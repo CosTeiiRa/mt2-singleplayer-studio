@@ -6,6 +6,68 @@ Search and edit drops, create quests, manage crafting at existing NPCs, inspect 
 
 Studio is installed **beside the game**, in its own folder. Installing or opening it does not install the game, change gameplay files or restart a running server. Saving an edit and applying it to the game are separate actions.
 
+## See what you can do
+
+Real dashboard captures from an installed world. Item names, available recipes and economic values depend on your game package and saved world. Expand an example to see its editor; click any image to view it at full size.
+
+**Follow the economy across progression stages.** Separate GM accounts, inspect Yang, item stock, recorded sales and upgrade activity, then export a report. Coverage notes explain what the existing game data can establish.
+
+![Economy dashboard with population, progression and period filters, GM exclusion and six economic indicators](docs/screenshots/economy.jpg)
+
+<details>
+<summary><strong>Edit Metin, monster and chest drops</strong></summary>
+
+Choose a target, adjust reward items, quantities and base parameters, inspect shared pools and review changes before saving. A base parameter is not always the final in-game drop probability.
+
+![Drop editor showing Metin of Sorrow rewards, quantities and base parameters](docs/screenshots/drop-editor.jpg)
+
+</details>
+
+<details>
+<summary><strong>Find the right item without knowing its ID</strong></summary>
+
+Filter by category or function: bonus changers, bonus adders, scrolls, potions, materials and more. Search by name or ID when useful; hover an item for its description.
+
+![Item picker filtered to bonus items, with category and function filters and named results](docs/screenshots/item-search.jpg)
+
+</details>
+
+<details>
+<summary><strong>Check where an item is already used</strong></summary>
+
+Open **Where used** from a reward or the catalog to inspect its configured drops, crafting and other indexed references before adding another source.
+
+![Read-only item explorer showing existing sources and references for Skill Book](docs/screenshots/item-usage.jpg)
+
+</details>
+
+<details>
+<summary><strong>Create a quest with guided fields</strong></summary>
+
+Choose a hunt, item turn-in or exchange template. Select the NPC, objectives, requirements, rewards and repeat cooldown; inspect the generated quest source and dialogue preview before saving. New quests add opt-in server-side scripts and require compilation during Apply.
+
+![Quest builder with template, NPC, hunt target, kill count, minimum level, item reward, Yang and experience fields](docs/screenshots/quest-builder.jpg)
+
+</details>
+
+<details>
+<summary><strong>Manage crafting at existing NPC menus</strong></summary>
+
+Filter by NPC, edit ingredients, output quantities, success chance and Yang cost, or create and clone recipes. Studio selects the existing Cube or native crafting system for that menu. This example shows Baek-Go's native potion recipe.
+
+![Native crafting editor for Baek-Go with success chance, Yang cost, ingredients and output quantity](docs/screenshots/native-crafting.jpg)
+
+</details>
+
+<details>
+<summary><strong>Review a rollback before confirming it</strong></summary>
+
+Select a saved change in **Change history**, inspect its before/after diff and decide whether to revert. Confirmation creates another backup; applying the reverted configuration remains a separate step. The capture shows a preview only.
+
+![Rollback review dialog showing the affected configuration file, source diff and explicit confirmation button](docs/screenshots/rollback-review.jpg)
+
+</details>
+
 ## Requirements and compatibility
 
 - **Windows 10/11** and **Python 3.10+**. Python 3.13 was used for local game integration checks. Download Python from [python.org](https://www.python.org/downloads/windows/); enable its launcher/PATH option if offered.
