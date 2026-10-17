@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Metin2 · Server Studio</title><meta name="description" content="Your local workspace for Metin2 drops, quests and world settings."><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23d7ae6c' d='M16 1 29 12 24 28 8 28 3 12Z'/%3E%3Cpath fill='%23202329' d='m9 22 2-13 5 8 5-8 2 13h-4l-1-6-2 4-2-4-1 6Z'/%3E%3C/svg%3E"><link rel="stylesheet" href="/style.css"><script src="/catalog.js" defer></script><script src="/navigation.js" defer></script><script src="/app.js" defer></script></head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="#overview"><span class="brand-mark">M</span><span>METIN2<small>SERVER STUDIO</small></span></a>
+  <div class="workspace"><span class="world-dot"></span><span>My singleplayer world<small id="version">Reading installation…</small></span><span class="local-label">LOCAL</span></div>
+  <div class="nav-label">WORKSPACE</div>
+  <nav aria-label="Main navigation">
+    <button data-page="overview" class="active"><span class="nav-icon">◈</span>Overview</button>
+    <button data-page="economy"><span class="nav-icon">◒</span>Economy</button>
+    <details class="nav-group" data-nav-group="game" open><summary><span class="nav-icon" aria-hidden="true">☷</span>Game configuration</summary><div class="nav-group-links">
+      <button data-page="drops"><span class="nav-icon">◇</span>Drop editor</button>
+      <button data-page="quests"><span class="nav-icon">▤</span>Quests</button>
+      <button data-page="crafting"><span class="nav-icon">⚒</span>Crafting recipes</button>
+      <button data-page="settings"><span class="nav-icon">☷</span>World settings</button>
+      <button data-page="files"><span class="nav-icon">▧</span>Config files</button>
+      <button id="explore-items"><span class="nav-icon">⌕</span>Item explorer</button>
+    </div></details>
+    <details class="nav-group" data-nav-group="studio"><summary><span class="nav-icon" aria-hidden="true">▧</span>Studio tools</summary><div class="nav-group-links">
+      <button data-page="history"><span class="nav-icon">↶</span>Change history</button>
+      <button data-page="changes"><span class="nav-icon">▤</span>Drafts &amp; changes</button>
+      <button data-page="updates"><span class="nav-icon">◇</span>Update protection</button>
+    </div></details>
+  </nav>
+  <div class="sidebar-note"><span>✦</span><strong>A world of your own.</strong><p>Shape the rewards, write the stories, and make the adventure yours.</p></div>
+  <div class="sidebar-bottom"><span class="world-dot"></span>Files connected<button id="connection-info" title="Show server folder" aria-label="Show server folder">ⓘ</button></div>
+</aside>
+<main>
+  <header class="topbar"><div class="breadcrumb"><span id="crumb-context">Workspace</span><span>/</span><strong id="crumb">Overview</strong></div><div class="top-actions"><button id="discard-draft" class="button ghost small" hidden>Discard draft</button><span id="docker-badge" class="status neutral">Checking Docker</span><button id="apply-button" class="button primary small" disabled>Checking saved changes…</button></div></header>
+  <section id="content" aria-live="polite"><div class="loading">Reading your world…</div></section>
+  <footer><strong id="studio-version">METIN2 SERVER STUDIO</strong> <span>Local files · Review every change · Automatic backups</span></footer>
+</main>
+<dialog id="picker" class="picker" aria-labelledby="picker-title">
+  <div class="dialog-head"><div><div class="eyebrow">INSTALLED CATALOG</div><h2 id="picker-title">Choose an item</h2><p class="picker-hint">Browse by category or function. Names and IDs are optional.</p></div><button class="icon-button" data-close="picker" aria-label="Close picker">×</button></div>
+  <div class="searchbox"><span aria-hidden="true">⌕</span><input id="picker-search" placeholder="Search names, IDs or functions…" autocomplete="off" aria-label="Search catalog"><kbd>ESC</kbd></div>
+  <div id="picker-quick" class="picker-quick" role="group" aria-label="Quick category filters"></div>
+  <div class="picker-filters">
+    <div class="field"><label for="picker-category">Category</label><select id="picker-category"></select></div>
+    <div class="field" id="picker-function-field"><label for="picker-function">Function / type</label><select id="picker-function"></select></div>
+    <div class="field"><label for="picker-sort">Sort by</label><select id="picker-sort"><option value="name">Name · A–Z</option><option value="id">ID · lowest first</option><option value="id-desc">ID · highest first</option><option value="level">Level · lowest first</option></select></div>
+  </div>
+  <div class="picker-summary"><span id="picker-count" role="status" aria-live="polite"></span><button id="picker-reset" class="subtle-link">Clear filters</button></div>
+  <div id="picker-results" aria-label="Catalog results"></div>
+  <div class="dialog-foot picker-foot"><span class="muted" id="picker-shown"></span><button id="picker-more" class="button small">Show 100 more</button></div>
+</dialog>
+<dialog id="item-usage" class="usage-dialog" aria-labelledby="usage-title">
+  <div class="dialog-head"><div><div class="eyebrow">ITEM EXPLORER · READ ONLY</div><h2 id="usage-title">Where this item is used</h2></div><button class="icon-button" data-close="item-usage" aria-label="Close item references">×</button></div>
+  <div id="usage-body" class="usage-body" aria-live="polite"></div>
+  <div class="dialog-foot"><span class="muted">Inspecting references does not change configurations.</span><button id="usage-browse" class="button">Back to item search</button><button id="usage-refresh" class="button primary">Refresh references</button></div>
+</dialog>
+<dialog id="review" class="review"><div class="dialog-head"><div><div class="eyebrow">REVIEW CHANGES</div><h2 id="review-title">Review before saving</h2></div><button class="icon-button" data-close="review" aria-label="Close review">×</button></div><div id="review-body"></div><div class="dialog-foot"><span class="muted">A backup is created before saving.</span><button class="button" data-close="review">Keep editing</button><button class="button primary" id="commit-button">Save changes</button></div></dialog>
+<dialog id="economy-export" class="eco-export-dialog" aria-labelledby="eco-export-title" aria-describedby="eco-export-detail">
+  <div class="dialog-head"><div><div class="eyebrow">TAKE YOUR DATA WITH YOU</div><h2 id="eco-export-title">Export economy report</h2></div><button class="icon-button" data-close="economy-export" aria-label="Close economy export">×</button></div>
+  <div class="eco-export-body"><p id="eco-export-scope" class="eco-export-scope"></p><p id="eco-export-detail"></p>
+    <div class="eco-export-formats"><article><span class="pill">SPREADSHEETS</span><h3>CSV pack</h3><p>Separate tables for metrics, items, progression, activity, saved history and journal. Includes the full JSON report.</p><button class="button primary" data-eco-download="zip">Download CSV pack</button><small>ZIP · unzip, then open in Excel or LibreOffice</small></article>
+    <article><span class="pill">ANALYSIS &amp; SHARING</span><h3>JSON report</h3><p>The complete aggregate data in one file, with filters, saved history, journal and measurement definitions.</p><button class="button" data-eco-download="json">Download JSON</button><small>JSON · useful for scripts or sharing for analysis</small></article></div>
+    <p class="eco-export-limits">GM separation and data limits travel with the report. Currency-flow tables are labelled as mixed global logs. Missing measurements stay blank in CSV and null in JSON.</p>
+  </div><div class="dialog-foot"><span id="eco-export-status" role="status"></span></div>
+</dialog>
+<dialog id="apply-dialog" class="review"><div class="dialog-head"><div><div class="eyebrow">LOAD SAVED CHANGES</div><h2>Apply to your server</h2></div><button class="icon-button" data-close="apply-dialog" aria-label="Close apply dialog">×</button></div><div class="dialog-content"><p>This builds the game image, compiles custom quests, runs the settings migration, and recreates the game container. <strong>Connected players will disconnect when the game restarts.</strong> A pending game package update uses the native launcher's full-stack build.</p><div id="apply-pending" class="work-help"></div><p id="apply-explanation" class="notice">Checking Docker…</p><pre id="apply-log" class="code" hidden></pre></div><div class="dialog-foot"><span class="muted">Validation builds without restarting the game.</span><button class="button" data-close="apply-dialog">Close</button><button class="button" id="run-validate">Validate build only</button><button class="button primary" id="run-apply">Build & restart</button></div></dialog>
+<div id="toast" role="status" hidden></div>
+<dialog id="update-install-dialog" class="review" aria-labelledby="update-install-title"><div class="dialog-head"><div><div class="eyebrow">REVIEWED PACKAGE</div><h2 id="update-install-title">Install update files</h2></div><button class="icon-button" data-close="update-install-dialog" aria-label="Close update installation">×</button></div><div class="dialog-content"><p id="update-install-summary"></p><p class="notice">The installation writes game package files and preserves the custom values you selected. Its backups stay in the native server backup folder. A game build and restart are separate.</p></div><div class="dialog-foot"><button class="button" data-close="update-install-dialog">Keep reviewing</button><button class="button primary" id="confirm-update-install">Install reviewed files</button></div></dialog>
+<div id="item-tooltip" class="item-tooltip" role="tooltip" popover="manual" hidden></div>
+<div id="quest-tooltip" class="item-tooltip quest-tooltip" role="tooltip" popover="manual" hidden></div>
+<script src="/workspace.js" defer></script>
+<script src="/editors.js" defer></script>
+<script src="/crafting.js" defer></script>
+<script src="/quests.js" defer></script>
+<script src="/economy.js" defer></script>
+<script src="/economy_tools.js" defer></script>
+</body></html>

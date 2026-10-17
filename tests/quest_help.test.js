@@ -1,0 +1,32 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../web/quests.js'),'utf8');
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+test('quest hover content escapes source text and labels unconfirmed details',()=>{
+  const context={esc};vm.createContext(context);
+  vm.runInContext(source.slice(source.indexOf('function questHelpContent('),source.indexOf('async function showQuestHelp(')),context);
+  const html=context.questHelpContent({title:'<script>unsafe</script>',summary:'Bring <item>',facts:[['Rewards','2 × <rare item>']],notes:['Database-backed; not confirmed.'],source:'Saved/staged sources'});
+  assert.doesNotMatch(html,/<script>/);
+  assert.match(html,/&lt;script&gt;/);
+  assert.match(html,/2 × &lt;rare item&gt;/);
+  assert.match(html,/Database-backed; not confirmed/);
+  assert.match(html,/Saved\/staged sources/);
+});
+test('Escape stays dismissed when hiding a popover exposes the same row under the pointer',async()=>{
+  const events={},tip={hidden:false,matches:()=>!tip.hidden,hidePopover(){},contains:()=>false,addEventListener(){}},anchor={description:'quest-tooltip',getAttribute(){return this.description},removeAttribute(){this.description=null}},row={contains:()=>false};
+  const context={row,anchor,S:{page:'quests'},QuestUI:{view:'library'},$:()=>tip,document:{addEventListener:(name,handler)=>events[name]=handler},window:{addEventListener(){}},clearTimeout(){},setTimeout(){return 1},api(){throw new Error('Dismissed hover must not request data')}};
+  vm.createContext(context);
+  vm.runInContext(source.slice(source.indexOf('const QuestHelp=')),context);
+  vm.runInContext('QuestHelp.anchor=anchor;QuestHelp.row=row;',context);
+  events.keydown({key:'Escape',preventDefault(){},stopImmediatePropagation(){}});
+  assert.equal(tip.hidden,true);
+  assert.equal(anchor.description,null);
+  events.pointerover({target:{closest:()=>row}});
+  assert.equal(tip.hidden,true);
+  assert.equal(vm.runInContext('QuestHelp.dismissed===row',context),true);
+  events.pointerout({target:{closest:()=>row},relatedTarget:{}});
+  assert.equal(vm.runInContext('QuestHelp.dismissed',context),null);
+});

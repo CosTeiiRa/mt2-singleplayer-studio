@@ -1,0 +1,39 @@
+name: Beta release
+on:
+  push:
+    tags: ['beta-*']
+permissions:
+  contents: write
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+  publish:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Verify tag and checks
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python -c 'import os,pathlib; assert pathlib.Path("VERSION").read_text().strip() == os.environ["RELEASE_TAG"]'
+          python tools/check_project.py
+          python -m unittest discover -s tests -v
+          node --test tests/catalog.test.js tests/icons.test.js tests/navigation.test.js tests/quest_help.test.js
+          python tools/build_release.py
+      - name: Publish portable ZIP and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" dist/*.zip dist/SHA256SUMS.txt --verify-tag --prerelease --title "$RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md
