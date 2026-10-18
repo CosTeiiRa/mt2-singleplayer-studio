@@ -6,6 +6,46 @@ Search and edit drops, create quests, manage crafting at existing NPCs, inspect 
 
 Studio is installed **beside the game**, in its own folder. Installing or opening it does not install the game, change gameplay files or restart a running server. Saving an edit and applying it to the game are separate actions.
 
+## Architecture overview
+
+Everything runs on your computer. The browser talks to Studio's local Python service. Studio reads your existing game installation and keeps its own history in a separate data folder on Windows. The game server and its MariaDB database use the game's existing Docker setup.
+
+```mermaid
+flowchart TB
+    subgraph local["Windows - outside Docker"]
+        browser["Browser dashboard<br/>127.0.0.1:8765 by default"]
+        studio["Studio backend<br/>Python process"]
+        state["Private Studio data folder<br/>SQLite, backups and caches"]
+        files["Existing Serwer folder<br/>Configuration and quest sources"]
+        client["Existing game client"]
+    end
+
+    subgraph docker["Existing game services - Docker"]
+        game["Game server"]
+        db[("MariaDB<br/>Game data")]
+    end
+
+    browser <-->|Local HTTP| studio
+    studio <-->|Drafts, history and snapshots| state
+    studio <-->|Read and reviewed Save| files
+    studio -->|Read-only economy and crafting queries| db
+    files -.->|Build input during Apply| game
+    studio -.->|Apply: build, compile, migrate and restart| game
+    studio -.->|Apply: native crafting transaction| db
+    client <-->|Game connection| game
+    game <-->|Game reads and writes| db
+```
+
+Solid arrows show normal requests and data access. Dashed arrows represent work performed during an explicit **Apply**. This is a simplified view; the game package has other supporting services. GitHub renders the diagram above; the workflow below also describes it in plain text.
+
+- **Review:** inspect the proposed values and source diff. This does not write game files or deploy anything.
+- **Save:** write the reviewed configuration files with backups. A named change set holds edits in Studio until you publish that set. Saving does not restart the game; native crafting changes remain in a Studio-owned JSON configuration until Apply.
+- **Apply:** build the saved configuration, compile custom quests, run the required settings migration and recreate the game container. Native crafting customisations are written to MariaDB in a guarded transaction while the game is stopped. Unsaved drafts and unpublished change sets are excluded. Connected players disconnect when the game restarts.
+
+The existing client connects directly to the game server. Closing Studio leaves the game running. Economy observations read existing game data and save aggregate snapshots in Studio's SQLite files outside Docker. Custom quests are optional server-side `.quest` scripts compiled by the existing build; their creation also adds a backed-up compiler integration. Studio does not patch engine or client binaries.
+
+See [Databases and Docker](#databases-and-docker) for storage details and [Your first edit](#your-first-edit) for the editing workflow. Game updates have a separate [custom-change review](#updating-the-game-or-studio) before Apply.
+
 ## See what you can do
 
 Real dashboard captures from an installed world. Item names, available recipes and economic values depend on your game package and saved world. Expand an example to see its editor; click any image to view it at full size.
