@@ -68,6 +68,15 @@ Select a saved change in **Change history**, inspect its before/after diff and d
 
 </details>
 
+<details>
+<summary><strong>Keep custom changes when the game updates</strong></summary>
+
+Compare the original, your custom value and the incoming update for tracked edits. Green **Custom value retained by default** entries keep your value unless you choose otherwise; they are not unresolved conflicts. In this example, two files are affected and there are zero conflicting custom changes. Review the selected merge before saving, then Apply separately.
+
+![Update protection comparing original, custom and incoming values for two quest build integration files, with keep-custom decisions and zero conflicts](docs/screenshots/update-protection.png)
+
+</details>
+
 ## Requirements and compatibility
 
 - **Windows 10/11** and **Python 3.10+**. Python 3.13 was used for local game integration checks. Download Python from [python.org](https://www.python.org/downloads/windows/); enable its launcher/PATH option if offered.
@@ -75,7 +84,7 @@ Select a saved change in **Change history**, inspect its before/after diff and d
 - The game's normal Docker Desktop / Docker Compose setup. Keep using its launcher to start the game. Docker is needed for live economy data, native crafting and Apply; file-based editors remain usable with Docker stopped.
 - Write access to the selected server and Studio folders.
 
-**No pip packages, npm packages, Node.js, new database, game reinstall or engine/client patch is needed to run Studio.** Node.js is only used for developer checks. The repository contains Studio code, not the game or its assets.
+**No pip packages, npm packages, Node.js, separate database server, game reinstall or engine/client patch is needed to run Studio.** Node.js is only used for developer checks. The repository contains Studio code, not the game or its assets.
 
 ## Install on a computer where the game already works
 
@@ -129,6 +138,28 @@ For an existing working world, use the game's backup feature before your first A
 | Change management | Drafts, named change sets, reviewable backups/rollbacks, pending Apply counts and custom-difference update protection |
 
 See the [operator guide](docs/USER_GUIDE.md) for mechanics, source coverage and limitations. Normal configuration edits use the game's existing systems. **New quests are opt-in server-side scripts:** saving one adds `.quest` source and a backed-up compiler integration; generated templates use the existing game logging API for their limited item-flow records. They do not change engine or client binaries. Native crafting saves a Studio JSON configuration; its database changes happen only during Apply.
+
+## Databases and Docker
+
+The game and Studio use separate storage:
+
+| Component | Database | Location and purpose |
+|---|---|---|
+| Existing game | MariaDB | Runs in the game's Docker setup; stores accounts, characters, inventories, shops, game logs and native crafting. Studio connects to this existing service. |
+| Studio workspace | `workspace.sqlite` | A local Windows file holding drafts, tracked custom changes, change sets, deployment records and preferences. |
+| Studio economy history | `economy.sqlite` | A local Windows file holding economic snapshots, journal notes and balancing experiments. |
+
+**SQLite is outside Docker.** Studio's Python process accesses these files directly; SQLite needs no separate server or container. They live in the selected Studio data folder, normally `data/worlds/<id>/`. Setup prints its exact path; migrated installations can keep an older or explicitly chosen data folder.
+
+With Docker stopped, Studio can still open file-based editors and saved Studio history. Live economy data and live native crafting require the game's MariaDB service; Apply requires Docker. Stopping Studio leaves the game and its database running. Back up Studio's data folder and the game/world database separately.
+
+### Scalability
+
+This beta is designed for one local owner managing one world. Each Studio installation has independent local databases; players do not write to Studio's SQLite files when they kill monsters or trade. By default, Studio collects aggregate economy snapshots every 60 minutes while running, has a 180-day snapshot retention setting and caches live observations for up to 60 seconds.
+
+SQLite suits this workload, but it permits only one writer per database at a time; see [SQLite's deployment guidance](https://www.sqlite.org/whentouse.html). A shared service with many simultaneous administrators would need changes to Studio's architecture as well as its storage.
+
+Larger economic histories would benefit from indexed history queries and more compact snapshot processing. Analytics also query the game's MariaDB, so performance depends on game data, queries and hardware. Some collection limits deliberately bound work—for example, 20,000 sales records per observation—with incomplete coverage flagged in the report. Functional tests do not establish a maximum supported player count.
 
 ## Local data, backups and privacy
 
