@@ -22,6 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 from metin2_studio.configuration_policy import editable_path, check_change, READ_ONLY_REASON
 from metin2_studio.catalogue import Catalogue, sql_rows
+from metin2_studio import deployment_progress
 from metin2_studio.item_icons import icon_path
 from metin2_studio.item_usage import item_usage, item_drop_summary
 from metin2_studio.economy import Economy
@@ -861,7 +862,10 @@ class Studio:
             elif not native_pending and (self.native_crafting.config()['recipes'] or self.native_crafting.applied()['recipes']):
                 native_step = ['studio', 'native-crafting']
                 commands.insert(-1, native_step)
+            deployment_progress.prepare(job, validation=validate_only, native_update=bool(native_pending),
+                                        crafting=['studio', 'native-crafting'] in commands)
             for cmd in commands:
+                deployment_progress.enter(job, deployment_progress.command_stage(cmd))
                 if cmd == ['studio', 'native-crafting']:
                     if self.build_fingerprints() != job.get('files'):
                         raise ValueError('Saved configuration changed during the build. Native crafting was not written; review and Apply again.')
@@ -874,7 +878,7 @@ class Studio:
                     if type(p.pid) is int:
                         from metin2_studio.operation_process import process_identity
                         job['process'] = {'pid': p.pid, 'identity': process_identity(p.pid)}
-                        self.workspace.deployment(job['id'], 'running', {'kind': job.get('kind'), 'files': job.get('files', {}), 'lines': job['lines'], 'process': job['process']})
+                        self.workspace.deployment(job['id'], 'running', {'kind': job.get('kind'), 'files': job.get('files', {}), 'lines': job['lines'], 'process': job['process'], 'progress': job.get('progress')})
                     for line in p.stdout:
                         # Do not return credentials accidentally printed by third-party scripts.
                         if re.search(r"password|secret|token", line, re.I):
@@ -894,18 +898,20 @@ class Studio:
                     raise ValueError("Command failed. Review the output. Saved source files and backups are retained.")
                 job.pop('process', None)
                 if job.get('id'):
-                    self.workspace.deployment(job['id'], 'running', {'kind': job.get('kind'), 'files': job.get('files', {}), 'lines': job['lines']})
+                    self.workspace.deployment(job['id'], 'running', {'kind': job.get('kind'), 'files': job.get('files', {}), 'lines': job['lines'], 'progress': job.get('progress')})
                 if cmd[2:4] == ["wait", "playerbot-migrate"]:
                     check = subprocess.run(["docker", "compose", "ps", "-a", "--format", "json", "playerbot-migrate"], cwd=self.compose, capture_output=True, text=True, timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                     records = json.loads(check.stdout) if check.stdout.strip().startswith("[") else [json.loads(x) for x in check.stdout.splitlines() if x.strip()]
                     if check.returncode or not records or any(int(x.get("ExitCode", -1)) != 0 or x.get("State") != "exited" for x in records):
                         raise ValueError("Settings migration did not exit successfully. Game was left stopped; inspect it in the launcher before restarting.")
+            deployment_progress.enter(job, 'sources')
             if self.build_fingerprints() != job.get('files'):
                 raise ValueError('A source file changed during the build. Its deployed configuration cannot be verified; review and build again.')
             if validate_only:
                 job['status'] = 'validated'
                 job['lines'].append('Build and quest compilation passed. No game restart or settings migration was performed.')
             else:
+                deployment_progress.enter(job, 'health')
                 health = self.runtime_health(True)
                 deadline = time.time() + 60
                 while not health['gameHealthy'] and time.time() < deadline:
@@ -914,6 +920,7 @@ class Studio:
                 job['health'] = health
                 job['status'] = 'succeeded' if health['gameHealthy'] else 'unverified'
                 if health['gameHealthy']:
+                    deployment_progress.enter(job, 'content')
                     from metin2_studio.runtime_checks import verify
                     runtime = verify(self)
                     job['runtime'] = runtime
@@ -933,8 +940,9 @@ class Studio:
             job["status"] = "failed"
             job["lines"].append(str(e))
         finally:
+            deployment_progress.finish(job)
             if job.get('id'):
-                self.workspace.deployment(job['id'], job['status'], {'kind': job.get('kind'), 'files': job.get('files', {}), 'lines': job['lines'][-80:], 'health': job.get('health'), 'runtime': job.get('runtime')})
+                self.workspace.deployment(job['id'], job['status'], {'kind': job.get('kind'), 'files': job.get('files', {}), 'lines': job['lines'][-80:], 'health': job.get('health'), 'runtime': job.get('runtime'), 'progress': job.get('progress')})
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1106,6 +1114,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/crafting.js':
                 return self.send((HERE / 'web/crafting.js').read_bytes(), mime='application/javascript; charset=utf-8')
             static = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "application/javascript; charset=utf-8"), "/workspace.js": ("workspace.js", "application/javascript; charset=utf-8"), "/editors.js": ("editors.js", "application/javascript; charset=utf-8"), "/quests.js": ("quests.js", "application/javascript; charset=utf-8"), "/economy_tools.js": ("economy_tools.js", "application/javascript; charset=utf-8"), "/economy.js": ("economy.js", "application/javascript; charset=utf-8"), "/navigation.js": ("navigation.js", "application/javascript; charset=utf-8"), "/catalog.js": ("catalog.js", "application/javascript; charset=utf-8"), "/style.css": ("style.css", "text/css; charset=utf-8")}
+            static.update({'/operations.js': ('operations.js', 'application/javascript; charset=utf-8'),
+                           '/interface.css': ('interface.css', 'text/css; charset=utf-8')})
             if u.path in static:
                 filename, mime = static[u.path]
                 return self.send((HERE / "web" / filename).read_bytes(), mime=mime)

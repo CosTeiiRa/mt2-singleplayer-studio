@@ -85,7 +85,7 @@ Types and properties use the current server catalogue, with a cached snapshot wh
 
 Hover an item in the catalog, a drop row, a crafting row or the quest reward to read its description. Keyboard focus shows the same tooltip; arrow keys browse picker results. Escape dismisses the description first, then the picker on a second press. The tooltip stays open while hovered, fits the viewport and can scroll for longer notes. Browsing never selects or saves an item. Descriptions are also searchable.
 
-The hover card also shows **Configured in N Metins**, up to four Metin names with levels and IDs, and counts for bosses, monsters, known chests and other reward tables. Each target ID counts once, even across several groups or shared-pool routes. Counts reflect saved drop sources, including zero-parameter references (flagged when present); they are not a guarantee of live drops. Unsaved drafts are excluded. The lightweight lookup rereads drop bytes and refreshes its in-memory index after saved files change, without scanning quests or SQL on hover. **Where used ↗** opens all matching groups and their sources.
+The hover card also shows **Configured in N Metins**, up to four Metin names with levels and IDs, and counts for bosses, monsters, known chests and other reward tables. Each target ID counts once, even across several groups or shared-pool routes. Counts reflect saved drop sources, including zero-parameter references (flagged when present); they are not a guarantee of live drops. Unsaved drafts are excluded. The lightweight lookup rereads drop bytes and refreshes its in-memory index after saved files change, without scanning quests or SQL on hover. **Inspect item ↗** opens item details, matching groups and their sources.
 
 Descriptions distinguish bonus changers, bonus adders, fifth-bonus marbles and common scrolls. Recovery amounts and known level requirements come from the installed seed. General mechanics are labeled as a **General Metin2 guide** because Studio does not inspect the running engine or database. Items without reliable details say so. Older catalogue labels called `25041` Magic Stone and `25042` Ritualstein; the installed English data identifies them as Blessing Scroll and Magic Stone respectively. Studio uses those installed names and retains a note about the older mismatch. Game definitions are unchanged.
 
@@ -93,7 +93,7 @@ Description references: installed `item_proto` and package `CHANGELOG.md` (1.23.
 
 ## Item explorer: where an item is used
 
-Open **Item explorer** in the sidebar and choose an item with the same search/category filters. **Where used ↗** on an existing drop, crafting ingredient/result or quest reward opens the same read-only view. The ↗ button beside an item-picker result inspects it without selecting it as a reward. A numeric ID absent from the catalog can be inspected directly, which also covers native crafting items missing from the catalog.
+Open **Item explorer** in the sidebar and choose an item with the same search/category filters. **Inspect item ↗** on an existing drop, crafting ingredient/result or quest reward opens the same read-only view. Search, saved items, combined drops, quest rewards and economy tables share the same item icon, name, ID and hover/focus details. The ↗ button beside an item-picker result inspects it without selecting it as a reward. Back retains the underlying search or returns to the source view. A numeric ID absent from the catalog can be inspected directly, which also covers native crafting items missing from the catalog.
 
 The view separates **Drops in**, **Found in chests**, **Reward pools & other tables**, **Can be crafted by**, **Used to craft**, **Sold by NPCs**, **Used in equipment upgrades**, and **Other file references**. It follows explicit shared-pool links, respects Studio's chest source precedence, and shows one shortest matching route per group. The same numeric value in the item and pool namespaces is never treated as the same object. A zero parameter on the displayed route is called out. Only known chest definitions are listed as physical chests; unclassified special reward tables remain in Reward pools & other tables. Route parameters are configuration values, not computed final game probabilities.
 
@@ -133,6 +133,13 @@ CSV files use UTF-8 with BOM, comma separators, UTC timestamps and unrounded num
 2. Select **Review changes** and inspect the exact diff.
 3. Select **Save changes**. Studio backs up every original file, checks that it has not changed since review, then replaces it atomically. Multi-file saves roll back completed writes if an ordinary write error occurs. An interrupted save is detected on startup and requires reviewed recovery before further saves or Apply.
 4. Select **Apply to server → Build & restart** when ready. This affects saved files only and disconnects players at the restart.
+
+Follow the persistent operation panel for the current stage and elapsed time, even
+when moving to another tab. **View progress** opens the stage card and optional
+technical log. Failed or unverified operations expose the log; a lost connection
+stays unconfirmed until Studio reconnects. The last result remains accessible
+through **View last operation** even with no pending changes. Validation results
+explicitly leave changes pending and do not restart the game.
 
 Apply builds the game image first. The package’s Linux `qc` compiler checks custom quest source during that build. A failed image build leaves the running game untouched. After building successfully, Studio ensures MariaDB is available, stops the game, recreates the settings migrator, checks that it completed successfully, and recreates the game container. A later migration/start failure can leave the game stopped; inspect the output and the normal launcher before restarting. Wait for the normal launcher to report the game healthy before logging in.
 

@@ -27,6 +27,10 @@ test('Back safely focuses search if catalogue refresh replaced the original resu
   const {ctx,search,focus}=fixture();focus.isConnected=false;ctx.backToItemResults();
   assert.equal(search.options.preventScroll,true);
 });
+test('inspection from an editor returns to its source instead of opening a new explorer',()=>{
+  const {ctx,picker,focus}=fixture();picker.open=false;ctx.backToItemResults();
+  assert.equal(focus.options.preventScroll,true);assert.equal(ctx.browsed,undefined);
+});
 test('configured effect text is escaped before rendering',()=>{
   const {ctx}=fixture();
   const html=ctx.itemEffectsMarkup({effects:[{title:'Base effects',values:['<script>bad()</script>'],note:'Calculated'}]});

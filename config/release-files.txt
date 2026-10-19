@@ -205,3 +205,11 @@ web/navigation.js
 web/quests.js
 web/style.css
 web/workspace.js
+
+src/metin2_studio/deployment_progress.py
+web/interface.css
+web/operations.js
+tests/item_views.test.js
+tests/operations.test.js
+tests/test_deployment_progress.py
+docs/INTERFACE_PATTERNS.md

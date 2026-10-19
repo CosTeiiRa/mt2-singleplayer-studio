@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Use one item identity renderer across search, drops, crafting, quest rewards,
+  saved items and economy tables, with shared icon fallback and hover/focus help.
+- Keep Server Apply progress visible across tabs, expose observed deployment
+  stages and elapsed time, and retain clear results with optional technical logs.
+- Keep error notifications above dialogs until dismissed. Preserve unknown
+  operation status on connection loss and expose the last result without a new save.
+
 - Open Item explorer directly into the catalogue. Keep favourites/recent items
   under Saved items and preserve the current search, filters, pagination, scroll
   and focus when returning from item details.

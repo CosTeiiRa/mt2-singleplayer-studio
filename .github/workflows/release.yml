@@ -30,7 +30,7 @@ jobs:
           python -c 'import os,pathlib; assert pathlib.Path("VERSION").read_text().strip() == os.environ["RELEASE_TAG"]'
           python tools/check_project.py
           python -m unittest discover -s tests -t . -v
-          node --test tests/catalog.test.js tests/catalogue_sync.test.js tests/icons.test.js tests/item_explorer.test.js tests/navigation.test.js tests/quest_help.test.js
+          node --test tests/catalog.test.js tests/catalogue_sync.test.js tests/icons.test.js tests/item_explorer.test.js tests/item_views.test.js tests/operations.test.js tests/navigation.test.js tests/quest_help.test.js
           python tools/build_release.py
       - name: Publish portable ZIP and checksum
         env:

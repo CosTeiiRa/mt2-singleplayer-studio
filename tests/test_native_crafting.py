@@ -274,6 +274,10 @@ class NativeEditorTests(unittest.TestCase):
             self.s.run_apply()
         self.assertEqual(self.s.job['status'],'failed')
         self.assertEqual(commands[-1],['native-transaction'])
+        self.assertEqual(self.s.job['progress']['current'],'crafting')
+        stages={stage['id']:stage['status'] for stage in self.s.job['progress']['steps']}
+        self.assertEqual(stages['crafting'],'failed')
+        self.assertEqual(stages['restart'],'blocked')
         self.assertEqual(commands[-2],['docker','compose','wait','playerbot-migrate'])
         self.assertNotIn(['docker','compose','up','-d','--no-deps','--force-recreate','game'],commands)
 

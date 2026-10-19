@@ -4,10 +4,28 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+import re
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 from tools.build_release import build, release_path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class WebAssetTests(unittest.TestCase):
+    def test_every_referenced_frontend_asset_is_served_with_the_correct_type(self):
+        from metin2_studio.server import Handler
+        html=(ROOT/'web/index.html').read_text(encoding='utf-8')
+        for url in re.findall(r'(?:src|href)="(/[^\"]+)"',html):
+            with self.subTest(url=url):
+                handler=object.__new__(Handler)
+                handler.path=url;handler.headers={};handler.studio=SimpleNamespace()
+                handler.guard=lambda:None;handler.send=Mock()
+                handler.do_GET()
+                sent=handler.send.call_args
+                self.assertEqual(sent.args[0],(ROOT/'web'/url[1:]).read_bytes())
+                self.assertTrue(sent.kwargs['mime'].startswith('text/css' if url.endswith('.css') else 'application/javascript'))
 
 
 class ReleaseBoundaryTests(unittest.TestCase):

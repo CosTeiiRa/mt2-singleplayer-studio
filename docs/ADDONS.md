@@ -2,7 +2,7 @@
 
 [Back to the overview](../README.md#see-what-you-can-do) · [All documentation](README.md)
 
-This guide covers **beta-1.15.0**: installing, configuring, updating and removing
+This guide covers **beta-1.16.0**: installing, configuring, updating and removing
 client add-ons, plus creating and sharing your own. Choose authors and sources
 you trust; add-ons run with the game client's permissions.
 

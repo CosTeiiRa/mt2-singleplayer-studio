@@ -23,6 +23,8 @@ dist/                     Generated portable ZIPs and checksums (ignored)
 ```
 
 Work on the application in `src/metin2_studio/` and on the dashboard in `web/`.
+Follow the [shared interface patterns](INTERFACE_PATTERNS.md) for game items,
+notifications and deployment feedback across screens.
 Run commands from the project root. Use `python studio.py serve` for the service
 and `python studio.py setup --check` to inspect setup. The Windows buttons and
 desktop shortcut use the same entry point. The source tree and portable ZIP use
@@ -37,7 +39,7 @@ do not need those codec dependencies.
 
 ```powershell
 python -m unittest discover -s tests -t . -v
-node --test tests/apply_status.test.js tests/history.test.js tests/catalog.test.js tests/catalogue_sync.test.js tests/icons.test.js tests/item_explorer.test.js tests/navigation.test.js tests/quest_help.test.js tests/update_priority.test.js tests/addons.test.mjs tests/addons_view.test.mjs tests/addon_jobs.test.mjs
+node --test tests/apply_status.test.js tests/history.test.js tests/catalog.test.js tests/catalogue_sync.test.js tests/icons.test.js tests/item_explorer.test.js tests/item_views.test.js tests/operations.test.js tests/navigation.test.js tests/quest_help.test.js tests/update_priority.test.js tests/addons.test.mjs tests/addons_view.test.mjs tests/addon_jobs.test.mjs
 python tools/check_project.py
 ```
 

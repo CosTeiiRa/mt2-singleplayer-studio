@@ -65,7 +65,8 @@ behind its details. **Back to items**, **Back to item search**, Close or Escape
 return to that picker with its search, filters, loaded results and scroll intact.
 Selecting an item in an editing field still selects it and closes that picker.
 
-Hover or focus an item for its configured effects. Weapon attack/magic attack
+Search, saved items, drops, crafting, quest rewards and economy tables share the
+same item identity and hover/focus details. Hover or focus an item for its configured effects. Weapon attack/magic attack
 ranges, armour defence and fixed bonuses use server definition fields; their
 displayed formulas follow the installed client tooltip. Bonus names and native
 point mappings are read as literal data from the package's panel sources.

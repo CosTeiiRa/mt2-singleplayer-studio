@@ -45,7 +45,7 @@ renderCrafting=function(){
 renderRecipeList=function(){
   const rows=craftingCandidates();
   $('#recipe-count').textContent=`${rows.length} RECIPES`;
-  $('#recipe-list').innerHTML=rows.map((r,i)=>`<button class="entity ${S.recipe&&recipeIdentity(r)===recipeIdentity(S.recipe)?'selected':''}" data-recipe="${i}">${icon(r.rewards[0]?.item)}<span><strong>${esc(r.name)}</strong><small>${esc(r.npcName)} · ${r.system==='native'?'Native':'Cube'} · ${esc(r.fields.percent)}%${r.npcSupported?'':' · menu unconfirmed'}${r.conflicted?' · review server change':''}</small></span></button>`).join('')||'<div class="empty">No matching recipes. New recipes can also use NPCs with empty crafting windows.</div>';
+  $('#recipe-list').innerHTML=rows.map((r,i)=>`<button class="entity ${S.recipe&&recipeIdentity(r)===recipeIdentity(S.recipe)?'selected':''}" data-recipe="${i}" ${r.rewards[0]?.item?itemHelpAttrs(r.rewards[0].item):''}>${itemContent(r.rewards[0]?.item,{title:r.name,detail:`${r.npcName} · ${r.system==='native'?'Native':'Cube'} · ${r.fields.percent}%${r.npcSupported?'':' · menu unconfirmed'}${r.conflicted?' · review server change':''}`})}</button>`).join('')||'<div class="empty">No matching recipes. New recipes can also use NPCs with empty crafting windows.</div>';
   $$('[data-recipe]').forEach(button=>button.onclick=()=>{if(!leaveOkay())return;S.recipe=structuredClone(rows[Number(button.dataset.recipe)]);S.recipe.originalWindow=S.recipe.window;dirty(false);renderRecipeDetail();renderRecipeList()});
   bindImages($('#recipe-list'));
 };
@@ -86,7 +86,7 @@ renderRecipeDetail=function(){
   $('#review-recipe').onclick=()=>preview('/api/preview/recipe',r);
   $('#remove-recipe').onclick=()=>{if(S.dirty)return toast('Save or discard the current draft before removing a saved recipe.',true);preview('/api/preview/recipe-delete',r)};
   $('#clone-recipe').onclick=()=>{if(leaveOkay())chooseCraftNpc(null,route=>startCraftRecipe(route,r))};
-  $('#recipe-variants').onclick=()=>{const rows=S.recipes.filter(x=>x.rewards.some(e=>r.rewards.some(t=>t.item===e.item)));toolDialog('Recipes for the same output',`<p>Configured cost per attempt. Existing game rules determine consumption on failure.</p><div class="table-wrap"><table><thead><tr><th>System / NPC</th><th>Ingredients</th><th>Yang</th><th>Success</th></tr></thead><tbody>${rows.map(v=>`<tr><td>${esc(v.system+' / '+v.npcName)}</td><td>${v.materials.map(e=>esc(name('item',e.item)+' ×'+e.count)).join('<br>')}</td><td>${esc(v.fields.gold||'0')}</td><td>${esc(v.fields.percent)}%</td></tr>`).join('')}</tbody></table></div>`)};
+  $('#recipe-variants').onclick=()=>{const rows=S.recipes.filter(x=>x.rewards.some(e=>r.rewards.some(t=>t.item===e.item)));toolDialog('Recipes for the same output',`<p>Configured cost per attempt. Existing game rules determine consumption on failure.</p><div class="table-wrap"><table><thead><tr><th>System / NPC</th><th>Ingredients</th><th>Yang</th><th>Success</th></tr></thead><tbody>${rows.map(v=>`<tr><td>${esc(v.system+' / '+v.npcName)}</td><td>${v.materials.map(e=>itemReference(e.item,{detail:'×'+e.count})).join('')}</td><td>${esc(v.fields.gold||'0')}</td><td>${esc(v.fields.percent)}%</td></tr>`).join('')}</tbody></table></div>`)};
   renderRecipeRows('materials');renderRecipeRows('rewards');
   if(native)$$('#recipe-detail [data-recipe-qty]').forEach(input=>input.max='2147483647');
   dirty(r.new||S.dirty);workspaceRestore();

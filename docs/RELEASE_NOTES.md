@@ -1,4 +1,22 @@
-# beta-1.15.0 — direct item exploration and configured effects
+# beta-1.16.0 — consistent items and visible operation feedback
+
+Search, drops, crafting, quest rewards, saved items and economy tables share one
+item renderer, catalogue names, icon fallback, and hover/focus help. Combined drop
+sources, recipe comparisons and guided quest fields now show the same identities.
+Inspecting an editor item returns to its source; explorer Back retains its results.
+
+Server Apply has a persistent status banner and a progress card at the top of its
+dialog. Stages come from the running commands, with elapsed time and a completed
+stage count rather than an estimated percentage. Results remain available while
+switching tabs; failures expose their logs, lost connections stay unconfirmed,
+and newer saved changes remain explicitly pending. Last results remain accessible
+even with no new changes. Error notifications stay above dialogs until dismissed.
+
+The deployment commands, validation boundary and game update review remain the
+same. See [shared interface patterns](INTERFACE_PATTERNS.md) for implementation
+and verification boundaries.
+
+## beta-1.15.0 — direct item exploration and configured effects
 
 Item explorer opens the catalogue immediately. Saved items opens favourites and
 recent history when wanted. Selecting an item leaves the results beneath its

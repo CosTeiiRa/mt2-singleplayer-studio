@@ -13,11 +13,15 @@ function setup(job={id:'previous',kind:'apply',status:'succeeded',started:1,line
     if(!nodes.has(id))nodes.set(id,{open:id==='#apply-dialog',hidden:false,disabled:false,textContent:'',innerHTML:'',showModal(){this.open=true;}});
     return nodes.get(id);
   };
-  const context={$,S:{status:{docker:{available:true},job}},WUI:{info:{pending:[{path:'custom-quests/new.quest'}],preferences:{},drafts:[],deploymentKnown:true}},
+  const storage=new Map();
+  const context={$,S:{data:{root:'test-world'},status:{docker:{available:true},job}},WUI:{info:{pending:[{path:'custom-quests/new.quest'}],preferences:{},drafts:[],deploymentKnown:true}},
     ApplyUI:{jobId:null,starting:'',loading:false,connectionFailed:false,error:''},
+    OperationUI:{scope:null,dismissed:null,signature:'',timer:null},StudioOperations:require('../web/operations.js'),statusRequest:0,
+    $$:()=>[],setInterval:()=>1,clearInterval(){},sessionStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},
     esc:String,wDate:at=>'date:'+at,api:async url=>{requests.push(url);return {id:'new-job',kind:url.endsWith('validate')?'validation':'apply',status:'running',lines:['New operation']};},
     updateStatus:async()=>context.refreshApplyControl(),toast:()=>{}};
   vm.createContext(context);
+  vm.runInContext(workspace.slice(workspace.indexOf('function operationJob('),workspace.indexOf('const wDate=')),context);
   vm.runInContext(workspace.slice(workspace.indexOf('function refreshApplyControl('),workspace.indexOf('async function initWorkspace(')),context);
   vm.runInContext(app.slice(app.indexOf('function openApplyDialog('),app.indexOf('let applyTimer;')),context);
   return {context,$,requests};
@@ -153,4 +157,29 @@ test('validation does not dismiss an interrupted deployment and retry requires a
   assert.equal($('#run-apply').disabled,false);
   context.openApplyDialog();
   assert.equal($('#apply-interrupted-ack').checked,false);
+});
+
+test('operation feedback remains available outside the Apply dialog and dismisses only the current result',()=>{
+  const {context,$}=setup();$('#apply-dialog').open=false;context.refreshApplyControl();
+  assert.equal($('#operation-status').hidden,false);
+  assert.match($('#operation-status').innerHTML,/Server Apply complete/);
+  assert.match($('#operation-status').innerHTML,/1 saved change still needs Apply/);
+  $('#operation-dismiss').onclick();assert.equal($('#operation-status').hidden,true);
+  context.S.status.job={id:'new',kind:'apply',status:'running',started:100,lines:[]};context.refreshApplyControl();
+  assert.equal($('#operation-status').hidden,false);assert.match($('#operation-status').innerHTML,/View progress/);
+});
+test('a completed operation stays inspectable when there are no new saved changes',()=>{
+  const {context,$}=setup();context.WUI.info.pending=[];context.refreshApplyControl();
+  assert.equal($('#apply-button').disabled,false);assert.equal($('#apply-button').textContent,'View last operation');
+  $('#operation-open').onclick();assert.equal(context.ApplyUI.jobId,'previous');
+});
+test('failure opens the technical log once and does not force it open after the user collapses it',()=>{
+  const {context,$}=setup({id:'bad',kind:'apply',status:'failed',lines:['Failure details']});
+  context.ApplyUI.jobId='bad';context.refreshApplyControl();assert.equal($('#apply-log-details').open,true);
+  $('#apply-log-details').open=false;context.refreshApplyControl();assert.equal($('#apply-log-details').open,false);
+});
+test('the elapsed clock does not continue timing an older completed receipt without a finish time',()=>{
+  const {context}=setup();const node={dataset:{started:'100',finished:'0',status:'succeeded'}};
+  context.$$=()=>[node];context.updateOperationElapsed();assert.equal(node.textContent,'');
+  node.dataset.finished='180';context.updateOperationElapsed();assert.equal(node.textContent,'1m 20s');
 });

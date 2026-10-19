@@ -1,6 +1,42 @@
 'use strict';
 const WUI={info:null,activeSet:null,cache:new Map(),timers:new Map(),pending:new Map(),restoring:false,report:null,updatePoll:null};
 const ApplyUI={jobId:null,starting:'',loading:false,connectionFailed:false,error:''};
+const OperationUI={dismissed:null,scope:null,timer:null,signature:''};
+function operationJob(){
+  const job=S.status?.job;
+  if(job?.id&&job.status!=='idle')return job;
+  const saved=WUI.info?.lastDeployment;
+  return saved?{...saved.payload,id:saved.id,status:saved.status,started:saved.started,finished:saved.finished}:{};
+}
+function operationMarkup(view,job,compact=false){
+  const labels={complete:'Complete',running:'In progress',pending:'Waiting',blocked:'Not reached',failed:'Failed',warning:'Needs verification'};
+  return `<div class="operation-summary"><div class="operation-copy"><div class="eyebrow">${esc(view.kind)}${job.started?' · '+esc(wDate(job.started)):''}</div><div role="${view.attention?'alert':'status'}" aria-live="${view.attention?'assertive':'polite'}"><strong class="operation-title">${esc(view.title)}</strong><p>${esc(view.message)}</p></div></div><span class="operation-elapsed" data-operation-elapsed data-status="${esc(job.status||'running')}" data-started="${Number(job.started)||0}" data-finished="${Number(job.finished)||0}" aria-label="Elapsed time">${esc(view.elapsed)}</span></div>${!compact&&view.steps.length?`<ol class="operation-steps" aria-label="Operation stages">${view.steps.map(step=>`<li data-state="${step.status}" ${step.status==='running'?'aria-current="step"':''}><span class="operation-step-mark" aria-hidden="true"></span><span>${esc(step.label)}<small>${labels[step.status]}</small></span></li>`).join('')}</ol>`:''}${view.active&&view.total?`<p class="operation-count">${view.stale?'Last observed: ':''}${view.complete} of ${view.total} stages complete · duration depends on the current build</p>`:''}${!compact&&view.lastLine?`<p class="operation-latest">${esc(view.lastLine)}</p>`:''}`;
+}
+function updateOperationElapsed(){
+  $$('[data-operation-elapsed]').forEach(node=>{node.textContent=StudioOperations.elapsed({status:node.dataset.status,started:Number(node.dataset.started)||undefined,finished:Number(node.dataset.finished)||undefined})});
+}
+function renderOperationStatus(){
+  const node=$('#operation-status');if(!node||typeof StudioOperations==='undefined')return;
+  const scope='metin2-studio:'+S.data.root+':operation-dismissed';
+  if(OperationUI.scope!==scope){OperationUI.scope=scope;try{OperationUI.dismissed=sessionStorage.getItem(scope)}catch(error){OperationUI.dismissed=null}}
+  const job=ApplyUI.starting?{kind:ApplyUI.starting,started:ApplyUI.startedAt}:operationJob();
+  const pending=(WUI.info?.pending.length||0)+Number(!!WUI.info?.preferences.nativeUpdatePending);
+  const view=StudioOperations.view(job,{starting:ApplyUI.starting,pending,connectionFailed:ApplyUI.connectionFailed});
+  node.hidden=(!job.id&&!ApplyUI.starting)||(!view.active&&OperationUI.dismissed===job.id);
+  if(!node.hidden){
+    const signature=JSON.stringify([job.id,job.status,job.progress?.current,view.title,view.message,view.tone,view.complete]);
+    if(OperationUI.signature!==signature){
+      OperationUI.signature=signature;node.className='operation-status operation-'+view.tone;
+      node.innerHTML='<div class="operation-main">'+operationMarkup(view,job,true)+'</div>'+`<div class="operation-actions"><button class="button small" id="operation-open">${view.active?'View progress':'View result'}</button>${ApplyUI.connectionFailed?'<button class="button small" id="operation-reconnect">Reconnect</button>':''}${!view.active?'<button class="icon-button" id="operation-dismiss" aria-label="Dismiss operation result">×</button>':''}</div>`;
+      $('#operation-open').onclick=()=>openApplyDialog({jobId:job.id});
+      if($('#operation-reconnect'))$('#operation-reconnect').onclick=updateStatus;
+      if($('#operation-dismiss'))$('#operation-dismiss').onclick=()=>{OperationUI.dismissed=job.id;try{sessionStorage.setItem(scope,job.id)}catch(error){}node.hidden=true;OperationUI.signature=''};
+    }
+  }
+  if(view.active&&!OperationUI.timer)OperationUI.timer=setInterval(updateOperationElapsed,1000);
+  if(!view.active&&OperationUI.timer){clearInterval(OperationUI.timer);OperationUI.timer=null}
+  updateOperationElapsed();
+}
 const wDate=at=>at?new Date(at*1000).toLocaleString('en-GB'):'Not recorded';
 const wPrefix=()=>`metin2-studio:${S.data.root}:`;
 function draftIdentity(){
@@ -93,9 +129,12 @@ function refreshApplyControl(){
   const files=info?.pending.length||0,packageUpdate=!!info?.preferences.nativeUpdatePending,count=files+Number(packageUpdate);
   const button=$('#apply-button');
   const recovering=!!info?.saveRecovery?.length;
-  button.disabled=!info||(!count&&!running);
+  const lastJob=operationJob();
+  button.disabled=!info||(!count&&!running&&!lastJob.id);
   button.textContent=running?(ApplyUI.starting==='validation'||!ApplyUI.starting&&S.status?.job.kind==='validation'?'Validating build…':'Applying server changes…'):count?`Apply to server (${count})`:'No server changes (0)';
   if(recovering){button.disabled=false;button.textContent='Save recovery required';}
+  else if(running&&ApplyUI.connectionFailed)button.textContent='Check operation status';
+  else if(!count&&!running&&lastJob.id)button.textContent='View last operation';
   const warning=$('#studio-recovery');
   if(warning){
     const interrupted=!!info?.interruptedDeployment||S.status?.job.status==='interrupted';
@@ -108,6 +147,7 @@ function refreshApplyControl(){
     $('#apply-pending').innerHTML=`<p><strong>${count} pending ${count===1?'change':'changes'}</strong> · ${files} saved ${files===1?'file':'files'}${packageUpdate?' + 1 game package update':''}. ${info?.drafts.length||0} preserved drafts are excluded.</p>${packageUpdate?'<p>The game package update uses the native full-stack build.</p>':''}${!count?'<p>Nothing to apply. The server will not be restarted.</p>':''}${(info?.pending||[]).map(row=>`<div class="path">${esc(row.path)}</div>`).join('')}`;
     renderApplyDialog();
   }
+  renderOperationStatus();
 }
 
 function applyOperationTitle(job){
@@ -127,7 +167,8 @@ function applyOperationMessage(job){
 
 function renderApplyDialog(){
   if(!$('#apply-dialog').open)return;
-  const info=WUI.info,job=S.status?.job??{},running=job.status==='running';
+  const latest=operationJob();
+  const info=WUI.info,job=latest.id&&latest.id===ApplyUI.jobId?latest:S.status?.job??{},running=job.status==='running';
   const count=(info?.pending.length??0)+Number(!!info?.preferences.nativeUpdatePending);
   const validation=ApplyUI.starting==='validation'||!ApplyUI.starting&&job.kind==='validation';
   const interrupted=info?.interruptedDeployment;
@@ -154,8 +195,23 @@ function renderApplyDialog(){
   $('#apply-operation').hidden=!current;
   $('#apply-operation-title').textContent=current?applyOperationTitle(job):'';
   $('#apply-operation-result').textContent=current?applyOperationMessage(job):'';
+  if(typeof StudioOperations!=='undefined'){
+    const progress=$('#apply-progress'),visible=current||!!ApplyUI.starting;
+    progress.hidden=!visible;$('#apply-operation').hidden=!visible;
+    if(visible){
+      const shown=ApplyUI.starting?{started:ApplyUI.startedAt}:job;
+      const view=StudioOperations.view(shown,{starting:ApplyUI.starting,pending:count,connectionFailed:ApplyUI.connectionFailed});
+      const signature=JSON.stringify([shown.id,shown.status,shown.progress,view.title,view.message,view.lastLine]);
+      progress.className='operation-card operation-'+view.tone;
+      if(ApplyUI.progressSignature!==signature){progress.innerHTML=operationMarkup(view,shown);ApplyUI.progressSignature=signature}
+    }
+  }
+  const log=$('#apply-log'),follow=log.scrollHeight-log.scrollTop-log.clientHeight<40;
   $('#apply-log').hidden=!current||!job.lines?.length;
   $('#apply-log').textContent=current?(job.lines??[]).join('\n'):'';
+  $('#apply-log-count').textContent=current?`(${job.lines?.length||0} lines)`:'';
+  if(follow&&running)log.scrollTop=log.scrollHeight;
+  if(current&&['failed','unverified','interrupted'].includes(job.status)&&ApplyUI.openedLog!==job.id){$('#apply-log-details').open=true;ApplyUI.openedLog=job.id}
   const deployed=info?.lastDeployment;
   const historical=!current&&job.status&&job.status!=='idle'&&!running?job:deployed&&deployed.id!==job.id?{...deployed.payload,id:deployed.id,status:deployed.status,started:deployed.started,finished:deployed.finished}:null;
   $('#apply-previous').hidden=ApplyUI.loading||!historical;

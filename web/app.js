@@ -51,7 +51,13 @@ async function api(path, body, uploadHeaders){
   return data;
 }
 let toastTimer;
-function toast(message, error=false){const node=$('#toast');node.textContent=message;node.classList.toggle('error',error);node.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.hidden=true,error?11000:6500)}
+function closeToast(){const node=$('#toast');if(node.matches(':popover-open'))node.hidePopover();node.hidden=true;clearTimeout(toastTimer)}
+function toast(message, error=false){
+  const node=$('#toast');$('#toast-title').textContent=error?'Action needs attention':'Studio update';$('#toast-message').textContent=message;
+  node.classList.toggle('error',error);$('#toast-announcement').setAttribute('role',error?'alert':'status');node.hidden=false;
+  if(!node.matches(':popover-open'))node.showPopover();clearTimeout(toastTimer);
+  if(!error)toastTimer=setTimeout(closeToast,6500);
+}
 async function attempt(fn){try{return await fn()}catch(error){toast(error.message,true)}}
 function head(eyebrow,title,description,action=''){return `<div class="page-head"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${description}</p></div>${action}</div>`}
 function iconPlaceholder(id){return `<span class="item-icon item-placeholder" aria-hidden="true" title="${esc(/^\d+$/.test(String(id))?'No local icon available for item #'+id:'No item icon available')}">◇</span>`}
@@ -65,12 +71,23 @@ function bindImages(root=document){$$('img.item-icon',root).forEach(img=>{
 function pool(id){return String(id).startsWith('s')?S.data.groups.find(g=>g.source.startsWith('chest')&&g.id===String(id).slice(1)):null}
 function name(kind,id){const p=kind==='item'?pool(id):null;return p?p.name+' · shared pool':(kind==='item'?S.itemMap[id]:S.mobMap[id])?.name || `#${id}`}
 function itemHelpAttrs(id){return `data-help-item="${esc(id)}"`}
+function itemContent(id,options={}){
+  const item=S.itemMap[id],label=options.title||item?.name||options.fallback||name('item',id);
+  const details=[`#${id}`,options.detail];
+  if(item?.definitionStatus==='catalogue-only')details.push('Catalogue only');
+  if(item?.iconAvailable===false)details.push('Icon unavailable');
+  if(item?.nameStatus==='unnamed')details.push('Name unavailable');
+  return `${icon(id)}<span class="item-copy"><strong>${esc(label)}</strong><small>${details.filter(Boolean).map(esc).join(' · ')}</small></span>`;
+}
+function itemReference(id,options={}){
+  return `<button type="button" class="item-reference" data-inspect-item="${esc(id)}" ${itemHelpAttrs(id)} aria-label="${esc('Inspect '+(S.itemMap[id]?.name||options.fallback||name('item',id))+' (#'+id+')')}">${itemContent(id,options)}</button>`;
+}
 function bindItemUsageLinks(root){
-  $$('.item-button[data-help-item],#quest-reward',root).forEach(anchor=>{
+  $$('.item-button[data-help-item],.native-picker[data-help-item],#quest-reward',root).forEach(anchor=>{
     const id=anchor.dataset.helpItem;if(!id||id.startsWith('s'))return;
     let button=anchor.nextElementSibling;
     if(!button?.matches('[data-inspect-item]')){button=document.createElement('button');button.className='subtle-link usage-link';anchor.after(button)}
-    button.dataset.inspectItem=id;button.textContent='Where used ↗';button.setAttribute('aria-label',`Where is ${name('item',id)} used?`);
+    button.dataset.inspectItem=id;button.dataset.helpItem=id;button.textContent='Inspect item ↗';button.setAttribute('aria-label',`Inspect ${name('item',id)} (#${id})`);
   });
 }
 let usageRequest=0;
@@ -83,7 +100,9 @@ async function showItemUsage(id){
   hideItemHelp();S.usageId=id;
   const request=++usageRequest,dialog=$('#item-usage');
   if(!dialog.open)S.usageReturnFocus=document.activeElement;
-  $('#usage-title').textContent='Where this item is used';
+  $('#usage-back').textContent=$('#picker').open?'← Back to items':'← Back to previous view';
+  $('#usage-browse').textContent=$('#picker').open?'Back to item search':'Back to previous view';
+  $('#usage-title').textContent='Item details and references';
   $('#usage-body').innerHTML='<div class="loading">Scanning saved drops, recipes and item references…</div>';
   $('#usage-refresh').disabled=true;
   if(!dialog.open)dialog.showModal();
@@ -100,7 +119,7 @@ function backToItemResults(){
   if($('#picker').open){
     const target=S.usageReturnFocus?.isConnected?S.usageReturnFocus:$('#picker-search');
     target.focus({preventScroll:true});
-  }else browseItems();
+  }else if(S.usageReturnFocus?.isConnected){S.usageReturnFocus.focus({preventScroll:true})}else browseItems();
 }
 function choosePickerResult(item){
   const picker=S.picker;
@@ -197,10 +216,10 @@ async function loadHoverUsage(id,anchor,request){
     if(request!==helpRequest||helpAnchor!==anchor)return;
     const count=data.counts.metins,others=[['bosses','boss','bosses'],['monsters','monster','monsters'],['chests','chest','chests'],['pools','reward table','reward tables'],['other','other target','other targets']].filter(([key])=>data.counts[key]).map(([key,one,many])=>`${fmt(data.counts[key])} ${data.counts[key]===1?one:many}`);
     const current=S.page==='drops'&&S.group?.category==='metin'&&data.metins.some(metin=>metin.id===S.group.id);
-    $('#item-help-usage').innerHTML=`<strong>Configured in ${fmt(count)} ${count===1?'Metin':'Metins'}</strong>${data.metins.length?`<ul>${data.metins.slice(0,4).map(metin=>`<li>${esc(metin.name)} <span>· Lv. ${esc(metin.level??'?')} · #${esc(metin.id)}</span></li>`).join('')}</ul>${count>4?`<div class="item-help-more">+ ${fmt(count-4)} more · see Where used ↗</div>`:''}`:''}${others.length?`<div class="item-help-other">Also in ${esc(others.join(' · '))}</div>`:''}${current?'<div class="item-help-current">Includes this Metin.</div>':''}<small>Saved references, including shared pools. Unsaved edits excluded.${data.zeroParameter?' Some references have zero parameters.':''}</small>`;
+    $('#item-help-usage').innerHTML=`<strong>Configured in ${fmt(count)} ${count===1?'Metin':'Metins'}</strong>${data.metins.length?`<ul>${data.metins.slice(0,4).map(metin=>`<li>${esc(metin.name)} <span>· Lv. ${esc(metin.level??'?')} · #${esc(metin.id)}</span></li>`).join('')}</ul>${count>4?`<div class="item-help-more">+ ${fmt(count-4)} more · see Inspect item ↗</div>`:''}`:''}${others.length?`<div class="item-help-other">Also in ${esc(others.join(' · '))}</div>`:''}${current?'<div class="item-help-current">Includes this Metin.</div>':''}<small>Saved references, including shared pools. Unsaved edits excluded.${data.zeroParameter?' Some references have zero parameters.':''}</small>`;
   }catch(error){
     if(request!==helpRequest||helpAnchor!==anchor)return;
-    $('#item-help-usage').textContent='Drop usage unavailable. Try hovering again or open Where used ↗.';
+    $('#item-help-usage').textContent='Drop usage unavailable. Try hovering again or open Inspect item ↗.';
   }
   positionItemHelp();
 }
@@ -284,7 +303,7 @@ function renderDropDetail(){
 }
 function renderDropRows(){
   const g=S.group;
-  $('#drop-rows').innerHTML=g.entries.map((e,i)=>`<tr><td>${String(i+1).padStart(2,'0')}</td><td><button class="item-button" ${itemHelpAttrs(e.item)} data-item="${i}" title="Choose a different reward">${icon(e.item)}<span><strong>${esc(name('item',e.item))}</strong><small>#${esc(e.item)}${e.rare?` · rare ${esc(e.rare)}`:''}</small></span></button>${pool(e.item)?`<button class="subtle-link pool-link" data-pool="${esc(e.item)}">Edit pool contents ↗</button>`:''}</td><td><input type="number" min="1" max="200" step="1" value="${esc(e.count)}" data-field="count" data-row="${i}" aria-label="Count for reward ${i+1}"></td><td><input type="number" min="0" step="${isWeighted()?'1':'0.01'}" value="${esc(e.prob)}" data-field="prob" data-row="${i}" aria-label="${isWeighted()?'Weight':'Base parameter'} for reward ${i+1}"></td><td><span class="chance" data-chance="${i}"></span></td><td><button class="icon-button remove-row" data-remove="${i}" aria-label="Remove reward ${i+1}">×</button></td></tr>`).join('');
+  $('#drop-rows').innerHTML=g.entries.map((e,i)=>`<tr><td>${String(i+1).padStart(2,'0')}</td><td><button class="item-button" ${itemHelpAttrs(e.item)} data-item="${i}" title="Choose a different reward">${itemContent(e.item,{detail:e.rare?`Rare ${e.rare}`:''})}</button>${pool(e.item)?`<button class="subtle-link pool-link" data-pool="${esc(e.item)}">Edit pool contents ↗</button>`:''}</td><td><input type="number" min="1" max="200" step="1" value="${esc(e.count)}" data-field="count" data-row="${i}" aria-label="Count for reward ${i+1}"></td><td><input type="number" min="0" step="${isWeighted()?'1':'0.01'}" value="${esc(e.prob)}" data-field="prob" data-row="${i}" aria-label="${isWeighted()?'Weight':'Base parameter'} for reward ${i+1}"></td><td><span class="chance" data-chance="${i}"></span></td><td><button class="icon-button remove-row" data-remove="${i}" aria-label="Remove reward ${i+1}">×</button></td></tr>`).join('');
   $$('[data-item]',$('#drop-rows')).forEach(n=>n.addEventListener('click',()=>pick('item',null,item=>{const e=g.entries[Number(n.dataset.item)];e.item=item.id;e.name=item.name;dirty();renderDropRows()})));
   $$('[data-field]',$('#drop-rows')).forEach(n=>n.addEventListener('input',()=>{g.entries[Number(n.dataset.row)][n.dataset.field]=n.value;dirty();updateChances()}));
   $$('[data-remove]',$('#drop-rows')).forEach(n=>n.addEventListener('click',()=>{g.entries.splice(Number(n.dataset.remove),1);dirty();renderDropRows()}));
@@ -326,7 +345,7 @@ function renderPicker(){
   $('#picker-quick').innerHTML=quick.filter(key=>key==='all'||items.some(e=>StudioCatalog.groupKeys(e,kind).includes(key))).map(key=>`<button class="filter-chip" data-category="${key}" aria-pressed="${filters.category===key}">${key==='all'?'All':esc(categories.find(([id])=>id===key)[1])}<span>${fmt(counts[key]||0)}</span></button>`).join('');
   $$('[data-category]',$('#picker-quick')).forEach(n=>n.addEventListener('click',()=>setPickerCategory(n.dataset.category)));
   const visible=results.slice(0,limit);
-  $('#picker-results').innerHTML=visible.length?visible.map((e,i)=>`<button class="pick-result" data-pick="${i}">${kind==='item'?icon(e.id):'<span class="entity-glyph" aria-hidden="true">◇</span>'}<span class="pick-name"><strong>${esc(e.name)}</strong><small>#${esc(e.id)}${e.definitionStatus==='catalogue-only'?' · Catalogue only':''}${e.iconAvailable===false?' · Icon unavailable':''}${e.nameStatus==='unnamed'?' · Name unavailable':''}${(e.requiredLevel??e.level)?` · ${kind==='item'?'Requires level':'Level'} ${e.requiredLevel??e.level}`:''}</small></span><span class="pill">${esc(StudioCatalog.label(e,kind))}</span></button>`).join(''):'<div class="empty"><strong>No matching results</strong><p>Try a broader category, another function, or fewer search words.</p><button class="button small" id="picker-empty-reset">Clear filters</button></div>';
+  $('#picker-results').innerHTML=visible.length?visible.map((e,i)=>`<button class="pick-result ${kind==='item'?'item-reference':''}" data-pick="${i}">${kind==='item'?itemContent(e.id,{detail:e.requiredLevel?`Requires level ${e.requiredLevel}`:'',fallback:e.name}):`<span class="entity-glyph" aria-hidden="true">◇</span><span class="pick-name"><strong>${esc(e.name)}</strong><small>#${esc(e.id)}${e.level?` · Level ${esc(e.level)}`:''}</small></span>`}<span class="pill">${esc(StudioCatalog.label(e,kind))}</span></button>`).join(''):'<div class="empty"><strong>No matching results</strong><p>Try a broader category, another function, or fewer search words.</p><button class="button small" id="picker-empty-reset">Clear filters</button></div>';
   $('#picker-count').textContent=`${fmt(results.length)} ${results.length===1?'match':'matches'}`;
   $('#picker-shown').textContent=results.length?`Showing ${fmt(visible.length)} of ${fmt(results.length)} · ${S.picker.inspectOnly?'Select an item to inspect it':'Select a result to use it; ↗ shows its references'}`:'No results to display';
   $('#picker-more').hidden=visible.length>=results.length;
@@ -337,7 +356,7 @@ function renderPicker(){
       const item=visible[Number(n.dataset.pick)];n.dataset.helpItem=item.id;
       if(!item.id.startsWith('s')&&!S.picker.inspectOnly){
         const row=document.createElement('div');row.className='pick-row';n.before(row);row.append(n);
-        const inspect=document.createElement('button');inspect.className='pick-inspect';inspect.dataset.inspectItem=item.id;inspect.textContent='↗';inspect.setAttribute('aria-label',`Where is ${item.name} used?`);inspect.title='Where this item is used';row.append(inspect);
+        const inspect=document.createElement('button');inspect.className='pick-inspect';inspect.dataset.inspectItem=item.id;inspect.textContent='↗';inspect.setAttribute('aria-label',`Inspect ${item.name} (#${item.id})`);inspect.title='Inspect item effects and sources';row.append(inspect);
       }
     }
     n.addEventListener('click',()=>choosePickerResult(visible[Number(n.dataset.pick)]));
@@ -355,13 +374,13 @@ function questField(key,label,type='text'){return `<div class="field"><label for
 function renderQuests(){
   const q=S.quest;
   $('#content').innerHTML=head('STORIES & ADVENTURES','Quest builder','Turn an idea into a hunt, an NPC conversation, and a reward.','<span class="head-note">One completion per character</span>')+
-  `<div class="quest-layout"><div class="panel"><div class="quest-section"><h3><span class="quest-number">01</span>The story</h3><div class="form-grid">${questField('title','Quest title')}${questField('id','Unique quest ID')}<div class="field full"><label for="quest-intro">NPC introduction</label><textarea id="quest-intro" data-quest="intro">${esc(q.intro)}</textarea><small>Use plain English text. The unique ID starts with studio_.</small></div></div></div><div class="quest-section"><h3><span class="quest-number">02</span>The adventure</h3><div class="form-grid"><div class="field"><label>Quest giver</label><button class="button" id="quest-npc">${esc(name('mob',q.npc))} · #${q.npc}</button></div><div class="field"><label>Hunt target</label><button class="button" id="quest-target">${esc(name('mob',q.target))} · #${q.target}</button></div>${questField('kills','Number to defeat','number')}${questField('level','Minimum player level','number')}</div></div><div class="quest-section"><h3><span class="quest-number">03</span>The reward</h3><div class="form-grid"><div class="field full"><label>Reward item</label><button class="button" id="quest-reward" ${itemHelpAttrs(q.reward)}>${esc(name('item',q.reward))} · #${q.reward}</button></div></div><div class="number-grid">${questField('quantity','Item count','number')}${questField('yang','Yang','number')}${questField('exp','Experience','number')}</div></div><div class="drop-save"><span id="dirty-label">Ready to customize</span><button class="button primary" id="review-quest">Review quest <span>→</span></button></div></div><div class="panel"><div class="panel-header"><h3>Quest source</h3><button class="button ghost small" id="download-quest">↓ Download .quest</button></div><pre class="code quest-code" id="quest-source">Generating source…</pre><div class="panel-body"><p class="notice info">Saving adds this quest and a compiler hook to your game build. Apply to server runs the installed qc compiler. Source preview alone does not confirm compilation.</p><p class="small-text muted">Players accept at the chosen NPC, defeat the target, and return for a reward. The quest keeps progress between logins and completes once.</p></div></div></div>`;
+  `<div class="quest-layout"><div class="panel"><div class="quest-section"><h3><span class="quest-number">01</span>The story</h3><div class="form-grid">${questField('title','Quest title')}${questField('id','Unique quest ID')}<div class="field full"><label for="quest-intro">NPC introduction</label><textarea id="quest-intro" data-quest="intro">${esc(q.intro)}</textarea><small>Use plain English text. The unique ID starts with studio_.</small></div></div></div><div class="quest-section"><h3><span class="quest-number">02</span>The adventure</h3><div class="form-grid"><div class="field"><label>Quest giver</label><button class="button" id="quest-npc">${esc(name('mob',q.npc))} · #${q.npc}</button></div><div class="field"><label>Hunt target</label><button class="button" id="quest-target">${esc(name('mob',q.target))} · #${q.target}</button></div>${questField('kills','Number to defeat','number')}${questField('level','Minimum player level','number')}</div></div><div class="quest-section"><h3><span class="quest-number">03</span>The reward</h3><div class="form-grid"><div class="field full"><label>Reward item</label><button class="button item-button item-reference" id="quest-reward" ${itemHelpAttrs(q.reward)}>${itemContent(q.reward)}</button></div></div><div class="number-grid">${questField('quantity','Item count','number')}${questField('yang','Yang','number')}${questField('exp','Experience','number')}</div></div><div class="drop-save"><span id="dirty-label">Ready to customize</span><button class="button primary" id="review-quest">Review quest <span>→</span></button></div></div><div class="panel"><div class="panel-header"><h3>Quest source</h3><button class="button ghost small" id="download-quest">↓ Download .quest</button></div><pre class="code quest-code" id="quest-source">Generating source…</pre><div class="panel-body"><p class="notice info">Saving adds this quest and a compiler hook to your game build. Apply to server runs the installed qc compiler. Source preview alone does not confirm compilation.</p><p class="small-text muted">Players accept at the chosen NPC, defeat the target, and return for a reward. The quest keeps progress between logins and completes once.</p></div></div></div>`;
   let timer;
   $$('[data-quest]').forEach(n=>n.addEventListener('input',()=>{S.quest[n.dataset.quest]=n.value;dirty();clearTimeout(timer);timer=setTimeout(updateQuestCode,400)}));
-  [['npc',m=>m.category==='npc'],['target',m=>['monster','metin','boss'].includes(m.category)],['reward',null]].forEach(([key,filter])=>{$('#quest-'+key).addEventListener('click',()=>pick(key==='reward'?'item':'mob',filter,e=>{S.quest[key]=e.id;if(key==='reward')$('#quest-reward').dataset.helpItem=e.id;$('#quest-'+key).textContent=`${e.name} · #${e.id}`;bindItemUsageLinks($('#content'));dirty();updateQuestCode()}))});
+  [['npc',m=>m.category==='npc'],['target',m=>['monster','metin','boss'].includes(m.category)],['reward',null]].forEach(([key,filter])=>{$('#quest-'+key).addEventListener('click',()=>pick(key==='reward'?'item':'mob',filter,e=>{S.quest[key]=e.id;if(key==='reward')$('#quest-reward').dataset.helpItem=e.id;if(key==='reward'){$('#quest-reward').innerHTML=itemContent(e.id);bindImages($('#quest-reward'))}else $('#quest-'+key).textContent=`${e.name} · #${e.id}`;bindItemUsageLinks($('#content'));dirty();updateQuestCode()}))});
   $('#review-quest').addEventListener('click',()=>preview('/api/preview/quest',S.quest));
   $('#download-quest').addEventListener('click',()=>attempt(async()=>{const {code}=await api('/api/quest-code',S.quest);const u=URL.createObjectURL(new Blob([code],{type:'text/plain'}));const a=document.createElement('a');a.href=u;a.download=S.quest.id+'.quest';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}));
-  updateQuestCode();bindItemUsageLinks($('#content'));workspaceRestore();
+  updateQuestCode();bindImages($('#content'));bindItemUsageLinks($('#content'));workspaceRestore();
 }
 let questRequest=0;
 async function updateQuestCode(){const id=++questRequest;try{const {code}=await api('/api/quest-code',S.quest);if(id===questRequest&&$('#quest-source'))$('#quest-source').textContent=code}catch(e){if(id===questRequest&&$('#quest-source'))$('#quest-source').textContent=e.message}}
@@ -398,7 +417,7 @@ function renderRecipeDetail(){
 }
 function renderRecipeRows(kind){
   const rows=S.recipe[kind],el=$('#recipe-'+kind);
-  el.innerHTML=rows.length?`<table><thead><tr><th>#</th><th>ITEM</th><th>COUNT</th><th></th></tr></thead><tbody>${rows.map((e,i)=>`<tr><td>${i+1}</td><td><button class="item-button" ${itemHelpAttrs(e.item)} data-recipe-item="${i}">${icon(e.item)}<span><strong>${esc(name('item',e.item))}</strong><small>#${esc(e.item)}</small></span></button></td><td><input type="number" min="1" max="200" data-recipe-qty="${i}" value="${esc(e.count)}" aria-label="${kind} count ${i+1}"></td><td><button class="icon-button" data-recipe-remove="${i}" aria-label="Remove ${kind} ${i+1}">×</button></td></tr>`).join('')}</tbody></table>`:'<div class="empty">Choose an item from the catalog to add it here.</div>';
+  el.innerHTML=rows.length?`<table><thead><tr><th>#</th><th>ITEM</th><th>COUNT</th><th></th></tr></thead><tbody>${rows.map((e,i)=>`<tr><td>${i+1}</td><td><button class="item-button" ${itemHelpAttrs(e.item)} data-recipe-item="${i}">${itemContent(e.item)}</button></td><td><input type="number" min="1" max="200" data-recipe-qty="${i}" value="${esc(e.count)}" aria-label="${kind} count ${i+1}"></td><td><button class="icon-button" data-recipe-remove="${i}" aria-label="Remove ${kind} ${i+1}">×</button></td></tr>`).join('')}</tbody></table>`:'<div class="empty">Choose an item from the catalog to add it here.</div>';
   $$('[data-recipe-item]',el).forEach(n=>n.addEventListener('click',()=>pick('item',e=>e.id!=='1',e=>{rows[Number(n.dataset.recipeItem)].item=e.id;dirty();renderRecipeRows(kind)})));
   $$('[data-recipe-qty]',el).forEach(n=>n.addEventListener('input',()=>{rows[Number(n.dataset.recipeQty)].count=n.value;dirty()}));
   $$('[data-recipe-remove]',el).forEach(n=>n.addEventListener('click',()=>{rows.splice(Number(n.dataset.recipeRemove),1);dirty();renderRecipeRows(kind)}));bindImages(el);bindItemUsageLinks(el);
@@ -471,8 +490,9 @@ async function commit(){const button=$('#commit-button');button.disabled=true;tr
   else if(S.page==='quests'){QuestUI.search='';QuestUI.origin='all';QuestUI.kind='all';QuestUI.limit=40;await renderQuestLibrary()}
   else navigate(S.route||S.page,{reload:true});
 }catch(e){toast(e.message,true)}finally{button.disabled=false}}
-function openApplyDialog(){
-  ApplyUI.jobId=null;ApplyUI.error='';ApplyUI.loading=true;ApplyUI.connectionFailed=false;
+function openApplyDialog(options={}){
+  const pending=(WUI.info?.pending.length||0)+Number(!!WUI.info?.preferences.nativeUpdatePending);
+  ApplyUI.jobId=options.jobId||(!pending?operationJob().id:null)||null;ApplyUI.error='';ApplyUI.loading=true;ApplyUI.connectionFailed=false;ApplyUI.progressSignature='';
   $('#apply-previous').open=false;
   $('#apply-interrupted-ack').checked=false;
   $('#apply-dialog').showModal();
@@ -481,6 +501,7 @@ function openApplyDialog(){
 }
 async function runServerOperation(validateOnly){
   if(ApplyUI.starting||S.status?.job.status==='running')return;
+  statusRequest++;ApplyUI.startedAt=Date.now()/1000;
   ApplyUI.starting=validateOnly?'validation':'apply';ApplyUI.error='';ApplyUI.jobId=null;
   refreshApplyControl();
   try{
@@ -536,20 +557,25 @@ async function refreshCatalogue(catalogue){
     S.data.catalogue=data.catalogue;renderCatalogueStatus(data.catalogue);
   }catch(error){const node=$('#catalogue-status');if(node){node.hidden=false;node.textContent='Catalogue refresh unavailable; last loaded data retained.'}}finally{catalogueRefreshBusy=false;}
 }
+let statusRequest=0;
 async function updateStatus(){
+  const request=++statusRequest;
   refreshAddonNotice();
   try{
-    const data=await api('/api/status');S.status=data;
+    const data=await api('/api/status');if(request!==statusRequest)return;S.status=data;
     await refreshCatalogue(data.catalogue);
+    if(request!==statusRequest)return;
     const badge=$('#docker-badge');
     badge.textContent=data.job.status==='running'?(data.job.kind==='validation'?'Validating build…':'Applying changes…'):data.health?.gameHealthy?'Game healthy':data.docker.available?'Game health unverified':'Docker stopped';
-    badge.classList.toggle('good',!!data.health?.gameHealthy);badge.classList.toggle('neutral',!data.docker.available);
+    badge.classList.toggle('good',data.job.status!=='running'&&!!data.health?.gameHealthy);badge.classList.toggle('neutral',data.job.status==='running'||!data.docker.available);
     await workspaceRefresh();
+    if(request!==statusRequest)return;
     ApplyUI.loading=false;ApplyUI.connectionFailed=false;
     refreshApplyControl();
     if(data.job.status==='running'&&!applyTimer)applyTimer=setInterval(updateStatus,4000);
     if(data.job.status!=='running'&&applyTimer){clearInterval(applyTimer);applyTimer=null}
   }catch(error){
+    if(request!==statusRequest)return;
     $('#docker-badge').textContent='Studio disconnected';
     ApplyUI.loading=false;ApplyUI.connectionFailed=true;
     refreshApplyControl();
@@ -557,6 +583,7 @@ async function updateStatus(){
 }
 
 document.addEventListener('DOMContentLoaded',async()=>{
+  $('#toast-close').addEventListener('click',closeToast);
   document.addEventListener('click',e=>{const button=e.target.closest('[data-inspect-item]');if(button){e.preventDefault();e.stopPropagation();showItemUsage(button.dataset.inspectItem)}});
   $('#explore-items').addEventListener('click',browseItems);
   $('#usage-browse').addEventListener('click',backToItemResults);
