@@ -104,6 +104,7 @@ src/metin2_studio/economy_tools.py
 src/metin2_studio/filesystem.py
 src/metin2_studio/installation.py
 src/metin2_studio/item_help.py
+src/metin2_studio/item_effects.py
 src/metin2_studio/item_icons.py
 src/metin2_studio/item_usage.py
 src/metin2_studio/local_lock.py
@@ -134,6 +135,7 @@ tests/collection_fixture.py
 tests/github_fixture.py
 tests/history.test.js
 tests/icons.test.js
+tests/item_explorer.test.js
 tests/navigation.test.js
 tests/quest_guidance.lua
 tests/quest_help.test.js
@@ -160,6 +162,7 @@ tests/test_history_categories.py
 tests/test_history_import.py
 tests/test_installation.py
 tests/test_item_icons.py
+tests/test_item_effects.py
 tests/test_item_usage.py
 tests/test_merged_integration_check.py
 tests/test_native_crafting.py

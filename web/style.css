@@ -17,6 +17,13 @@
 .usage-dialog[open]{display:flex;flex-direction:column}
 .usage-dialog>.dialog-head,.usage-dialog>.dialog-foot{flex:none}
 .usage-dialog .dialog-foot>span{line-height:1.7}
+.dialog-head-actions{display:flex;align-items:center;gap:10px;flex:none}
+.usage-dialog .dialog-head>div:first-child{min-width:0}.usage-dialog .dialog-head h2{overflow-wrap:anywhere}
+.item-effect-group{margin:13px 0;padding:12px 14px;border:1px solid var(--line);border-radius:6px;background:#151a20}
+.item-effect-group h4{margin:0 0 7px;font-size:11px;color:var(--gold)}
+.item-effect-group ul{padding-left:17px;margin:0;font-size:12px;line-height:1.8;color:#d3dfd5}
+.item-effect-group p{margin:7px 0 0;font-size:10px;line-height:1.6;color:var(--muted)}
+.item-detail-effects .item-effect-note{font-size:11px;line-height:1.7;color:var(--muted)}
 .usage-body{padding:22px;overflow:auto;overscroll-behavior:contain;min-height:160px}
 .usage-item{display:flex;align-items:center;gap:13px;margin-bottom:20px}
 .usage-item>.item-icon{width:43px;height:46px}

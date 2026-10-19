@@ -42,7 +42,7 @@
   <footer><strong id="studio-version">METIN2 SERVER STUDIO</strong> <span>Local files · Review every change · Automatic backups</span></footer>
 </main>
 <dialog id="picker" class="picker" aria-labelledby="picker-title">
-  <div class="dialog-head"><div><div class="eyebrow">INSTALLED CATALOG</div><h2 id="picker-title">Choose an item</h2><p class="picker-hint">Browse by category or function. Names and IDs are optional.</p></div><button class="icon-button" data-close="picker" aria-label="Close picker">×</button></div>
+  <div class="dialog-head"><div><div class="eyebrow">INSTALLED CATALOG</div><h2 id="picker-title">Choose an item</h2><p class="picker-hint">Browse by category or function. Names and IDs are optional.</p></div><div class="dialog-head-actions"><button id="picker-library" class="button small" hidden>Saved items</button><button class="icon-button" data-close="picker" aria-label="Close picker">×</button></div></div>
   <div class="searchbox"><span aria-hidden="true">⌕</span><input id="picker-search" placeholder="Search names, IDs or functions…" autocomplete="off" aria-label="Search catalog"><kbd>ESC</kbd></div>
   <div id="picker-quick" class="picker-quick" role="group" aria-label="Quick category filters"></div>
   <div class="picker-filters">
@@ -56,7 +56,7 @@
   <div class="dialog-foot picker-foot"><span class="muted" id="picker-shown"></span><button id="picker-more" class="button small">Show 100 more</button></div>
 </dialog>
 <dialog id="item-usage" class="usage-dialog" aria-labelledby="usage-title">
-  <div class="dialog-head"><div><div class="eyebrow">ITEM EXPLORER · READ ONLY</div><h2 id="usage-title">Where this item is used</h2></div><button class="icon-button" data-close="item-usage" aria-label="Close item references">×</button></div>
+  <div class="dialog-head"><div><div class="eyebrow">ITEM EXPLORER · READ ONLY</div><h2 id="usage-title">Where this item is used</h2></div><div class="dialog-head-actions"><button id="usage-back" class="button small">← Back to items</button><button class="icon-button" data-close="item-usage" aria-label="Close item references">×</button></div></div>
   <div id="usage-body" class="usage-body" aria-live="polite"></div>
   <div class="dialog-foot"><span class="muted">Inspecting references does not change configurations.</span><button id="usage-browse" class="button">Back to item search</button><button id="usage-refresh" class="button primary">Refresh references</button></div>
 </dialog>

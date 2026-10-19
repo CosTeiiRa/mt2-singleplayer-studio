@@ -21,6 +21,7 @@
     const description = item?.description;
     const sourceLabels = {
       definition: item?.definitionStatus === 'installed-server' ? 'Server catalogue values · runtime rules may differ' : 'Installed seed values · live settings may differ',
+      configured: 'Deployed Dragon Stone balance · calculated preview',
       guide: 'General Metin2 guide · server rules may differ',
       catalog: 'Catalog category guide · effect unverified',
       unknown: 'Effect not documented'
@@ -28,6 +29,7 @@
     return {
       text: description?.text || 'No reliable effect description is available for this item. Check the in-game tooltip or Singleplayer wiki using its ID.',
       note: description?.note || '',
+      effects: Array.isArray(description?.effects) ? description.effects.filter(group=>group&&typeof group.title==='string'&&Array.isArray(group.values)).map(group=>({title:group.title,values:group.values.filter(value=>typeof value==='string'),note:typeof group.note==='string'?group.note:''})) : [],
       source: sourceLabels[description?.source] || sourceLabels.unknown,
       facts: Array.isArray(description?.facts) ? description.facts.filter(fact=>Array.isArray(fact)&&fact.length===2) : []
     };

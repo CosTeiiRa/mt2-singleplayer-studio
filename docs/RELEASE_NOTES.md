@@ -1,4 +1,20 @@
-# beta-1.14.0 — shared live catalogue and offline cache
+# beta-1.15.0 — direct item exploration and configured effects
+
+Item explorer opens the catalogue immediately. Saved items opens favourites and
+recent history when wanted. Selecting an item leaves the results beneath its
+details; Back, Close and Escape return to the same search and scroll position.
+Header and footer Back controls remain available on long reference pages.
+
+Hover cards, details and comparisons show configured weapon attack ranges, armour
+defence and fixed item bonuses. English bonus labels and native point mappings
+come from the installed package. Dragon Stone effects use the deployed server
+table, rather than the older host copy that this game's build replaces. Calculated
+base effects, quality/strength and possible random bonus rolls are shown separately.
+The shared catalogue caches the last successfully read table for offline use and
+exports the same description data to add-on references. Previews are not rolled
+inventory items; unsupported balance entries remain explicitly unavailable.
+
+## beta-1.14.0 — shared live catalogue and offline cache
 
 Studio reads current item and mob definitions from the running server in a bounded
 read-only transaction at startup. Installed client packs supply English names,

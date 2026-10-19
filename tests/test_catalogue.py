@@ -220,6 +220,18 @@ class CatalogueTests(unittest.TestCase):
         self.assertTrue(restarted.status['cacheFromOlderVersion'])
         self.assertEqual(restarted.status['serverMode'],'cached')
 
+    def test_deployed_effect_snapshot_survives_offline_restart(self):
+        from tests.test_item_effects import TABLE,META
+        from metin2_studio.item_effects import parse_dragon_table
+        self.rows['catalog-items'].append(item(110000,'Dragon Stone',29))
+        service = self.service()
+        service.server = {'dragonSoul':parse_dragon_table(TABLE),'bonusMeta':META}
+        before = service.refresh(force=True)
+        self.assertEqual(before['items']['110000']['description']['effects'][0]['values'],['Intelligence +1'])
+        self.online = False; restarted = self.service(); after = restarted.refresh(force=True)
+        self.assertEqual(after['items']['110000']['description'],before['items']['110000']['description'])
+        self.assertEqual(restarted.status['serverMode'],'cached')
+
 
 class ImageTests(unittest.TestCase):
     def test_tga_rle_and_orientation_decode_to_expected_png_pixels(self):

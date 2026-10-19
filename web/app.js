@@ -82,6 +82,7 @@ function browseItems(){
 async function showItemUsage(id){
   hideItemHelp();S.usageId=id;
   const request=++usageRequest,dialog=$('#item-usage');
+  if(!dialog.open)S.usageReturnFocus=document.activeElement;
   $('#usage-title').textContent='Where this item is used';
   $('#usage-body').innerHTML='<div class="loading">Scanning saved drops, recipes and item references…</div>';
   $('#usage-refresh').disabled=true;
@@ -93,6 +94,21 @@ async function showItemUsage(id){
   }catch(error){
     if(request===usageRequest&&dialog.open){$('#usage-body').innerHTML='<div class="empty"><strong>Could not read item references</strong><p id="usage-error"></p></div>';$('#usage-error').textContent=error.message}
   }finally{if(request===usageRequest)$('#usage-refresh').disabled=false}
+}
+function backToItemResults(){
+  hideItemHelp();$('#item-usage').close();
+  if($('#picker').open){
+    const target=S.usageReturnFocus?.isConnected?S.usageReturnFocus:$('#picker-search');
+    target.focus({preventScroll:true});
+  }else browseItems();
+}
+function choosePickerResult(item){
+  const picker=S.picker;
+  hideItemHelp();if(!picker.inspectOnly)$('#picker').close();
+  picker.callback(item);
+}
+function itemEffectsMarkup(detail){
+  return (detail?.effects||[]).map(group=>`<section class="item-effect-group"><h4>${esc(group.title)}</h4><ul>${group.values.map(value=>`<li>${esc(value)}</li>`).join('')}</ul>${group.note?`<p>${esc(group.note)}</p>`:''}</section>`).join('');
 }
 function renderItemUsage(data){
   const labels={drops:['Drops in','Monster, boss and Metin groups, including shared pools.'],chests:['Found in chests','Saved chest reward groups.'],pools:['Reward pools & other tables','Shared or unclassified reward tables. These are not all physical chests or confirmed obtainable sources.'],crafted:['Can be crafted by','Recipes that produce this exact item ID.'],ingredients:['Used to craft','Ingredients and recipe/progress requirements.'],shops:['Sold by NPCs','Database seed shop inventories; current shops may differ.'],refining:['Used in equipment upgrades','Database seed refinement relationships.'],files:['Other file references','Literal ID matches; these do not confirm an item effect or an active quest.']};
@@ -169,7 +185,7 @@ function showItemHelp(anchor){
   const detail=StudioCatalog.help(item),tooltip=$('#item-tooltip');
   const owner=anchor.closest('dialog')||document.body;
   if(tooltip.parentElement!==owner)owner.append(tooltip);
-  tooltip.innerHTML=`<div class="item-help-head">${icon(id)}<div><strong>${esc(item.name)}</strong><small>#${esc(id)} · ${esc(StudioCatalog.label(item))}</small></div></div><div id="item-help-usage" class="item-help-usage" role="status">Checking drop sources…</div><p class="item-help-text">${esc(detail.text)}</p>${detail.facts.length?`<dl class="item-help-facts">${detail.facts.map(([key,value])=>`<div><dt>${esc(key)}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>`:''}${detail.note?`<p class="item-help-note">${esc(detail.note)}</p>`:''}<div class="item-help-source">${esc(detail.source)}</div>`;
+  tooltip.innerHTML=`<div class="item-help-head">${icon(id)}<div><strong>${esc(item.name)}</strong><small>#${esc(id)} · ${esc(StudioCatalog.label(item))}</small></div></div><p class="item-help-text">${esc(detail.text)}</p>${itemEffectsMarkup(detail)}${detail.facts.length?`<dl class="item-help-facts">${detail.facts.map(([key,value])=>`<div><dt>${esc(key)}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>`:''}${detail.note?`<p class="item-help-note">${esc(detail.note)}</p>`:''}<div id="item-help-usage" class="item-help-usage" role="status">Checking drop sources…</div><div class="item-help-source">${esc(detail.source)}</div>`;
   const ids=(anchor.getAttribute('aria-describedby')||'').split(/\s+/).filter(Boolean);ids.push('item-tooltip');anchor.setAttribute('aria-describedby',[...new Set(ids)].join(' '));
   tooltip.hidden=false;tooltip.showPopover();positionItemHelp();bindImages(tooltip);
   const request=helpRequest;
@@ -292,6 +308,7 @@ function pick(kind,filter,callback,options={}){
   if(!available.functions.some(e=>e.id===filters.function))filters.function='all';
   S.picker={kind,callback,filter,items,filters,limit:100,inspectOnly:!!options.inspectOnly};
   $('#picker-title').textContent=options.inspectOnly?'Explore an item':kind==='item'?'Choose an item':'Choose a monster or NPC';
+  $('#picker-library').hidden=!options.inspectOnly;
   $('.picker-hint').textContent=options.inspectOnly?'Select an item to see drops, crafting and other references. Read only.':kind==='item'?'Installed definitions are shown by default. Use Full catalogue for other IDs; missing icons and names are labelled.':'Browse by type or search a name or ID.';
   $('#picker-search').value='';$('#picker-sort').value=filters.sort;
   $('#picker-function-field').hidden=kind!=='item';$('#picker-scope-field').hidden=kind!=='item';$('#picker-scope').value=filters.scope||'all';
@@ -323,7 +340,7 @@ function renderPicker(){
         const inspect=document.createElement('button');inspect.className='pick-inspect';inspect.dataset.inspectItem=item.id;inspect.textContent='↗';inspect.setAttribute('aria-label',`Where is ${item.name} used?`);inspect.title='Where this item is used';row.append(inspect);
       }
     }
-    n.addEventListener('click',()=>{hideItemHelp();$('#picker').close();S.picker.callback(visible[Number(n.dataset.pick)])});
+    n.addEventListener('click',()=>choosePickerResult(visible[Number(n.dataset.pick)]));
   });
   $('#picker-empty-reset')?.addEventListener('click',resetPicker);
   const typedId=$('#picker-search').value.trim();
@@ -542,7 +559,8 @@ async function updateStatus(){
 document.addEventListener('DOMContentLoaded',async()=>{
   document.addEventListener('click',e=>{const button=e.target.closest('[data-inspect-item]');if(button){e.preventDefault();e.stopPropagation();showItemUsage(button.dataset.inspectItem)}});
   $('#explore-items').addEventListener('click',browseItems);
-  $('#usage-browse').addEventListener('click',()=>{$('#item-usage').close();if($('#picker').open)$('#picker-search').focus();else browseItems()});
+  $('#usage-browse').addEventListener('click',backToItemResults);
+  $('#usage-back').addEventListener('click',backToItemResults);
   $('#usage-refresh').addEventListener('click',()=>showItemUsage(S.usageId));
   $('#item-usage').addEventListener('close',()=>{usageRequest++;$('#usage-refresh').disabled=false});
   document.addEventListener('pointerover',e=>{const anchor=e.target.closest('[data-help-item]');if(anchor)showItemHelp(anchor)});

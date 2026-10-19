@@ -70,6 +70,9 @@ test('item help labels uncertainty and handles missing descriptions', () => {
   assert.match(detail.source, /server rules may differ/);
   assert.equal(detail.note, 'Restriction.');
   assert.deepEqual(detail.facts, [['Level','40']]);
+  const configured=help({description:{source:'configured',effects:[{title:'Base effects',values:['Intelligence +1',null],note:'Calculated'},null]}});
+  assert.match(configured.source,/Deployed Dragon Stone/);
+  assert.deepEqual(configured.effects,[{title:'Base effects',values:['Intelligence +1'],note:'Calculated'}]);
 });
 
 test('effect descriptions are searchable together with existing filters', () => {

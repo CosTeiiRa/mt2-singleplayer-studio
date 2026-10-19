@@ -57,6 +57,32 @@ A definition does not prove an item is obtainable in game. Runtime script rules,
 player inventories and rolled item bonuses are outside this catalogue. A bundled
 seed fallback can omit newer custom server items until a live read succeeds.
 
+## Explore and return to your results
+
+**Item explorer** opens the searchable catalogue directly. **Saved items** opens
+favourites and recently inspected items. Selecting an item keeps the picker open
+behind its details. **Back to items**, **Back to item search**, Close or Escape
+return to that picker with its search, filters, loaded results and scroll intact.
+Selecting an item in an editing field still selects it and closes that picker.
+
+Hover or focus an item for its configured effects. Weapon attack/magic attack
+ranges, armour defence and fixed bonuses use server definition fields; their
+displayed formulas follow the installed client tooltip. Bonus names and native
+point mappings are read as literal data from the package's panel sources.
+
+Dragon Stones use the last successfully read **deployed**
+`/opt/metin2/share/locale/poland/dragon_soul_table.txt`. This installation's build
+replaces the table in the host folder, so the host copy is not treated as proof of
+runtime values. The server cache retains the deployed balance and bonus labels.
+Background catalogue checks also pick up changes to this balance.
+
+The preview decodes the item's family, class, quality and strength, applies the
+configured weight to base values, and rounds calculated values up to whole points.
+Fixed base effects and possible additional rolls are separate. Additional options
+are alternatives, not bonuses guaranteed together. This is a calculated catalogue
+preview, not the attributes of a particular inventory stone. Missing/unsupported
+table entries display no invented bonus values.
+
 ## Where names come from
 
 Studio prefers the client's English item/mob names. The installed English export,

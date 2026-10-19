@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Open Item explorer directly into the catalogue. Keep favourites/recent items
+  under Saved items and preserve the current search, filters, pagination, scroll
+  and focus when returning from item details.
+- Show configured weapon damage, armour defence and fixed bonuses in hover,
+  item details and comparisons. Read English bonus labels and native point
+  mappings from the installed package.
+- Read/cache the deployed Dragon Stone balance and client quality labels. Show
+  calculated base effects separately from possible random rolls, with quality,
+  strength, scaling and coverage notes; never substitute the stale host table.
+
 - Load the shared item/mob catalogue from the live server database and installed
   client packs at startup. Refresh stable client/package updates automatically
   and poll live definitions without restarting the game.

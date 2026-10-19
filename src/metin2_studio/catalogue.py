@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import threading
 import time
 
@@ -13,6 +14,7 @@ from .database import query
 from .installation import atomic_json
 from .item_help import item_description
 from .item_icons import icon_path
+from .item_effects import bonus_metadata, deployed_dragon_table, enrich_description
 
 ITEM_COLUMNS = ('vnum','name','locale_name','type','subtype','stack','weight','size','antiflag','flag','wearflag',
                 'immuneflag','gold','shop_buy_price','refined_vnum','refine_set','magic_pct','specular','socket_pct',
@@ -84,13 +86,17 @@ class Catalogue:
         self.server = None
         self.status = {}
         self.paths = [self.root / name for name in ('VERSION','files/items.json','files/playerbot_names_en.tsv',
-                      'files/static/item_icons.json','files/static/icons','linux-port/docker/mariadb/initdb.d/dumps/world.sql')]
+                      'files/static/item_icons.json','files/static/icons','linux-port/docker/mariadb/initdb.d/dumps/world.sql',
+                      'files/admin_panel.py','linux-port/docker/seban-panel/app.py','linux-port/docker/ENGINE')]
         self.paths += self.client.paths
         try:
             cached = json.loads(self.cache.read_text('utf-8'))
-            if isinstance(cached, dict) and cached.get('schema') == 1 and cached.get('root') == str(self.root):
+            if isinstance(cached, dict) and cached.get('schema') in (1,2) and cached.get('root') == str(self.root):
                 valid_rows(cached['items'], 36); valid_rows(cached['mobs'], 7)
-                if checksum([cached['items'], cached['mobs']]) == cached.get('digest'):
+                contents = [cached['items'],cached['mobs']]
+                if cached['schema']==2:
+                    contents += [cached.get('dragonSoul'),cached.get('bonusMeta')]
+                if checksum(contents) == cached.get('digest'):
                     self.server = cached
         except (OSError, ValueError, KeyError, TypeError):
             pass
@@ -109,9 +115,19 @@ class Catalogue:
                       "SELECT JSON_OBJECT('set','catalog-mobs','row',JSON_ARRAY(" + mob_fields + ")) FROM world.mob_proto ORDER BY vnum;"]
         rows = self.server_query(statements) if self.server_query else query(self.compose, statements, timeout=10)
         items, mobs = valid_rows(rows.get('catalog-items'), 36), valid_rows(rows.get('catalog-mobs'), 7)
-        result = {'schema':1,'root':str(self.root),'items':list(items.values()),'mobs':list(mobs.values()),
+        metadata = bonus_metadata(self.root)
+        if not metadata['formats'] and self.server:
+            metadata = self.server.get('bonusMeta') or metadata
+        dragon = self.server.get('dragonSoul') if self.server else None
+        if self.server_query is None and (self.compose / 'docker-compose.yml').is_file():
+            try:
+                dragon = deployed_dragon_table(self.compose)
+            except (ValueError,OSError,subprocess.TimeoutExpired):
+                pass
+        result = {'schema':2,'root':str(self.root),'items':list(items.values()),'mobs':list(mobs.values()),
+                  'dragonSoul':dragon, 'bonusMeta':metadata,
                   'fetchedAt':time.time(),'version':self._version()}
-        result['digest'] = checksum([result['items'], result['mobs']])
+        result['digest'] = checksum([result['items'],result['mobs'],dragon,metadata])
         return result
 
     def _version(self):
@@ -207,6 +223,8 @@ class Catalogue:
         if not isinstance(legacy,dict):
             legacy = {}
         icons = client.get('icons', {})
+        metadata = server.get('bonusMeta') if server else None
+        metadata = metadata or bonus_metadata(self.root)
         available = {path.name for path in self.client.images.glob('*.png') if path.is_file()}
         static_folder = (self.root / 'files/static/icons').resolve()
         static = {path.name for path in static_folder.glob('*.png') if path.is_file() and path.resolve().is_relative_to(static_folder)}
@@ -225,6 +243,7 @@ class Catalogue:
                 item['definitionStatus'] = 'installed-server'
             item.update(item_metadata(item, row))
             item['description'] = item_description(item, row)
+            enrich_description(item,row,metadata,server.get('dragonSoul') if server else None,client.get('terms',{}))
             description = client.get('descriptions', {}).get(ident)
             if description:
                 item['description']['facts'].append(['Client description', description])

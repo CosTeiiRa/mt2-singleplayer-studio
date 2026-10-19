@@ -37,7 +37,7 @@ do not need those codec dependencies.
 
 ```powershell
 python -m unittest discover -s tests -t . -v
-node --test tests/apply_status.test.js tests/history.test.js tests/catalog.test.js tests/catalogue_sync.test.js tests/icons.test.js tests/navigation.test.js tests/quest_help.test.js tests/update_priority.test.js tests/addons.test.mjs tests/addons_view.test.mjs tests/addon_jobs.test.mjs
+node --test tests/apply_status.test.js tests/history.test.js tests/catalog.test.js tests/catalogue_sync.test.js tests/icons.test.js tests/item_explorer.test.js tests/navigation.test.js tests/quest_help.test.js tests/update_priority.test.js tests/addons.test.mjs tests/addons_view.test.mjs tests/addon_jobs.test.mjs
 python tools/check_project.py
 ```
 

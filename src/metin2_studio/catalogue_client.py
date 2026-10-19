@@ -101,7 +101,7 @@ class ClientCatalogue:
         before = fingerprint(self.paths)
         try:
             cached = json.loads(self.cache.read_text('utf-8'))
-            if (not isinstance(cached, dict) or cached.get('schema') != 1 or cached.get('root') != str(self.root.resolve())
+            if (not isinstance(cached, dict) or cached.get('schema') not in (1,2) or cached.get('root') != str(self.root.resolve())
                     or any(not isinstance(cached.get(key), dict) for key in ('names','descriptions','mobs','proto','icons'))
                     or any(value is not None and (not isinstance(value,str) or not re.fullmatch(r'[a-f0-9]{64}\.png',value)) for value in cached['icons'].values())
                     or any(not isinstance(value,str) for key in ('names','descriptions','mobs') for value in cached[key].values())
@@ -109,7 +109,7 @@ class ClientCatalogue:
                 cached = None
         except (OSError, ValueError):
             cached = None
-        if cached and cached.get('fingerprint') == before and all(self.icon_path(name) for name in set(cached.get('icons', {}).values()) if name):
+        if cached and cached.get('schema')==2 and isinstance(cached.get('terms'),dict) and cached.get('fingerprint') == before and all(self.icon_path(name) for name in set(cached.get('icons', {}).values()) if name):
             return cached, 'current'
         try:
             if any(value[1] is None for value in before):
@@ -128,6 +128,11 @@ class ClientCatalogue:
             names = text_table(entry(locale, 'locale/en/item_names.txt'))
             descriptions = text_table(entry(locale, 'locale/en/itemdesc.txt'), True)
             mobs = text_table(entry(locale, 'locale/en/mob_names.txt'))
+            terms = {}
+            for line in entry(locale,'locale/en/locale_game.txt').decode('utf-8-sig',errors='replace').splitlines():
+                cells = line.split('\t')
+                if len(cells)>=2 and cells[0].startswith('DRAGON_SOUL_'):
+                    terms[cells[0]] = cells[1].strip().strip('"')[:256]
             rows = reader.decode_rows(reader.read_item_proto(entry(game, 'gamedata/item_proto')), reader.ITEM_STRUCT, reader.ITEM_NAMES)
             aliases = {}
             for line in entry(game, 'gamedata/item_list.txt').decode('utf-8-sig', errors='replace').splitlines():
@@ -172,8 +177,8 @@ class ClientCatalogue:
                     icons[ident] = next(iter(candidates))
             if before != fingerprint(self.paths):
                 raise ValueError('Client files changed while reading')
-            result = {'schema': 1, 'root': str(self.root.resolve()), 'fingerprint': before,
-                      'names': names, 'descriptions': descriptions, 'mobs': mobs, 'proto': proto, 'icons': icons}
+            result = {'schema': 2, 'root': str(self.root.resolve()), 'fingerprint': before,
+                      'names': names, 'descriptions': descriptions, 'mobs': mobs, 'proto': proto, 'icons': icons,'terms':terms}
             atomic_json(self.cache, result)
             return result, 'current'
         except Exception:
