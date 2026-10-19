@@ -2,11 +2,17 @@
 
 [Back to the overview](../README.md#see-what-you-can-do) · [All documentation](README.md)
 
-This guide covers **beta-1.13.0**: installing, configuring, updating and removing
+This guide covers **beta-1.14.0**: installing, configuring, updating and removing
 client add-ons, plus creating and sharing your own. Choose authors and sources
 you trust; add-ons run with the game client's permissions.
 
 For players: [bundled add-ons](#bundled-add-ons) · [install and manage](#install-and-manage) · [GitHub sources](#install-from-github) · [updates](#see-updates-and-read-the-changelog).
+
+Item and mob labels come from Studio's [shared live catalogue](ITEM_CATALOG.md).
+Pocket Wiki's installed details show when its reference catalogue has changed.
+Use **Review reference-data refresh** to update the in-game snapshot through the
+normal reviewed transaction; automatic catalogue checks only update Studio's
+private cache. The client must be closed to apply a reference-data refresh.
 
 For creators: [package requirements](#developer-package-requirements) · [API v2 windows](#api-v2-windows-shortcuts-and-add-on-menu) · [first add-on](#create-your-first-add-on) · [edit and build](#edit-and-build) · [collections](#publish-a-collection-from-one-repository).
 

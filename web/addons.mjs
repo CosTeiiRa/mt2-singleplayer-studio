@@ -41,7 +41,7 @@ function compatibilityDetails(item) {
 
 function referenceMarkup(meta) {
   if(!meta)return '<p class="field-hint">Reference data is generated locally during the installation review.</p>';
-  return `<section class="source-box"><h3>Pocket Wiki reference snapshot</h3><p>Server ${e(meta.server_version)} · Generated ${e(meta.generated_at)}<br>${Object.entries(meta.counts??{}).map(([key,count])=>`${e(count)} ${e(humanize(key))}`).join(' · ')}</p><p>Snapshot <code>${e(String(meta.snapshot??'').slice(0,16))}</code></p><ul>${(meta.warnings??[]).map(note=>`<li>${e(note)}</li>`).join('')}</ul></section>`;
+  return `<section class="source-box"><h3>Pocket Wiki reference snapshot</h3>${meta.catalogue_current===false?'<p class="field-hint">The catalogue has changed. Review a reference-data refresh to update the in-game wiki.</p>':''}<p>Server ${e(meta.server_version)} · Generated ${e(meta.generated_at)}<br>${Object.entries(meta.counts??{}).map(([key,count])=>`${e(count)} ${e(humanize(key))}`).join(' · ')}</p><p>Snapshot <code>${e(String(meta.snapshot??'').slice(0,16))}</code></p><ul>${(meta.warnings??[]).map(note=>`<li>${e(note)}</li>`).join('')}</ul></section>`;
 }
 let host = null;
 const $ = selector => host?.root?.querySelector(selector) ?? document.querySelector(selector);

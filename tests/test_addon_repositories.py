@@ -199,6 +199,23 @@ class RepositoryTests(unittest.TestCase):
         self.assertFalse((self.store.root / 'targets').exists())
         self.assertNotIn('publisher_verified', self.store.list()[0])
 
+    def test_release_promotion_retries_brief_windows_folder_locks(self):
+        self.subscribe()
+        rename = Path.rename
+        attempts = []
+        def sharing_lock(path, destination):
+            if path.name == 'release':
+                attempts.append(path)
+                if len(attempts) < 3:
+                    error = PermissionError('Brief Windows sharing lock'); error.winerror = 32
+                    raise error
+            return rename(path,destination)
+        with patch('pathlib.Path.rename',sharing_lock):
+            result = self.download()
+        self.assertEqual(result['downloaded'],'fixture.overlay')
+        self.assertGreaterEqual(len(attempts),3)
+        self.assertIn('fixture.overlay',self.store.packages()[0])
+
     def test_local_archive_import_needs_no_repository_and_survives_reopening(self):
         result = self.store.import_archive(self.raw, 'my-addon.m2addon.zip')
         self.assertEqual(result['imported'], 'fixture.overlay')

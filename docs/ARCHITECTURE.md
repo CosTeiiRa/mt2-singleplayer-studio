@@ -1,5 +1,11 @@
 # Architecture and storage
 
+The [shared catalogue](ITEM_CATALOG.md) reads item/mob definitions from the running
+server and names, descriptions and icon pixels from client packs. Studio editors
+and add-on exports consume one snapshot. Installation-bound derived caches under
+`<stateDir>/catalogue/` retain the last successful data for offline browsing;
+automatic refresh never deploys game or add-on changes.
+
 [Overview diagram](../README.md#architecture-overview) · [All documentation](README.md)
 
 The overview diagram introduces the Studio/game boundary. This guide explains the responsibilities, reviewed operations and storage behind it.

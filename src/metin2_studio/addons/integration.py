@@ -41,6 +41,7 @@ class AddonService:
     def _backend(self, path):
         backend = ClientAdapter(path, self.state_dir)
         backend.reference_provider = self.reference
+        backend.world_provider = lambda: self.world(fresh=True)
         if backend.server_root.resolve() != self.studio.root.resolve():
             raise ValueError('This add-on target belongs to another world. Select a target belonging to this Studio world.')
         if not backend.marker and (self.source is None or backend.target_root != self.source):
@@ -69,6 +70,9 @@ class AddonService:
     def state(self):
         from .client_pack import lzokay, np
         result = self.manager.state()
+        catalogue_revision = self.studio.catalogue_status().get('revision') if hasattr(self.studio, 'catalogue') else None
+        if result.get('reference') and catalogue_revision:
+            result['reference']['catalogue_current'] = result['reference'].get('catalogue_revision') == catalogue_revision
         for item in result['installed']:
             try:
                 self.repositories.policy_check(item['id'], 'enable')
@@ -165,9 +169,11 @@ class AddonService:
                 self.manager.catalog_changed()
                 self._review_tokens.clear()
 
-    def world(self):
+    def world(self, fresh=False):
         # Always read the saved selected-world configuration, not an active draft.
-        return WorldData(self.studio.root)
+        if fresh and hasattr(self.studio, 'catalogue'):
+            self.studio.refresh_catalog(force=True)
+        return WorldData(self.studio.root, mobs=getattr(self.studio, 'mobs', None))
 
     def map(self, ident):
         result = copy.deepcopy(self.world().map(ident))

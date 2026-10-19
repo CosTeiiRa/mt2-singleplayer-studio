@@ -21,9 +21,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 from metin2_studio.configuration_policy import editable_path, check_change, READ_ONLY_REASON
-from metin2_studio.catalog import item_metadata, item_identity
-from metin2_studio.item_help import item_description
-from metin2_studio.item_icons import client_icon_aliases, icon_path
+from metin2_studio.catalogue import Catalogue, sql_rows
+from metin2_studio.item_icons import icon_path
 from metin2_studio.item_usage import item_usage, item_drop_summary
 from metin2_studio.economy import Economy
 from metin2_studio.economy_export import download as economy_download
@@ -63,35 +62,6 @@ def text_decode(raw):
         return raw.decode("latin1"), "latin1"
 
 
-def sql_rows(raw, table):
-    """Read INSERT tuples as data, never execute SQL."""
-    hit = re.search(r"INSERT INTO `" + re.escape(table) + r"` VALUES\s*", raw)
-    if not hit:
-        return []
-    rows, row, cell, quoted, escaped, active = [], [], [], False, False, False
-    for c in raw[hit.end():]:
-        if escaped:
-            cell.append({"n": "\n", "r": "\r", "t": "\t", "0": "\0"}.get(c, c))
-            escaped = False
-        elif quoted and c == "\\":
-            escaped = True
-        elif c == "'":
-            quoted = not quoted
-        elif not quoted and c == ";":
-            break
-        elif not quoted and c == "(":
-            active, row, cell = True, [], []
-        elif not quoted and active and c in ",)":
-            row.append("".join(cell).strip())
-            cell = []
-            if c == ")":
-                rows.append(row)
-                active = False
-        elif active:
-            cell.append(c)
-    return rows
-
-
 class Studio:
     def __init__(self, root, state=None):
         self.root = Path(root).resolve()
@@ -119,35 +89,13 @@ class Studio:
         self._stopping = False
         self._apply_thread = None
         self._health_cache = None
-        self.items = {str(x["v"]): {"id": str(x["v"]), "name": x["n"], "category": x.get("c", "item"), "keywords": x.get("k", "")} for x in json.loads((self.root / "files/items.json").read_text("utf-8"))}
-        names, item_names = {}, {}
-        for line in (self.root / "files/playerbot_names_en.tsv").read_text("utf-8").splitlines():
-            p = line.split("\t")
-            if len(p) >= 3 and p[0] == "m":
-                names[p[1]] = p[2]
-            if len(p) >= 3 and p[0] == 'i':
-                item_names[p[1]] = p[2]
-        sql = (self.compose / "mariadb/initdb.d/dumps/world.sql").read_text("utf-8", errors="replace")
-        definitions = {row[0]: row for row in sql_rows(sql, "item_proto")}
-        # The package's compact browser catalog omits some native craft items.
-        # Include real item definitions and installed English names as well.
-        for ident, definition in definitions.items():
-            if ident.isdigit() and int(ident) > 0 and ident not in self.items:
-                self.items[ident] = {'id': ident, 'name': item_names.get(ident, definition[2]), 'category': 'item', 'keywords': ''}
-        for item in self.items.values():
-            item.update(item_identity(item, definitions.get(item['id']), item_names.get(item['id'])))
-            item.update(item_metadata(item, definitions.get(item["id"])))
-            item["description"] = item_description(item, definitions.get(item["id"]))
-        self.mobs = {}
-        for row in sql_rows(sql, "mob_proto"):
-            if len(row) > 6:
-                ident, rank, typ = row[0], int(row[3]), int(row[4])
-                category = "metin" if typ == 2 else "npc" if typ not in (0, 2) else "boss" if rank >= 4 else "monster"
-                self.mobs[ident] = {"id": ident, "name": names.get(ident, row[2]), "original": row[2], "category": category, "level": int(row[6])}
-        self.icons = json.loads((self.root / "files/static/item_icons.json").read_text("utf-8"))
-        self.icons.update(client_icon_aliases(self.root, self.state))
-        for item in self.items.values():
-            item['iconAvailable'] = icon_path(self.root, self.icons, item['id']) is not None
+        self.catalogue = Catalogue(self.root, self.state)
+        snapshot = self.catalogue.refresh(force=True)
+        self.items, self.mobs = snapshot['items'], snapshot['mobs']
+        self.icons = snapshot['legacyIcons']
+        self._catalogue_revision = snapshot['revision']
+        self._catalogue_status = dict(self.catalogue.status)
+        self._catalogue_stop = threading.Event()
         self.sources = {
             "mob-base": (self.locale / "mob_drop_item.txt", "mob_drop_item.txt", "Monster & Metin drops"),
             "mob-m3": (self.game / "share-add/mob_drop_item.m3.append.txt", "mob_drop_item.txt", "Additional monster drops"),
@@ -222,17 +170,50 @@ class Studio:
             raise ValueError("Path must stay inside the selected server folder.")
         return p
 
+    def catalogue_status(self):
+        return dict(getattr(self, '_catalogue_status', {}))
+
+    def refresh_catalog(self, force=False):
+        snapshot = self.catalogue.refresh(force=force)
+        with self.lock:
+            # Another refresh may have completed while this thread waited.
+            snapshot = self.catalogue.snapshot
+            if snapshot['revision'] != self._catalogue_revision:
+                self.items, self.mobs = snapshot['items'], snapshot['mobs']
+                self.icons = snapshot['legacyIcons']
+                self._catalogue_revision = snapshot['revision']
+                if hasattr(self, 'economy'):
+                    self.economy.cached = None
+                self._drop_hover_cache = None
+                self._economy_sources = None
+            self._catalogue_status = dict(self.catalogue.status)
+        return self.catalogue_status()
+
+    def start_catalogue_sync(self):
+        def watch():
+            while not self._catalogue_stop.wait(15):
+                if self._stopping:
+                    break
+                try:
+                    if self.updates.job.get('status') != 'running':
+                        self.refresh_catalog()
+                except (OSError, ValueError):
+                    self._catalogue_status = {**self._catalogue_status, 'refreshPending': True}
+        threading.Thread(target=watch, name='studio-catalogue', daemon=True).start()
+
     def reload_catalog(self):
         with self.lock:
             if self.server_busy():
                 raise ValueError('Wait for the current operation before reloading the catalog.')
-            fresh = Studio(self.root, self.state)
-            for key in ('dt', 'items', 'mobs', 'icons', 'settings_schema', 'sources'):
-                setattr(self, key, getattr(fresh, key))
-            self.economy.cached = None
-            self._drop_hover_cache = None
-            self._economy_sources = None
-        return {'reloaded': True}
+        self.refresh_catalog(force=True)
+        with self.lock:
+            parser = (self.root / 'files/drop_tables.py').read_bytes()
+            spec = importlib.util.spec_from_file_location('installed_drop_tables', self.root / 'files/drop_tables.py')
+            module = importlib.util.module_from_spec(spec)
+            exec(compile(parser, str(self.root / 'files/drop_tables.py'), 'exec'), module.__dict__)
+            self.dt, self.drop_parser_sha = module, digest(parser)
+            self.settings_schema = self.discover_settings()
+        return {'reloaded': True, 'catalogue': self.catalogue_status()}
 
     def source_raw(self, source):
         path, filename, label = self.sources[source]
@@ -1036,8 +1017,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(s.updates.preview(q['id']))
             if u.path == '/api/updates/available':
                 return self.send(s.updates.check())
+            if u.path == '/api/catalog':
+                with s.lock:
+                    result = {'catalogue': s.catalogue_status()}
+                    if q.get('revision') != result['catalogue'].get('revision'):
+                        result.update(items=list(s.items.values()), mobs=list(s.mobs.values()))
+                    return self.send(result)
             if u.path == "/api/bootstrap":
-                return self.send({"application": APPLICATION, "projectRoot": str(HERE), "modules": ["server", "addons"], "studioVersion": studio_version(), "stateDir": str(s.state), "mode": "configuration-and-quests", "token": s.token, "root": str(s.root), "version": (s.root / "VERSION").read_text().strip(), "counts": {"items": len(s.items), "mobs": len(s.mobs), "settings": len(s.settings_schema), "files": len(s.inventory())}, "items": list(s.items.values()), "mobs": list(s.mobs.values()), "groups": s.groups()})
+                with s.lock:
+                    return self.send({"application": APPLICATION, "projectRoot": str(HERE), "modules": ["server", "addons"], "studioVersion": studio_version(), "stateDir": str(s.state), "mode": "configuration-and-quests", "token": s.token, "root": str(s.root), "version": (s.root / "VERSION").read_text().strip(), "counts": {"items": len(s.items), "mobs": len(s.mobs), "settings": len(s.settings_schema), "files": len(s.inventory())}, "catalogue": s.catalogue_status(), "items": list(s.items.values()), "mobs": list(s.mobs.values()), "groups": s.groups()})
             if u.path == "/api/group":
                 return self.send(s.group(q["source"], q["key"]))
             if u.path == "/api/drop-source":
@@ -1108,10 +1096,10 @@ class Handler(BaseHTTPRequestHandler):
                         return 0
                 return self.send({'items': sorted(rows, key=activity_time, reverse=True)[:100]})
             if u.path == "/api/status":
-                return self.send({"docker": s.docker_status(), "health": s.runtime_health(), "job": s.public_job()})
+                return self.send({"docker": s.docker_status(), "health": s.runtime_health(), "job": s.public_job(), "catalogue": s.catalogue_status()})
             if u.path.startswith("/icons/"):
                 ident = unquote(u.path.split("/")[-1])
-                p = icon_path(s.root, s.icons, ident)
+                p = s.catalogue.icon(ident) if hasattr(s, 'catalogue') else icon_path(s.root, s.icons, ident)
                 if p:
                     return self.send(p.read_bytes(), mime="image/png")
                 return self.send(b"", 404, "image/png")
@@ -1274,11 +1262,13 @@ def main():
     if Handler.studio.workspace.preference('economySchedule', None) is None:
         Handler.studio.economy.tools.schedule({'enabled': True, 'minutes': 60, 'retention': 180, 'filters': {}})
     Handler.studio.economy.tools.start()
+    Handler.studio.start_catalogue_sync()
     try:
         server = ThreadingHTTPServer(("127.0.0.1", selected['port']), Handler)
         server.daemon_threads = False  # Close waits for in-flight handlers.
     except OSError:
         Handler.studio.economy.tools.stop.set()
+        Handler.studio._catalogue_stop.set()
         lock.close()
         parser.error(f"Local port {selected['port']} is unavailable. Close the other Studio instance or choose another --port.")
     print(f"Metin2 Server Studio {studio_version()}: http://127.0.0.1:{selected['port']}", flush=True)
@@ -1300,6 +1290,7 @@ def main():
                     print(str(error), flush=True)
     finally:
         Handler.studio.economy.tools.stop.set()
+        Handler.studio._catalogue_stop.set()
         server.server_close()
         lock.close()
         run_file.unlink(missing_ok=True)

@@ -161,6 +161,7 @@ class ClientAdapter:
                 self.marker = marker
         self.server_root = Path(self.marker['server_root']) if self.marker and self.marker.get('server_root') else self.target_root.parent / 'Serwer'
         self._world = None
+        self.world_provider = None
         self.reference_provider = None
         self.reference_metadata = None
         executable = self.target_root / 'metin2client.exe'
@@ -180,6 +181,8 @@ class ClientAdapter:
             return self._pack
 
     def world(self, refresh=False):
+        if callable(self.world_provider):
+            return self.world_provider()
         if self._world is None or refresh:
             self._world = WorldData(self.server_root)
         return self._world
@@ -306,7 +309,7 @@ class ClientAdapter:
                 from .knowledge import encoded
                 raw = encoded(reference).decode('ascii')
                 files['m2hub_reference.py'] = ('# Locally generated reference data.\nJSON = u%r\n' % raw).encode('ascii')
-                self.reference_metadata = {key: reference['meta'][key] for key in ('snapshot', 'server_version', 'generated_at', 'native_crafting', 'warnings')}
+                self.reference_metadata = {key: reference['meta'][key] for key in ('snapshot', 'server_version', 'generated_at', 'native_crafting', 'warnings', 'catalogue_revision') if key in reference['meta']}
                 self.reference_metadata['counts'] = {key: len(reference[key]) for key in ('items', 'recipes', 'upgrades', 'origins')}
         return files
 

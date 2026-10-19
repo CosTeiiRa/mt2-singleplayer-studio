@@ -16,6 +16,7 @@ from .hubcore.packages import ID_RE, SHA_RE, PackageError, discover_packages, lo
 from .transport import PublicHTTPSFetcher, https_url
 from .versions import Version
 from .github_source import GitHubSource, allowed_release, identity as github_identity, manifest_digest
+from ..filesystem import retry_windows_lock
 
 INDEX_LIMIT = 2 * 1024 * 1024
 
@@ -510,7 +511,7 @@ class RepositoryStore:
             else:
                 if not extracted.resolve().is_relative_to(staging.resolve()) or destination.resolve().parent != (self.root / 'releases').resolve():
                     raise ValueError('Invalid owned release staging path.')
-                extracted.rename(destination)
+                retry_windows_lock(extracted.rename, destination)
             if not artifact.exists():
                 _atomic_bytes(artifact, raw)
         return verified, archive_hash

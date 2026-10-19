@@ -24,33 +24,8 @@ def checksum(value):
     return hashlib.sha256(encoded(value)).hexdigest()
 
 
-def sql_rows(raw, table):
-    """Read every INSERT for one table, including quoted commas and escapes."""
-    result = []
-    pattern = re.compile(r'INSERT\s+INTO\s+`?' + re.escape(table) + r'`?\s+VALUES\s*', re.I)
-    for match in pattern.finditer(raw):
-        row, cell, quoted, escaped, active = [], [], False, False, False
-        for char in raw[match.end():]:
-            if escaped:
-                cell.append({'n': '\n', 'r': '\r', 't': '\t', '0': '\0'}.get(char, char))
-                escaped = False
-            elif quoted and char == '\\':
-                escaped = True
-            elif char == "'":
-                quoted = not quoted
-            elif not quoted and char == ';':
-                break
-            elif not quoted and char == '(':
-                row, cell, active = [], [], True
-            elif not quoted and active and char in ',)':
-                row.append(''.join(cell).strip())
-                cell = []
-                if char == ')':
-                    result.append(row)
-                    active = False
-            elif active:
-                cell.append(char)
-    return result
+from metin2_studio.catalogue import sql_rows
+from metin2_studio.catalogue_client import fingerprint
 
 
 def positive(value):
@@ -88,6 +63,8 @@ def build_index(studio):
 
 
 def _build(studio):
+    if getattr(studio, 'catalogue', None) is not None:
+        studio.refresh_catalog(force=True)
     studio = copy.copy(studio)
     studio._crafting_access = None
     studio._native_crafting_access = None
@@ -115,35 +92,25 @@ def _build(studio):
     if getattr(studio, 'drop_parser_sha', hashlib.sha256(parser_raw).hexdigest()) != hashlib.sha256(parser_raw).hexdigest():
         raise ValueError('The installed drop parser changed. Restart Studio before generating reference data.')
     read(game / 'Dockerfile')
-    from metin2_studio.catalog import item_metadata
-    from metin2_studio.item_help import item_description
-    catalog_raw = read(root / 'files/items.json')
-    catalog = {str(row['v']): {'id': str(row['v']), 'name': row['n'], 'category': row.get('c', 'item'), 'keywords': row.get('k', '')}
-               for row in json.loads(catalog_raw.decode('utf-8-sig'))} if catalog_raw else copy.deepcopy(studio.items)
-    names_raw = read(root / 'files/playerbot_names_en.tsv').decode('utf-8-sig', 'replace')
-    names = {p[1]: p[2] for line in names_raw.splitlines() if len(p := line.split('\t')) >= 3 and p[0] == 'i'}
-    mob_names = {p[1]: p[2] for line in names_raw.splitlines() if len(p := line.split('\t')) >= 3 and p[0] == 'm'}
-    current_mobs = {}
-    for row in sql_rows(sql, 'mob_proto'):
-        if len(row) > 6:
-            rank, kind = int(row[3]), int(row[4])
-            current_mobs[row[0]] = {'id': row[0], 'name': mob_names.get(row[0], row[2]), 'level': int(row[6]),
-                                    'category': 'metin' if kind == 2 else 'npc' if kind != 0 else 'boss' if rank >= 4 else 'monster'}
-    if current_mobs:
-        studio.mobs = current_mobs
-    for ident, row in definitions.items():
-        catalog.setdefault(ident, {'id': ident, 'name': names.get(ident, row[2]), 'category': 'item', 'keywords': ''})
-    for ident, item in catalog.items():
-        item.update(item_metadata(item, definitions.get(ident)))
-        item['description'] = item_description(item, definitions.get(ident))
-    studio.items = catalog
+    catalogue_service = getattr(studio, 'catalogue', None)
+    catalogue_snapshot = None
+    if catalogue_service is not None:
+        catalogue_snapshot = catalogue_service.export()
+        definitions = catalogue_snapshot['definitions']
+        studio.items = catalogue_snapshot['items']
+        studio.mobs = catalogue_snapshot['mobs']
+    else:
+        # Synthetic/export-only callers already supply their item and mob snapshot.
+        studio.items = copy.deepcopy(studio.items)
+        studio.mobs = copy.deepcopy(studio.mobs)
     items = {}
     for ident, item in studio.items.items():
         if positive(ident):
             items[str(ident)] = {'id': str(ident), 'name': str(item['name']),
                                 'category': str(item.get('catalogLabel', item.get('category', 'Item'))),
                                 'description': item.get('description', ''),
-                                'level': item.get('requiredLevel'), 'aliases': str(item.get('keywords', ''))}
+                                'level': item.get('requiredLevel'), 'aliases': ' '.join(str(item.get(key) or '') for key in ('keywords', 'catalogName', 'original')),
+                                'iconAvailable': item.get('iconAvailable'), 'nameSource': item.get('nameSource')}
     recipes, upgrades, origins, npcs = {}, {}, {}, {}
     created, used, obtained = defaultdict(list), defaultdict(list), defaultdict(list)
 
@@ -326,6 +293,10 @@ def _build(studio):
              'obtained': {key: sorted(set(value)) for key, value in obtained.items()},
              'meta': {'server_version': version, 'source_hashes': sources, 'native_crafting': native_kind,
                       'warnings': sorted(set(warnings)), 'scope': 'Local reference data; base chances per attempt'}}
+    if catalogue_snapshot is not None:
+        index['meta']['catalogue_revision'] = catalogue_snapshot['revision']
+        if catalogue_service.local_fingerprint != fingerprint(catalogue_service.paths):
+            raise ValueError('Catalogue sources changed during reference generation. Review again.')
     index['meta']['snapshot'] = checksum(index)
     for path, raw in captured.items():
         if (path.read_bytes() if path.is_file() else b'') != raw:

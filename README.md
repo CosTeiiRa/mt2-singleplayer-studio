@@ -1,6 +1,6 @@
 # Metin2 Studio
 
-**beta-1.13.0** · A local dashboard for your Metin2 Singleplayer world and client add-ons.
+**beta-1.14.0** · A local dashboard for your Metin2 Singleplayer world and client add-ons.
 
 Edit drops, create quests, manage crafting, explore items and follow the economy.
 Add in-game tools such as Boss Atlas and Pocket Wiki through the same application.
@@ -128,7 +128,7 @@ Choose a target, adjust reward items, quantities and base parameters, inspect sh
 
 Filter by category or function: bonus changers, bonus adders, scrolls, potions, materials and more. Search by name or ID when useful; hover an item for its description.
 
-Browse installed definitions by default, or switch to the full catalogue. Missing names and icons are labelled. [Catalogue sources and limits](docs/ITEM_CATALOG.md).
+Studio loads current server definitions and client names/icons, keeps them in sync after updates, and retains a private cache for offline browsing. Browse installed definitions by default, or switch to the full catalogue. [Catalogue sources and limits](docs/ITEM_CATALOG.md).
 
 ![Item picker filtered to bonus items, with category and function filters and named results](docs/screenshots/item-search.jpg)
 

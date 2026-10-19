@@ -93,8 +93,11 @@ src/metin2_studio/addons/transport.py
 src/metin2_studio/addons/updates.py
 src/metin2_studio/addons/versions.py
 src/metin2_studio/catalog.py
+src/metin2_studio/catalogue.py
+src/metin2_studio/catalogue_client.py
 src/metin2_studio/configuration_policy.py
 src/metin2_studio/crafting_access.py
+src/metin2_studio/database.py
 src/metin2_studio/economy.py
 src/metin2_studio/economy_export.py
 src/metin2_studio/economy_tools.py
@@ -126,6 +129,7 @@ tests/addons.test.mjs
 tests/addons_view.test.mjs
 tests/apply_status.test.js
 tests/catalog.test.js
+tests/catalogue_sync.test.js
 tests/collection_fixture.py
 tests/github_fixture.py
 tests/history.test.js
@@ -147,6 +151,7 @@ tests/test_addon_runtime.py
 tests/test_addon_updates.py
 tests/test_atomic_writes.py
 tests/test_client_profiles.py
+tests/test_catalogue.py
 tests/test_content_management.py
 tests/test_customisations.py
 tests/test_economy.py

@@ -1,4 +1,24 @@
-# beta-1.13.0 — clearer item names and catalogue coverage
+# beta-1.14.0 — shared live catalogue and offline cache
+
+Studio reads current item and mob definitions from the running server in a bounded
+read-only transaction at startup. Installed client packs supply English names,
+descriptions and original icon pixels. The same snapshot feeds Studio editors,
+search, Pocket Wiki reference exports and atlas names.
+
+Stable local file changes are checked every 15 seconds; live definitions are
+checked every minute. Open dashboards receive changed data through the regular
+status refresh while retaining editor drafts. Interrupted client updates keep
+the previous readable snapshot. A last successful installation-bound cache keeps
+names, properties and generated icons available when the server or client packs
+are unavailable. Without a cache, bundled exports/seed definitions are labelled
+as fallback data. No check starts or restarts the game.
+
+Pocket Wiki installations retain their in-client snapshot until a reviewed
+reference-data refresh. Its details show when the catalogue revision has changed;
+new reviews use the shared current catalogue. Client pack writes still require
+closing the game and follow the existing recovery and transaction rules.
+
+## beta-1.13.0 — clearer item names and catalogue coverage
 
 Item pickers start with the definitions bundled with the installed server. The
 full catalogue and direct numeric ID search remain available; catalogue-only,

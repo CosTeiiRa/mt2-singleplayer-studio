@@ -20,7 +20,7 @@
   function help(item) {
     const description = item?.description;
     const sourceLabels = {
-      definition: 'Installed seed values · live settings may differ',
+      definition: item?.definitionStatus === 'installed-server' ? 'Server catalogue values · runtime rules may differ' : 'Installed seed values · live settings may differ',
       guide: 'General Metin2 guide · server rules may differ',
       catalog: 'Catalog category guide · effect unverified',
       unknown: 'Effect not documented'
@@ -35,7 +35,7 @@
   function searchText(item, kind) {
     if (!searchCache.has(item)) {
       const categories = groupKeys(item, kind).map(key => (kind === 'mob' ? mobGroups : groups).find(([id]) => id === key)?.[1] || key);
-      searchCache.set(item, normalize([item.id, item.name, item.catalogName, item.keywords, item.original, item.description?.text, label(item, kind), ...categories].filter(Boolean).join(' ')));
+      searchCache.set(item, normalize([item.id, item.name, item.catalogName, item.keywords, item.original, item.clientDescription, item.description?.text, label(item, kind), ...categories].filter(Boolean).join(' ')));
     }
     return searchCache.get(item);
   }

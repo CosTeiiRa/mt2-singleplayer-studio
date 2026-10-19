@@ -290,7 +290,7 @@ function pick(kind,filter,callback,options={}){
   if(!items.some(e=>StudioCatalog.groupKeys(e,kind).includes(filters.category)))filters.category='all';
   const available=StudioCatalog.query(items,{kind,category:filters.category,scope:filters.scope});
   if(!available.functions.some(e=>e.id===filters.function))filters.function='all';
-  S.picker={kind,callback,items,filters,limit:100,inspectOnly:!!options.inspectOnly};
+  S.picker={kind,callback,filter,items,filters,limit:100,inspectOnly:!!options.inspectOnly};
   $('#picker-title').textContent=options.inspectOnly?'Explore an item':kind==='item'?'Choose an item':'Choose a monster or NPC';
   $('.picker-hint').textContent=options.inspectOnly?'Select an item to see drops, crafting and other references. Read only.':kind==='item'?'Installed definitions are shown by default. Use Full catalogue for other IDs; missing icons and names are labelled.':'Browse by type or search a name or ID.';
   $('#picker-search').value='';$('#picker-sort').value=filters.sort;
@@ -493,10 +493,37 @@ async function refreshAddonNotice(force=false){
     notice.hidden=false;notice.innerHTML='Add-on files could not be checked. <a href="#installed">Check installed add-ons →</a>';
   }finally{addonNoticeBusy=false;}
 }
+let catalogueRefreshBusy=false;
+function renderCatalogueStatus(catalogue){
+  const node=$('#catalogue-status');if(!node||!catalogue?.revision)return;
+  const server=catalogue.serverMode==='live'?'Catalogue synced with server':catalogue.serverMode==='cached'?'Catalogue cached · live catalogue unavailable':'Catalogue from installed files · live catalogue unavailable';
+  const client=catalogue.clientMode==='current'?'Client names and icons synced':catalogue.clientMode==='cached'?'Using cached client names and icons':'Client packs unavailable · using installed exports';
+  node.hidden=false;node.textContent=server+' · '+client+(catalogue.refreshPending?' · Waiting for update files to settle':'')+(catalogue.cacheFromOlderVersion?' · Server cache predates this game update':'');
+}
+async function refreshCatalogue(catalogue){
+  renderCatalogueStatus(catalogue);
+  if(!catalogue?.revision||!S.data||catalogueRefreshBusy)return;
+  if(catalogue.revision===S.data.catalogue?.revision){S.data.catalogue=catalogue;return;}
+  catalogueRefreshBusy=true;
+  try{
+    const data=await api('/api/catalog?revision='+encodeURIComponent(S.data.catalogue?.revision||''));
+    if(data.items&&data.mobs){
+      S.data.items=data.items;S.data.mobs=data.mobs;S.data.counts={...S.data.counts,items:data.items.length,mobs:data.mobs.length};
+      S.itemMap=Object.fromEntries(data.items.map(item=>[item.id,item]));S.mobMap=Object.fromEntries(data.mobs.map(mob=>[mob.id,mob]));
+      if(S.picker&&$('#picker').open){
+        const picker=S.picker,pools=picker.items.filter(item=>item.catalogKind==='reward-pool');
+        picker.items=(picker.kind==='item'?[...data.items,...pools]:data.mobs).filter(item=>!picker.filter||picker.filter(item));
+        renderPicker();
+      }
+    }
+    S.data.catalogue=data.catalogue;renderCatalogueStatus(data.catalogue);
+  }catch(error){const node=$('#catalogue-status');if(node){node.hidden=false;node.textContent='Catalogue refresh unavailable; last loaded data retained.'}}finally{catalogueRefreshBusy=false;}
+}
 async function updateStatus(){
   refreshAddonNotice();
   try{
     const data=await api('/api/status');S.status=data;
+    await refreshCatalogue(data.catalogue);
     const badge=$('#docker-badge');
     badge.textContent=data.job.status==='running'?(data.job.kind==='validation'?'Validating build…':'Applying changes…'):data.health?.gameHealthy?'Game healthy':data.docker.available?'Game health unverified':'Docker stopped';
     badge.classList.toggle('good',!!data.health?.gameHealthy);badge.classList.toggle('neutral',!data.docker.available);
@@ -552,5 +579,5 @@ document.addEventListener('DOMContentLoaded',async()=>{
   $('#run-validate').addEventListener('click',()=>runServerOperation(true));
   $('#run-apply').addEventListener('click',()=>runServerOperation(false));
   $('#apply-interrupted-ack').addEventListener('change',refreshApplyControl);
-  try{S.data=await api('/api/bootstrap');S.itemMap=Object.fromEntries(S.data.items.map(e=>[e.id,e]));S.mobMap=Object.fromEntries(S.data.mobs.map(e=>[e.id,e]));await initWorkspace();initSidebarNavigation();if(WUI.activeSet)S.data.groups=(await api('/api/bootstrap')).groups;$('#version').textContent='Game '+S.data.version+' · Connected';$('#studio-version').textContent='METIN2 STUDIO '+(S.data.studioVersion||'');await navigate(location.hash.slice(1)||'overview');updateStatus();setInterval(()=>{if(!applyTimer)updateStatus()},30000)}catch(e){$('#content').innerHTML='<div class="empty">Studio could not read the installation.<p></p></div>';$('#content .empty p').textContent=e.message}
+  try{S.data=await api('/api/bootstrap');renderCatalogueStatus(S.data.catalogue);S.itemMap=Object.fromEntries(S.data.items.map(e=>[e.id,e]));S.mobMap=Object.fromEntries(S.data.mobs.map(e=>[e.id,e]));await initWorkspace();initSidebarNavigation();if(WUI.activeSet)S.data.groups=(await api('/api/bootstrap')).groups;$('#version').textContent='Game '+S.data.version+' · Connected';$('#studio-version').textContent='METIN2 STUDIO '+(S.data.studioVersion||'');await navigate(location.hash.slice(1)||'overview');updateStatus();setInterval(()=>{if(!applyTimer)updateStatus()},30000)}catch(e){$('#content').innerHTML='<div class="empty">Studio could not read the installation.<p></p></div>';$('#content .empty p').textContent=e.message}
 });

@@ -51,7 +51,7 @@ def _groups(path):
 
 
 class WorldData:
-    def __init__(self, server_root):
+    def __init__(self, server_root, mobs=None):
         self.root = Path(server_root).resolve()
         self.locale = self.root / 'linux-port' / 'docker' / 'game' / 'share' / 'locale' / 'poland'
         self.panel = self.root / 'linux-port' / 'docker' / 'seban-panel'
@@ -60,7 +60,9 @@ class WorldData:
         self.groups = _groups(self.locale / 'group.txt')
         self.names = {}
         names_file = self.panel / 'static' / 'mob_names_en.json'
-        if names_file.is_file():
+        if mobs is not None:
+            self.names = {str(ident): row['name'] for ident, row in mobs.items()}
+        elif names_file.is_file():
             self.names = json.loads(_text(names_file))
         self.directories = {}
         index = self.maps_root / 'index'

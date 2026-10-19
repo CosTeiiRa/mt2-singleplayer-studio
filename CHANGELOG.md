@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Load the shared item/mob catalogue from the live server database and installed
+  client packs at startup. Refresh stable client/package updates automatically
+  and poll live definitions without restarting the game.
+- Keep installation-bound server/client caches and generated icon PNGs for
+  offline use. Report live, cached and bundled fallback sources in Studio.
+- Use the same snapshot for Studio editors, Pocket Wiki exports and atlas names.
+  Mark installed wiki reference data when its catalogue revision is outdated.
+- Read original client icon pixels directly, including true-colour and RLE TGA,
+  without requiring another package or modifying game files.
+- Retry brief Windows folder sharing locks when promoting verified add-on
+  downloads into the local cache; persistent permission errors still fail.
+
 - Prefer installed English item names over stale catalogue labels and label
   unresolved names explicitly. Preserve previous names as searchable aliases.
 - Default item pickers to installed seed definitions, with full catalogue,
