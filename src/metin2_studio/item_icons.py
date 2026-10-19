@@ -13,15 +13,44 @@ import re
 def item_list_aliases(raw):
     result = {}
     for line in raw.decode('utf-8-sig', errors='replace').splitlines():
-        cells = line.split()
-        if len(cells) < 3 or not re.fullmatch(r'\d{1,10}', cells[0]):
+        match = re.match(r'^\s*(\d{1,10})\s+\S+\s+(.+?\.(?:tga|dds|png))(?=\s|$)', line, re.I)
+        if not match:
             continue
-        path = cells[2].replace('\\', '/').lower()
+        ident, path = match.group(1), match.group(2).replace('\\', '/').lower()
+        if '..' in PurePosixPath(path).parts:
+            continue
         if '/icon/item/' not in '/' + path:
             continue
         name = PurePosixPath(path).name
         if re.fullmatch(r'[a-z0-9_-]+\.(?:tga|dds|png)', name):
-            result[cells[0]] = PurePosixPath(name).stem + '.png'
+            result[ident] = PurePosixPath(name).stem + '.png'
+    return result
+
+
+def shared_name_aliases(rows, aliases, filenames):
+    """Match exact original proto names only when they identify one known icon.
+
+    The client uses original-name matching for items absent from item_list.txt.
+    Ambiguous names, empty names and explicit missing assets are left unresolved.
+    """
+    images = {}
+    for row in rows:
+        name = row.get('name', b'').split(b'\0', 1)[0]
+        if not name or name.lower() in (b'noname', b'none', b'unnamed'):
+            continue
+        ident = str(row['vnum'])
+        image = aliases.get(ident, f'{int(ident):05d}.png')
+        if image.lower() in filenames:
+            images.setdefault(name, set()).add(filenames[image.lower()])
+    result = {}
+    for row in rows:
+        ident = str(row['vnum'])
+        if ident in aliases or f'{int(ident):05d}.png' in filenames:
+            continue
+        name = row.get('name', b'').split(b'\0', 1)[0]
+        candidates = images.get(name, set())
+        if len(candidates) == 1:
+            result[ident] = next(iter(candidates))
     return result
 
 
@@ -38,23 +67,32 @@ def client_icon_aliases(root, state):
             previous = json.loads(cache.read_text('utf-8'))
         except (OSError, ValueError):
             previous = {}
-        if previous.get('version') == 1 and previous.get('fingerprint') == fingerprint and isinstance(previous.get('aliases'), dict):
+        files = {p.name.lower(): p.name for p in folder.glob('*.png') if p.is_file()}
+        if previous.get('version') == 2 and previous.get('fingerprint') == fingerprint and isinstance(previous.get('aliases'), dict):
             aliases = previous['aliases']
         else:
             spec = importlib.util.spec_from_file_location('studio_item_icon_pack_reader', reader)
             module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            exec(compile(reader.read_bytes(), str(reader), 'exec'), module.__dict__)
             _, entries = module.read_pack(inputs[1].read_bytes(), inputs[2].read_bytes())
             entry = next((e for e in entries if e.key() == 'gamedata/item_list.txt'), None)
             aliases = item_list_aliases(module.entry_data(entry)) if entry else {}
+            proto = next((e for e in entries if e.key() == 'gamedata/item_proto'), None)
+            if proto is not None and all(hasattr(module, name) for name in ('read_item_proto', 'decode_rows', 'ITEM_STRUCT', 'ITEM_NAMES')):
+                try:
+                    rows = module.decode_rows(module.read_item_proto(module.entry_data(proto)), module.ITEM_STRUCT, module.ITEM_NAMES)
+                    aliases.update(shared_name_aliases(rows, aliases, files))
+                except Exception:
+                    # Optional proto formats vary; retain the explicit item_list aliases.
+                    pass
             state.mkdir(parents=True, exist_ok=True)
             temporary = cache.with_suffix('.tmp')
-            temporary.write_text(json.dumps({'version': 1, 'fingerprint': fingerprint, 'aliases': aliases}), encoding='utf-8')
+            temporary.write_text(json.dumps({'version': 2, 'fingerprint': fingerprint, 'aliases': aliases}), encoding='utf-8')
             temporary.replace(cache)
         # Use the actual filename casing on both Windows and case-sensitive hosts.
-        files = {p.name.lower(): p.name for p in folder.glob('*.png') if p.is_file()}
-        return {str(ident): files[name.lower()] for ident, name in aliases.items()
-                if re.fullmatch(r'\d{1,10}', str(ident)) and isinstance(name, str) and name.lower() in files}
+        return {str(ident): files.get(name.lower()) for ident, name in aliases.items()
+                if re.fullmatch(r'\d{1,10}', str(ident)) and isinstance(name, str)
+                and Path(name).name == name and re.fullmatch(r'[a-zA-Z0-9_-]+\.png', name)}
     except Exception:
         # Older packages may not ship the reader or use a supported pack format.
         # Keep their original web icon map and exact-ID PNG fallback functional.
@@ -62,8 +100,11 @@ def client_icon_aliases(root, state):
 
 
 def icon_path(root, mapping, ident):
+    ident = str(ident)
     if not re.fullmatch(r'\d{1,10}', str(ident)):
         return None
+    if ident in mapping and mapping[ident] is None:
+        return None  # The client's explicit asset is missing; an old alias must not substitute another item.
     folder = (Path(root) / 'files/static/icons').resolve()
     for name in (mapping.get(ident), f'{int(ident):05d}.png'):
         if not isinstance(name, str) or Path(name).name != name or not name.lower().endswith('.png'):

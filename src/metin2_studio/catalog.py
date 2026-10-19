@@ -2,6 +2,36 @@
 import re
 
 
+def _usable_name(value):
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not text or re.fullmatch(r'(?:no\s*name|unnamed|none|null|\?+)', text, re.I) or '\ufffd' in text:
+        return False
+    # Some legacy catalogue entries contain Korean bytes decoded as Latin-1.
+    # Do not present those bytes as an English name or invent a translation.
+    if re.search(r'[\u00b3\u00ba\u00c6\u00c7\u00d0][\x80-\xff]', text):
+        try:
+            decoded = text.encode('latin-1').decode('cp949')
+            if len(re.findall(r'[\uac00-\ud7af]', decoded)) >= 2:
+                return False
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+    return not any(ord(char) < 32 for char in text)
+
+
+def item_identity(item, definition=None, english_name=None):
+    """Prefer this package's names while retaining old catalogue search terms."""
+    original = str(item.get('name') or '').strip()
+    seed_name = definition[2] if definition and len(definition) > 2 else None
+    candidates = ((english_name, 'installed-english'), (original, 'catalogue'), (seed_name, 'installed-seed'))
+    name, source = next(((value.strip(), label) for value, label in candidates if _usable_name(value)),
+                        ('Unnamed item #' + str(item['id']), 'unknown'))
+    return {'name': name, 'nameSource': source, 'catalogName': original, 'original': seed_name or original,
+            'nameStatus': 'unnamed' if source == 'unknown' else 'named',
+            'definitionStatus': 'installed-seed' if definition else 'catalogue-only'}
+
+
 TYPE_KINDS = {
     0: ("other", "unclassified", "Other item"),
     1: ("equipment", "weapon", "Weapon"),

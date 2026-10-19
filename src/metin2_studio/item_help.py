@@ -64,8 +64,8 @@ SCROLL_HELP = {
     "22011": "Travel scroll used to record a location and return to it. Destination restrictions depend on the server.",
 }
 NAME_NOTES = {
-    "25041": "Name mismatch: the catalog says Magic Stone, but the installed seed and Singleplayer wiki call #25041 Blessing Scroll. Do not assume downgrade protection from its catalog name.",
-    "25042": "Name mismatch: the catalog says Ritualstein, but the installed seed calls #25042 Magic Stone. Ritual Stone level restrictions are not confirmed for this ID.",
+    "25041": "Name mismatch in the older catalogue: Magic Stone referred to #25041. The installed package calls this Blessing Scroll. Do not assume downgrade protection from the older name.",
+    "25042": "Name mismatch in the older catalogue: Ritualstein referred to #25042. The installed package calls this Magic Stone. Ritual Stone level restrictions are not confirmed for this ID.",
 }
 
 

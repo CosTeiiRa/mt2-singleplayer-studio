@@ -6,6 +6,7 @@
 | --- | --- |
 | [Getting started](GETTING_STARTED.md) | Requirements, setup, first launch, first edit and troubleshooting. |
 | [Operator guide](USER_GUIDE.md) | Editors, quests, crafting, economy, review/save/apply and recovery. |
+| [Item catalogue](ITEM_CATALOG.md) | Installed definitions, name sources, icon mappings and unresolved entries. |
 | [Add-on guide](ADDONS.md) | Bundled tools, installation, settings, updates, package creation and publishing. |
 | [Pocket Wiki](POCKET_WIKI.md) | In-game controls, recipes, upgrades, bookmarks and reference-data coverage. |
 | [Architecture and storage](ARCHITECTURE.md) | Studio/game boundaries, operation workflows, MariaDB, SQLite and Docker. |

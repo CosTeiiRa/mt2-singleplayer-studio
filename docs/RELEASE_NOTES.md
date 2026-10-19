@@ -1,4 +1,21 @@
-# beta-1.12.0 — batch add-on installation and one client reopen
+# beta-1.13.0 — clearer item names and catalogue coverage
+
+Item pickers start with the definitions bundled with the installed server. The
+full catalogue and direct numeric ID search remain available; catalogue-only,
+missing-icon and unnamed-item filters make incomplete entries easy to inspect.
+This scope reads the seed definitions, not the running database or player inventory.
+
+Installed English names replace stale catalogue labels. Previous labels remain
+searchable, and unresolved names display their numeric ID. Icon resolution now
+handles paths containing spaces and unambiguous original-name mappings in the
+client proto. Explicit missing client assets cannot silently borrow obsolete
+catalogue icons. Missing assets keep a labelled placeholder.
+
+These changes affect Studio's display and private derived cache. Game files,
+item IDs, add-ons and saved crafts are unchanged. See the
+[item catalogue guide](ITEM_CATALOG.md) for sources and remaining limits.
+
+## beta-1.12.0 — batch add-on installation and one client reopen
 
 Discover add-ons supports selecting several packages or reviewing every ready
 bundled/downloaded package together. Installed add-ons can review all ready

@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 from metin2_studio.configuration_policy import editable_path, check_change, READ_ONLY_REASON
-from metin2_studio.catalog import item_metadata
+from metin2_studio.catalog import item_metadata, item_identity
 from metin2_studio.item_help import item_description
 from metin2_studio.item_icons import client_icon_aliases, icon_path
 from metin2_studio.item_usage import item_usage, item_drop_summary
@@ -135,6 +135,7 @@ class Studio:
             if ident.isdigit() and int(ident) > 0 and ident not in self.items:
                 self.items[ident] = {'id': ident, 'name': item_names.get(ident, definition[2]), 'category': 'item', 'keywords': ''}
         for item in self.items.values():
+            item.update(item_identity(item, definitions.get(item['id']), item_names.get(item['id'])))
             item.update(item_metadata(item, definitions.get(item["id"])))
             item["description"] = item_description(item, definitions.get(item["id"]))
         self.mobs = {}
@@ -145,6 +146,8 @@ class Studio:
                 self.mobs[ident] = {"id": ident, "name": names.get(ident, row[2]), "original": row[2], "category": category, "level": int(row[6])}
         self.icons = json.loads((self.root / "files/static/item_icons.json").read_text("utf-8"))
         self.icons.update(client_icon_aliases(self.root, self.state))
+        for item in self.items.values():
+            item['iconAvailable'] = icon_path(self.root, self.icons, item['id']) is not None
         self.sources = {
             "mob-base": (self.locale / "mob_drop_item.txt", "mob_drop_item.txt", "Monster & Metin drops"),
             "mob-m3": (self.game / "share-add/mob_drop_item.m3.append.txt", "mob_drop_item.txt", "Additional monster drops"),

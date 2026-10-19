@@ -76,3 +76,21 @@ test('effect descriptions are searchable together with existing filters', () => 
   const described = {...items[0], description:{text:'Rerolls existing bonuses.'}};
   assert.deepEqual(query([described,items[1]], {category:'bonus', search:'rerolls 71084'}).results.map(i=>i.id), ['71084']);
 });
+
+test('installed scope excludes catalogue-only rows but preserves pools and explicit ID inspection',()=>{
+  const rows=[item('10','Sword','equipment','weapon','Sword',{definitionStatus:'installed-seed'}),
+    item('310','Archived sword','equipment','weapon','Sword',{definitionStatus:'catalogue-only'}),items[8]];
+  assert.deepEqual(query(rows,{scope:'installed',sort:'id'}).results.map(row=>row.id),['10','s8001']);
+  assert.deepEqual(query(rows,{scope:'all',sort:'id'}).results.map(row=>row.id),['10','310','s8001']);
+  assert.deepEqual(query(rows,{scope:'installed',search:'310'}).results.map(row=>row.id),['310']);
+  assert.equal(query(rows,{scope:'installed',search:'310',allow:row=>row.id!=='310'}).results.length,0);
+});
+
+test('catalogue quality filters and original names remain searchable',()=>{
+  const rows=[item('30315','Bread','quest','quest-item','Quest item',{catalogName:'NoNAme',original:'Chleb',definitionStatus:'installed-seed',iconAvailable:false,nameStatus:'named'}),
+    item('30528','Unnamed item #30528','quest','quest-item','Quest item',{definitionStatus:'installed-seed',nameStatus:'unnamed',iconAvailable:true})];
+  assert.deepEqual(query(rows,{scope:'missing-icons'}).results.map(row=>row.id),['30315']);
+  assert.deepEqual(query(rows,{scope:'name-issues'}).results.map(row=>row.id),['30528']);
+  assert.equal(query(rows,{search:'chleb'}).results[0].id,'30315');
+  assert.equal(query(rows,{search:'noname'}).results[0].id,'30315');
+});

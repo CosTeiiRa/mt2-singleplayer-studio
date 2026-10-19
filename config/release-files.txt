@@ -29,6 +29,7 @@ docs/ARCHITECTURE.md
 docs/BETA_REVIEW.md
 docs/DEVELOPMENT.md
 docs/GETTING_STARTED.md
+docs/ITEM_CATALOG.md
 docs/MERGED_STUDIO.md
 docs/POCKET_WIKI.md
 docs/README.md

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Prefer installed English item names over stale catalogue labels and label
+  unresolved names explicitly. Preserve previous names as searchable aliases.
+- Default item pickers to installed seed definitions, with full catalogue,
+  catalogue-only, missing-icon and unnamed-item filters. Exact ID searches remain
+  available within the field's allowed items.
+- Recover unambiguous shared-name icons from client proto data, support icon
+  paths containing spaces and stop substituting obsolete icons when the client
+  explicitly names a missing asset. Known missing icons render placeholders.
+- Document catalogue sources and limits without changing game definitions.
+
 - Added combined add-on install/update reviews, selected/all package controls,
   one pack rebuild and one recoverable transaction, with an optional client
   reopen after the complete batch succeeds.

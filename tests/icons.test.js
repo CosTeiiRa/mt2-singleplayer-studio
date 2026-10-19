@@ -33,3 +33,9 @@ test('lazy images wait for load and get only one error listener',()=>{
 test('successful images are retained',()=>{
   const img=image(true,32);helpers([img]).bindImages();assert.equal(img.replacement,undefined);
 });
+
+test('known unavailable icons render a placeholder without sending a failing image request',()=>{
+  const ctx=helpers();vm.runInContext('var S={itemMap:{"30353":{iconAvailable:false}}};',ctx);
+  assert.match(ctx.icon('30353'),/item-placeholder/);
+  assert.doesNotMatch(ctx.icon('30353'),/<img/);
+});

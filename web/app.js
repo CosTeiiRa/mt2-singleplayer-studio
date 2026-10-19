@@ -55,7 +55,7 @@ function toast(message, error=false){const node=$('#toast');node.textContent=mes
 async function attempt(fn){try{return await fn()}catch(error){toast(error.message,true)}}
 function head(eyebrow,title,description,action=''){return `<div class="page-head"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${description}</p></div>${action}</div>`}
 function iconPlaceholder(id){return `<span class="item-icon item-placeholder" aria-hidden="true" title="${esc(/^\d+$/.test(String(id))?'No local icon available for item #'+id:'No item icon available')}">◇</span>`}
-function icon(id){return /^\d{1,10}$/.test(String(id)) ? `<img class="item-icon" src="/icons/${encodeURIComponent(id)}" alt="" loading="lazy" data-icon-id="${esc(id)}">` : iconPlaceholder(id)}
+function icon(id){if(typeof S!=='undefined'&&S.itemMap?.[id]?.iconAvailable===false)return iconPlaceholder(id);return /^\d{1,10}$/.test(String(id)) ? `<img class="item-icon" src="/icons/${encodeURIComponent(id)}" alt="" loading="lazy" data-icon-id="${esc(id)}">` : iconPlaceholder(id)}
 function bindImages(root=document){$$('img.item-icon',root).forEach(img=>{
   if(img.dataset.iconBound)return;img.dataset.iconBound='1';
   const fallback=()=>{const el=document.createElement('span');el.className='item-icon item-placeholder';el.setAttribute('aria-hidden','true');el.title='No local icon available for item #'+(img.dataset.iconId||'unknown');el.textContent='◇';img.replaceWith(el)};
@@ -284,17 +284,17 @@ function newGroup(){
 }
 function pick(kind,filter,callback,options={}){
   S.catalogFilters ||= {};
-  const filters=S.catalogFilters[kind] ||= {category:'all',function:'all',sort:'id'};
+  const filters=S.catalogFilters[kind] ||= {category:'all',function:'all',sort:'id',scope:kind==='item'?'installed':'all'};
   const pools=kind==='item'&&S.page==='drops'?[...new Map(S.data.groups.filter(g=>g.source.startsWith('chest')).map(g=>['s'+g.id,{id:'s'+g.id,name:g.name+' · shared pool',category:'reward pool',keywords:g.key,catalogGroups:['pools'],catalogKind:'reward-pool',catalogLabel:'Shared reward pool'}])).values()]:[];
   const items=(kind==='item'?[...S.data.items,...pools]:S.data.mobs).filter(e=>!filter||filter(e));
   if(!items.some(e=>StudioCatalog.groupKeys(e,kind).includes(filters.category)))filters.category='all';
-  const available=StudioCatalog.query(items,{kind,category:filters.category});
+  const available=StudioCatalog.query(items,{kind,category:filters.category,scope:filters.scope});
   if(!available.functions.some(e=>e.id===filters.function))filters.function='all';
   S.picker={kind,callback,items,filters,limit:100,inspectOnly:!!options.inspectOnly};
   $('#picker-title').textContent=options.inspectOnly?'Explore an item':kind==='item'?'Choose an item':'Choose a monster or NPC';
-  $('.picker-hint').textContent=options.inspectOnly?'Select an item to see drops, crafting and other references. Read only.':kind==='item'?'Browse by category or function. Names and IDs are optional.':'Browse by type or search a name or ID.';
+  $('.picker-hint').textContent=options.inspectOnly?'Select an item to see drops, crafting and other references. Read only.':kind==='item'?'Installed definitions are shown by default. Use Full catalogue for other IDs; missing icons and names are labelled.':'Browse by type or search a name or ID.';
   $('#picker-search').value='';$('#picker-sort').value=filters.sort;
-  $('#picker-function-field').hidden=kind!=='item';
+  $('#picker-function-field').hidden=kind!=='item';$('#picker-scope-field').hidden=kind!=='item';$('#picker-scope').value=filters.scope||'all';
   $('#picker').showModal();renderPicker();setTimeout(()=>$('#picker-search').focus(),40);
 }
 function renderPicker(){
@@ -309,12 +309,12 @@ function renderPicker(){
   $('#picker-quick').innerHTML=quick.filter(key=>key==='all'||items.some(e=>StudioCatalog.groupKeys(e,kind).includes(key))).map(key=>`<button class="filter-chip" data-category="${key}" aria-pressed="${filters.category===key}">${key==='all'?'All':esc(categories.find(([id])=>id===key)[1])}<span>${fmt(counts[key]||0)}</span></button>`).join('');
   $$('[data-category]',$('#picker-quick')).forEach(n=>n.addEventListener('click',()=>setPickerCategory(n.dataset.category)));
   const visible=results.slice(0,limit);
-  $('#picker-results').innerHTML=visible.length?visible.map((e,i)=>`<button class="pick-result" data-pick="${i}">${kind==='item'?icon(e.id):'<span class="entity-glyph" aria-hidden="true">◇</span>'}<span class="pick-name"><strong>${esc(e.name)}</strong><small>#${esc(e.id)}${(e.requiredLevel??e.level)?` · ${kind==='item'?'Requires level':'Level'} ${e.requiredLevel??e.level}`:''}</small></span><span class="pill">${esc(StudioCatalog.label(e,kind))}</span></button>`).join(''):'<div class="empty"><strong>No matching results</strong><p>Try a broader category, another function, or fewer search words.</p><button class="button small" id="picker-empty-reset">Clear filters</button></div>';
+  $('#picker-results').innerHTML=visible.length?visible.map((e,i)=>`<button class="pick-result" data-pick="${i}">${kind==='item'?icon(e.id):'<span class="entity-glyph" aria-hidden="true">◇</span>'}<span class="pick-name"><strong>${esc(e.name)}</strong><small>#${esc(e.id)}${e.definitionStatus==='catalogue-only'?' · Catalogue only':''}${e.iconAvailable===false?' · Icon unavailable':''}${e.nameStatus==='unnamed'?' · Name unavailable':''}${(e.requiredLevel??e.level)?` · ${kind==='item'?'Requires level':'Level'} ${e.requiredLevel??e.level}`:''}</small></span><span class="pill">${esc(StudioCatalog.label(e,kind))}</span></button>`).join(''):'<div class="empty"><strong>No matching results</strong><p>Try a broader category, another function, or fewer search words.</p><button class="button small" id="picker-empty-reset">Clear filters</button></div>';
   $('#picker-count').textContent=`${fmt(results.length)} ${results.length===1?'match':'matches'}`;
   $('#picker-shown').textContent=results.length?`Showing ${fmt(visible.length)} of ${fmt(results.length)} · ${S.picker.inspectOnly?'Select an item to inspect it':'Select a result to use it; ↗ shows its references'}`:'No results to display';
   $('#picker-more').hidden=visible.length>=results.length;
   $('#picker-more').textContent=`Show ${Math.min(100,results.length-visible.length)} more`;
-  $('#picker-reset').hidden=filters.category==='all'&&filters.function==='all'&&!$('#picker-search').value;
+  $('#picker-reset').hidden=filters.category==='all'&&filters.function==='all'&&(kind!=='item'||filters.scope==='installed')&&!$('#picker-search').value;
   $$('[data-pick]',$('#picker-results')).forEach(n=>{
     if(kind==='item'){
       const item=visible[Number(n.dataset.pick)];n.dataset.helpItem=item.id;
@@ -333,7 +333,7 @@ function renderPicker(){
   bindImages($('#picker-results'));
 }
 function setPickerCategory(category){S.picker.filters.category=category;S.picker.filters.function='all';S.picker.limit=100;renderPicker();$('#picker-results').scrollTop=0}
-function resetPicker(){S.picker.filters.category='all';S.picker.filters.function='all';$('#picker-search').value='';S.picker.limit=100;renderPicker();$('#picker-results').scrollTop=0;$('#picker-search').focus()}
+function resetPicker(){S.picker.filters.scope=S.picker.kind==='item'?'installed':'all';$('#picker-scope').value=S.picker.filters.scope;S.picker.filters.category='all';S.picker.filters.function='all';$('#picker-search').value='';S.picker.limit=100;renderPicker();$('#picker-results').scrollTop=0;$('#picker-search').focus()}
 function questField(key,label,type='text'){return `<div class="field"><label for="quest-${key}">${label}</label><input id="quest-${key}" data-quest="${key}" type="${type}" value="${esc(S.quest[key])}" ${type==='number'?'min="0" step="1"':''}></div>`}
 function renderQuests(){
   const q=S.quest;
@@ -538,6 +538,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   $('#picker-search').addEventListener('input',()=>{S.picker.limit=100;renderPicker();$('#picker-results').scrollTop=0});
   $('#picker-category').addEventListener('change',e=>setPickerCategory(e.target.value));
   $('#picker-function').addEventListener('change',e=>{S.picker.filters.function=e.target.value;S.picker.limit=100;renderPicker();$('#picker-results').scrollTop=0});
+  $('#picker-scope').addEventListener('change',e=>{S.picker.filters.scope=e.target.value;S.picker.filters.function='all';S.picker.limit=100;renderPicker();$('#picker-results').scrollTop=0});
   $('#picker-sort').addEventListener('change',e=>{S.picker.filters.sort=e.target.value;S.picker.limit=100;renderPicker();$('#picker-results').scrollTop=0});
   $('#picker-reset').addEventListener('click',resetPicker);
   $('#picker-more').addEventListener('click',()=>{const firstNew=S.picker.limit;S.picker.limit+=100;renderPicker();$(`[data-pick="${firstNew}"]`)?.focus()});

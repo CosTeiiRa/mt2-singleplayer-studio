@@ -35,14 +35,18 @@
   function searchText(item, kind) {
     if (!searchCache.has(item)) {
       const categories = groupKeys(item, kind).map(key => (kind === 'mob' ? mobGroups : groups).find(([id]) => id === key)?.[1] || key);
-      searchCache.set(item, normalize([item.id, item.name, item.keywords, item.original, item.description?.text, label(item, kind), ...categories].filter(Boolean).join(' ')));
+      searchCache.set(item, normalize([item.id, item.name, item.catalogName, item.keywords, item.original, item.description?.text, label(item, kind), ...categories].filter(Boolean).join(' ')));
     }
     return searchCache.get(item);
   }
   function query(items, options = {}) {
-    const {kind = 'item', category = 'all', function: func = 'all', search = '', sort = 'name', allow} = options;
+    const {kind = 'item', category = 'all', function: func = 'all', search = '', sort = 'name', scope = 'all', allow} = options;
     const tokens = normalize(search).trim().split(/\s+/).filter(Boolean);
-    const eligible = allow ? items.filter(allow) : items;
+    const restricted = allow ? items.filter(allow) : items;
+    const exactId = /^\d{1,10}$/.test(String(search).trim()) ? String(search).trim() : null;
+    const eligible = restricted.filter(item => kind !== 'item' || scope === 'all' || item.id === exactId || item.catalogKind === 'reward-pool' ||
+      (scope === 'catalogue-only' ? item.definitionStatus === 'catalogue-only' : item.definitionStatus !== 'catalogue-only' &&
+        (scope !== 'missing-icons' || item.iconAvailable === false) && (scope !== 'name-issues' || item.nameStatus === 'unnamed')));
     const searched = eligible.filter(item => tokens.every(token => searchText(item, kind).includes(token)));
     const counts = Object.fromEntries((kind === 'mob' ? mobGroups : groups).map(([key]) => [key, key === 'all' ? searched.length : searched.filter(item => groupKeys(item, kind).includes(key)).length]));
     const inCategory = item => category === 'all' || groupKeys(item, kind).includes(category);
