@@ -101,6 +101,8 @@ Real dashboard captures from an installed world. Item names, available recipes a
 | **Atlas Legend** | Labels explaining the configured atlas overlays. |
 | **Pocket Wiki** | Searchable crafts, upgrades, item sources and uses, with bookmarks and pinned recipes. |
 
+![Installed add-on manager showing the four bundled add-ons, verified client files, enabled switches and available updates](docs/screenshots/addons.png)
+
 Installed add-ons work with Studio closed. The [add-on guide](docs/ADDONS.md)
 covers installation, controls, settings, updates and creating your own extensions.
 The browser's **World atlas** also links configured spawns to their drop editors

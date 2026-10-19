@@ -37,6 +37,7 @@ docs/THIRD_PARTY.md
 docs/UPDATES_AND_BACKUPS.md
 docs/USER_GUIDE.md
 docs/screenshots/README.md
+docs/screenshots/addons.png
 docs/screenshots/drop-editor.jpg
 docs/screenshots/economy.jpg
 docs/screenshots/item-search.jpg
