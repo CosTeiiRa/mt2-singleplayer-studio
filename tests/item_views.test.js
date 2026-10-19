@@ -35,3 +35,12 @@ test('error notifications use the top layer and persist until dismissed',()=>{
   ctx.closeToast();assert.equal($('#toast').hidden,true);assert.equal($('#toast').open,false);
   ctx.toast('Saved');assert.equal(timers[0].ms,6500);
 });
+
+test('creature references share portraits, names and game levels with honest category fallbacks',()=>{
+  const ctx={S:{mobMap:{101:{name:'Wolf <test>',level:1,category:'monster',iconAvailable:true,iconKind:'portrait'},102:{name:'Boss',level:50,category:'boss',iconAvailable:true,iconKind:'category'},103:{name:'Unknown',level:20,category:'metin',iconAvailable:false}}},esc:value=>String(value).replaceAll('<','&lt;')};
+  vm.createContext(ctx);vm.runInContext(source.slice(source.indexOf('function mobIcon('),source.indexOf('function helpDetails(')),ctx);
+  assert.match(ctx.mobContent(101),/src="\/mob-icons\/101"/);
+  assert.match(ctx.mobContent(101),/Wolf &lt;test>/);assert.match(ctx.mobContent(101),/Lv. 1/);
+  assert.match(ctx.mobIcon(102),/Client category badge/);
+  assert.doesNotMatch(ctx.mobIcon(103),/<img/);
+});

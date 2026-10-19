@@ -144,3 +144,13 @@ test('boolean settings use saved false values before package defaults',()=>{
     {key:'show_areas',label:'Show areas',description:'',value:true}
   ]);
 });
+
+test('atlas species groups repeated zones and combines type and text filters',async()=>{
+  const {atlasSpecies}=await import('../web/addon_helpers.mjs');
+  const map={regions:[{mob_id:101,name:'Wolf',type:'monster',level:1,x:0,y:0},{mob_id:101,name:'Wolf',type:'monster',level:1,x:10,y:20},{mob_id:8001,name:'Metin of Sorrow',type:'metin',level:5,x:30,y:40}]};
+  assert.equal(atlasSpecies(map).length,2);
+  assert.equal(atlasSpecies(map,'monster','101')[0].zones.length,2);
+  assert.equal(atlasSpecies(map,'metin','wolf').length,0);
+  assert.equal(atlasSpecies(map,'metin','sorrow')[0].mob_id,'8001');
+  assert.deepEqual(atlasSpecies(map,'all','missing'),[]);
+});

@@ -1,5 +1,5 @@
 'use strict';
-const Econ={filters:{population:'regular',stage:'all',days:7,early:39,mid:74},tab:'overview',data:null,request:0,itemSearch:'',itemCategory:'all',itemSort:'stock',itemGrade:'all',limit:50,activity:'all',sourceSearch:'',noteTitle:'',noteBody:''};
+const Econ={filters:{population:'regular',stage:'all',days:7,early:39,mid:74},tab:'overview',data:null,request:0,itemSearch:'',itemCategory:'all',itemSort:'stock',itemGrade:'all',limit:50,activity:'all',sourceSearch:'',noteTitle:'',noteBody:'',cache:new Map()};
 const ecoNumber=n=>n===null||n===undefined?'—':Number(n).toLocaleString('en-GB',{maximumFractionDigits:1});
 const ecoCompact=n=>n===null||n===undefined?'—':Number(n).toLocaleString('en-GB',{notation:'compact',maximumFractionDigits:2});
 const ecoDate=t=>new Date(t*1000).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
@@ -9,12 +9,22 @@ const ecoLabels={all:'Whole server',early:'Early game',mid:'Midgame',late:'Late 
 async function loadEconomy(fresh=false,capture=false){
   const request=++Econ.request;
   if(!$('#economy-view'))renderEconomyShell();
-  $('#eco-status').textContent=capture?'Collecting and saving a snapshot…':'Reading the live database…';
+  const cacheKey=JSON.stringify([S.data.root,Econ.filters]);
+  let cached=Econ.cache.get(cacheKey);
+  if(!cached){try{const saved=JSON.parse(sessionStorage.getItem('studio-economy-last')||'null');if(saved?.key===cacheKey)cached=saved.data}catch{}}
+  Econ.data=cached||null;
+  if(cached){renderEconomyView();$('#eco-connection').textContent='PREVIOUS OBSERVATION';}
+  else{$('#economy-view').innerHTML='<div class="loading" role="status">Reading economy…</div>';$('#eco-connection').textContent='CONNECTING';}
+  $('#eco-connection').classList.toggle('good',false);
+  $('#economy-view').setAttribute('aria-busy','true');
+  $('#eco-status').textContent=capture?'Saving a fresh snapshot…':cached?`Updating · showing observation from ${ecoDate(cached.at)}`:'Reading live economy…';
   $$('#eco-refresh,#eco-capture,#eco-export').forEach(button=>button.disabled=true);
   try{
     const data=capture?await api('/api/economy/capture',Econ.filters):await api('/api/economy?'+new URLSearchParams({...Econ.filters,...(fresh?{fresh:1}:{})}));
     if(request!==Econ.request||S.page!=='economy')return;
     Econ.data=data;
+    Econ.cache.set(cacheKey,data);if(Econ.cache.size>8)Econ.cache.delete(Econ.cache.keys().next().value);
+    try{sessionStorage.setItem('studio-economy-last',JSON.stringify({key:cacheKey,data}))}catch{}
     $('#eco-status').textContent=data.connected?`Observed ${ecoDate(data.at)} · read-only database access`:data.lastSaved?`Game database offline · last saved observation: ${ecoDate(data.lastSaved.at)}`:'Game database offline · no saved observation matches these filters';
     $('#eco-connection').textContent=data.connected?'LIVE DATABASE':data.lastSaved?'SAVED SNAPSHOT · OFFLINE':'OFFLINE';
     $('#eco-connection').classList.toggle('good',data.connected);
@@ -23,13 +33,15 @@ async function loadEconomy(fresh=false,capture=false){
   }catch(error){
     if(request===Econ.request&&S.page==='economy'){
       $('#eco-status').textContent='Economy lookup failed';
-      $('#economy-view').innerHTML=`<div class="notice">${esc(error.message)}</div>`;
+      if(!cached)$('#eco-connection').textContent='UNAVAILABLE';
+      if(cached)$('#eco-status').textContent=`Refresh failed · previous observation ${ecoDate(cached.at)} · ${error.message}`;
+      else $('#economy-view').innerHTML=`<div class="notice">${esc(error.message)}</div>`;
     }
-  }finally{if(request===Econ.request&&S.page==='economy'){$('#eco-refresh').disabled=false;$('#eco-capture').disabled=!Econ.data?.connected}}
+  }finally{if(request===Econ.request&&S.page==='economy'){$('#economy-view').setAttribute('aria-busy','false');$('#eco-refresh').disabled=false;$('#eco-export').disabled=!Econ.data;$('#eco-capture').disabled=!Econ.data?.connected}}
 }
 function renderEconomyShell(){
   const f=Econ.filters;
-  $('#content').innerHTML=head('WORLD BALANCE','Economy','Follow currency, goods and progression across your whole world.','<span id="eco-connection" class="status neutral">CONNECTING</span>')+
+  $('#content').innerHTML=head('WORLD BALANCE','Economy','Track currency, stock and progression.','<span id="eco-connection" class="status neutral">CONNECTING</span>')+
     `<section class="eco-controls" aria-label="Economy filters"><div class="field"><label for="eco-population">Population</label><select id="eco-population">${[['regular','Regular economy · no GMs'],['human','Humans · no GMs'],['bot','Playerbots · no GMs'],['gm','GM accounts only'],['all','Everyone · including GMs'],['unknown','Unknown ownership']].map(([key,label])=>`<option value="${key}" ${key===f.population?'selected':''}>${label}</option>`).join('')}</select></div>
     <div class="field"><label for="eco-stage">Progression stage</label><select id="eco-stage">${Object.entries(ecoLabels).map(([key,label])=>`<option value="${key}" ${key===f.stage?'selected':''}>${label}${key==='early'?` · 1–${f.early}`:key==='mid'?` · ${f.early+1}–${f.mid}`:key==='late'?` · ${f.mid+1}+`:''}</option>`).join('')}</select></div>
     <div class="field"><label for="eco-days">Log period</label><select id="eco-days">${[1,7,28].map(days=>`<option value="${days}" ${days===f.days?'selected':''}>Last ${days} ${days===1?'day':'days'}</option>`).join('')}</select></div>
@@ -72,7 +84,7 @@ function renderEconomyView(){
   $('#economy-view').setAttribute('aria-labelledby','eco-tab-'+Econ.tab);
   const d=Econ.data;
   $('#eco-export').disabled=false;
-  $('#economy-view').innerHTML=(!d.connected?`<div class="notice eco-offline"><strong>Live data is unavailable</strong><p>${esc(d.error)}</p><p>${d.lastSaved?'Saved figures below are from '+esc(ecoDate(d.lastSaved.at))+', for exactly these population, stage and period filters. They are not current balances.':'Your saved observations are retained. Try the population, stage and period filters used when they were collected.'}</p></div>`:'')+(d.alerts.length?`<div class="notice eco-data-notes">${d.alerts.map(alert=>`<p>${esc(alert)}</p>`).join('')}</div>`:'')+(!d.connected&&Econ.tab==='overview'?economySavedOverview():!d.connected&&Econ.tab==='items'?economySavedItems():({overview:economyOverview,items:economyItems,activity:economyActivity,journal:economyJournal,coverage:economyCoverage}[Econ.tab])());
+  $('#economy-view').innerHTML=(!d.connected?`<div class="notice eco-offline"><strong>Live data is unavailable</strong><p>${esc(d.error)}</p><p>${d.lastSaved?'Saved figures below are from '+esc(ecoDate(d.lastSaved.at))+', for exactly these population, stage and period filters. They are not current balances.':'Your saved observations are retained. Try the population, stage and period filters used when they were collected.'}</p></div>`:'')+(d.alerts.length?helpDetails(`Data notes (${d.alerts.length})`,d.alerts.map(alert=>`<p>${esc(alert)}</p>`).join('')):'')+(!d.connected&&Econ.tab==='overview'?economySavedOverview():!d.connected&&Econ.tab==='items'?economySavedItems():({overview:economyOverview,items:economyItems,activity:economyActivity,journal:economyJournal,coverage:economyCoverage}[Econ.tab])());
   if(Econ.tab==='items'){if(d.connected)bindEconomyItems();else bindSavedEconomyItems()}
   if(Econ.tab==='activity')bindEconomyActivity();
   if(Econ.tab==='journal')bindEconomyJournal();
@@ -110,15 +122,15 @@ function economyOverview(){
   const bands=d.bands.map(row=>`<tr class="${f.stage===row.key?'eco-selected':''}"><th scope="row">${ecoLabels[row.key]}<small>${row.key==='early'?`1–${f.early}`:row.key==='mid'?`${f.early+1}–${f.mid}`:`${f.mid+1}+`}</small></th><td>${ecoNumber(d.available.includes('active')?row.active:null)} / ${ecoNumber(d.available.includes('players')?row.accounts:null)}</td><td>${ecoCompact(d.available.includes('players')?row.wallet:null)}</td><td>${ecoCompact(d.available.includes('sales')?row.turnover:null)}</td><td>${ecoNumber(d.available.includes('refines')?row.attempts:null)}</td></tr>`).join('');
   const flows=d.money.map(row=>`<tr><th scope="row">${esc(row.type)}</th><td class="eco-positive">${ecoNumber(row.created)}</td><td>${ecoNumber(row.removed)}</td></tr>`).join('');
   const signals=[];
-  if(d.prices.percent!==null)signals.push(['Comparable goods',`${ecoPercent(d.prices.percent)} against the preceding ${f.days} days, across ${d.prices.matched} matched item IDs. Review individual goods before changing supply.`]);
-  else signals.push(['Build a price baseline',`${d.prices.matched} commodity IDs have enough trades in both periods. Three are needed for a combined price movement figure.`]);
-  if(m.attempts)signals.push(['Equipment progression',`${ecoNumber(m.attempts)} upgrade attempts; ${ecoNumber(m.burns)} equipment-destruction log records. ${ecoNumber(m.scrollAttempts)} attempts used a named scroll method; this alone does not prove protection.`]);
+  if(d.prices.percent!==null)signals.push(['Comparable goods',`${ecoPercent(d.prices.percent)} across ${d.prices.matched} matched goods · previous ${f.days} days.`]);
+  else signals.push(['Build a price baseline',`${d.prices.matched} of 3 required goods have comparable trades.`]);
+  if(m.attempts)signals.push(['Equipment progression',`${ecoNumber(m.attempts)} attempts · ${ecoNumber(m.burns)} destruction records · ${ecoNumber(m.scrollAttempts)} scroll-method attempts.`]);
   const top=Object.entries(d.activity).sort((a,b)=>b[1]-a[1]),kills=top.reduce((n,row)=>n+row[1],0);
-  if(kills)signals.push(['Farming concentration',`${S.mobMap[top[0][0]]?.name||'#'+top[0][0]} accounts for ${ecoNumber(top[0][1]/kills*100)}% of ${ecoNumber(kills)} recorded Metin/boss kills. Kill share is not item-production share.`]);
+  if(kills)signals.push(['Farming concentration',`${S.mobMap[top[0][0]]?.name||'#'+top[0][0]} · ${ecoNumber(top[0][1]/kills*100)}% of ${ecoNumber(kills)} recorded Metin/boss kills.`]);
   const accumulating=d.items.filter(row=>row.stockChange>0&&row.sales===0).sort((a,b)=>b.stockChange-a.stockChange);
-  if(accumulating.length)signals.push(['Stock review',`${accumulating.length} item IDs increased in held stock without a recorded shop sale during the log period. Check their uses and transfers before calling this overproduction.`]);
+  if(accumulating.length)signals.push(['Stock review',`${accumulating.length} items gained stock with no recorded shop sale.`]);
   const quality=[['+0 to +3',0,3],['+4 to +6',4,6],['+7 and above',7,Infinity]].map(([label,low,high])=>{const rows=d.items.filter(row=>row.grade!==null&&row.grade!==undefined&&row.grade>=low&&row.grade<=high);return `<tr><th scope="row">${label}</th><td>${ecoNumber(d.available.includes('stock')?rows.reduce((n,row)=>n+row.stock,0):null)}</td><td>${ecoNumber(d.available.includes('stock')?rows.reduce((n,row)=>n+row.equipped,0):null)}</td><td>${ecoNumber(d.available.includes('stock')?rows.reduce((n,row)=>n+row.listed,0):null)}</td></tr>`}).join('');
-  return `<div class="eco-gm-scope"><strong>${gmScope}</strong><span>${gmInfo}</span></div><div class="eco-cards">${ecoCard('Character-wallet Yang',ecoCompact(m.wallet),d.baseline?`${ecoPercent(d.baseline.walletChange)} since ${ecoDate(d.baseline.at)}`:'Current balance · banks and Won separate')}${ecoCard('Recorded shop turnover',ecoCompact(m.turnover),`${ecoNumber(m.trades)} Yang-only sales · ${ecoNumber(m.buyers)} distinct buyer characters`)}${ecoCard('Active accounts',ecoNumber(m.activeAccounts),`${ecoNumber(m.accounts)} accounts in this view · active within ${f.days} days`)}${ecoCard('Held item units',ecoCompact(m.stock),'Current stock · includes listed and equipped items')}${ecoCard('Upgrade success',m.successRate===null?'—':ecoNumber(m.successRate)+'%',`${ecoNumber(m.attempts)} attempts · downgrade detail rows excluded`)}${ecoCard('Comparable goods prices',d.prices.percent===null?'—':ecoPercent(d.prices.percent),`${d.prices.matched} matched IDs · preceding ${f.days}-day comparison`)}</div>
+  return `<div class="eco-gm-scope"><strong>${gmScope}</strong><details><summary>Account scope</summary><span>${gmInfo}</span></details></div><div class="eco-cards">${ecoCard('Character-wallet Yang',ecoCompact(m.wallet),d.baseline?`${ecoPercent(d.baseline.walletChange)} since ${ecoDate(d.baseline.at)}`:'Current balance · banks and Won separate')}${ecoCard('Recorded shop turnover',ecoCompact(m.turnover),`${ecoNumber(m.trades)} Yang-only sales · ${ecoNumber(m.buyers)} distinct buyer characters`)}${ecoCard('Active accounts',ecoNumber(m.activeAccounts),`${ecoNumber(m.accounts)} accounts in this view · active within ${f.days} days`)}${ecoCard('Held item units',ecoCompact(m.stock),'Current stock · includes listed and equipped items')}${ecoCard('Upgrade success',m.successRate===null?'—':ecoNumber(m.successRate)+'%',`${ecoNumber(m.attempts)} attempts · downgrade detail rows excluded`)}${ecoCard('Comparable goods prices',d.prices.percent===null?'—':ecoPercent(d.prices.percent),`${d.prices.matched} matched IDs · preceding ${f.days}-day comparison`)}</div>
   <p class="eco-caption">GM status applies to the whole account, including alts and storage. Regular economy includes humans and bots with known ownership; GM-involved trades are excluded from normal sales and prices. Stage uses current levels; in the GM view, trade stage follows the GM party. Bank balances follow population across all levels. Currency-flow logs remain mixed and global.</p>
   ${ecoPanel('Progression balance','Same measures, every stage',`<div class="eco-table-wrap"><table class="eco-table"><thead><tr><th>Stage / level</th><th>Active / accounts</th><th>Wallet Yang</th><th>Sales Yang</th><th>Upgrade attempts</th></tr></thead><tbody>${bands}</tbody></table></div>`)}
   <div class="eco-two">${ecoPanel('Mixed global Yang logs','Includes possible GM activity · partial coverage',`<p class="eco-caption">These logs have no actor ID. Their amounts cannot be split into regular and GM economies and do not follow the population filter.</p><div class="eco-flow-totals"><span>Recorded in<strong>${ecoCompact(m.recordedIn)}</strong></span><span>Recorded out<strong>${ecoCompact(m.recordedOut)}</strong></span><span>Balance<strong>${ecoCompact(m.recordedNet)}</strong></span></div><div class="eco-table-wrap"><table class="eco-table"><thead><tr><th>Source label</th><th>In</th><th>Out</th></tr></thead><tbody>${flows||'<tr><td colspan="3">No currency-flow records available.</td></tr>'}</tbody></table></div><p class="eco-caption">A positive logged balance alone does not prove inflation. Unlogged flows and transfers prevent a full reconciliation.</p>`)}
@@ -149,7 +161,8 @@ function bindEconomyActivity(){
   const render=()=>{
     const query=Econ.sourceSearch.toLowerCase(),f=Econ.filters;
     const rows=Econ.data.sources.filter(row=>(Econ.activity==='all'||row.kind===Econ.activity)&&(f.stage==='all'||row.level>0&&(row.level<=f.early?'early':row.level<=f.mid?'mid':'late')===f.stage)&&`${row.name} ${row.id}`.toLowerCase().includes(query));
-    $('#eco-source-table').innerHTML=`<div class="eco-table-wrap"><table class="eco-table"><thead><tr><th>Target</th><th>Level / type</th><th>Recorded kills</th><th>Configured item IDs</th><th>Shared pools</th><th>Source</th></tr></thead><tbody>${rows.slice(0,150).map(row=>`<tr><th scope="row">${esc(row.name)}<small>#${esc(row.id)}</small></th><td>${esc(row.level??'?')} · ${esc(row.kind)}</td><td>${['metin','boss'].includes(row.kind)&&Econ.data.available.includes('actions')?ecoNumber(Econ.data.activity[row.id]||0):'—'}</td><td>${ecoNumber(row.items)}</td><td>${ecoNumber(row.pools)}</td><td><button class="subtle-link" data-eco-drop="${esc(row.id)}">Open drop group ↗</button></td></tr>`).join('')||'<tr><td colspan="6">No targets match this view.</td></tr>'}</tbody></table></div><div class="eco-table-foot">Showing ${Math.min(150,rows.length)} of ${rows.length} targets${rows.length>150?' · narrow your search to see others':''}</div>`;
+    $('#eco-source-table').innerHTML=`<div class="eco-table-wrap"><table class="eco-table"><thead><tr><th>Target</th><th>Level / type</th><th>Recorded kills</th><th>Configured item IDs</th><th>Shared pools</th><th>Source</th></tr></thead><tbody>${rows.slice(0,150).map(row=>`<tr><th scope="row"><span class="mob-reference" ${mobHelpAttrs(row.id)} tabindex="0">${mobContent(row.id,{title:row.name})}</span></th><td>${esc(row.level??'?')} · ${esc(row.kind)}</td><td>${['metin','boss'].includes(row.kind)&&Econ.data.available.includes('actions')?ecoNumber(Econ.data.activity[row.id]||0):'—'}</td><td>${ecoNumber(row.items)}</td><td>${ecoNumber(row.pools)}</td><td><button class="subtle-link" data-eco-drop="${esc(row.id)}">Open drop group ↗</button></td></tr>`).join('')||'<tr><td colspan="6">No targets match this view.</td></tr>'}</tbody></table></div><div class="eco-table-foot">Showing ${Math.min(150,rows.length)} of ${rows.length} targets${rows.length>150?' · narrow your search to see others':''}</div>`;
+    bindImages($('#eco-source-table'));
     $$('[data-eco-drop]').forEach(button=>button.addEventListener('click',()=>{const source=Econ.data.sources.find(row=>row.id===button.dataset.ecoDrop).groups[0];openUsageSource({kind:'drop',...source})}));
   };
   $('#eco-source-search').addEventListener('input',e=>{Econ.sourceSearch=e.target.value;render()});

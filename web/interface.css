@@ -18,3 +18,47 @@
 #apply-dialog{max-height:92vh}#apply-dialog[open]{display:flex;flex-direction:column}#apply-dialog>.dialog-content{overflow:auto;min-height:0}#apply-dialog>.dialog-head,#apply-dialog>.dialog-foot{flex:none}
 #toast{inset:auto 24px 24px auto;margin:0;display:flex;align-items:flex-start;gap:20px;max-width:min(520px,calc(100vw - 32px));padding:17px 18px;box-shadow:0 12px 55px #0008}#toast[hidden]{display:none}#toast-title{font-size:13px}#toast-message{margin:7px 0 0;line-height:1.7;font-size:12px}#toast-close{flex:none;min-width:30px;min-height:30px}
 @media(max-width:850px){.operation-status{padding:15px 20px;gap:15px}.operation-title{font-size:15px}.operation-summary{flex-basis:100%}.operation-status .operation-count{margin:0}.operation-actions{margin-left:auto}.operation-card{padding:17px}.operation-card .operation-title{font-size:18px}.operation-steps{grid-template-columns:1fr 1fr}.dialog-head-actions{gap:6px}}
+/* Compact guidance, shared creature references, and a map-height spawn list. */
+.help-details{margin:10px 0;color:var(--muted);font-size:11px;line-height:1.6}
+.help-details>summary{cursor:pointer;color:var(--gold);padding:6px 0;width:fit-content}
+.help-details[open]>summary{margin-bottom:6px}
+.eco-data-notes p,.help-details p{margin:6px 0}
+.eco-gm-scope{align-items:center}
+.eco-gm-scope details{margin-left:auto;font-size:11px;max-width:65%}
+.eco-gm-scope summary{cursor:pointer}
+#economy-view[aria-busy=true]{border-top:2px solid var(--gold);padding-top:8px}
+.mob-icon{width:38px;height:40px;object-fit:contain}
+.mob-placeholder{display:grid;place-items:center;color:var(--gold);font-size:23px}
+.mob-drop-items{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0}
+.mob-drop-items .item-reference{min-width:0;font-size:11px}
+.m2addons .atlas-layout{grid-template-columns:minmax(0,1.5fr) minmax(290px,1fr);height:clamp(620px,73vh,950px)}
+.m2addons .atlas-map-panel,.m2addons .atlas-spawn-panel{min-height:0;display:flex;flex-direction:column}
+.m2addons .atlas-map-panel .atlas-canvas{flex:1;aspect-ratio:auto;max-height:none;min-height:0}
+.m2addons .atlas-spawn-panel .atlas-list{flex:1;max-height:none;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.m2addons button.spawn-row{display:flex;align-items:center;gap:10px;width:100%;border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;padding:12px}
+.m2addons button.spawn-row:hover,.m2addons button.spawn-row.selected{background:#a98b5c20}
+.m2addons button.spawn-row:focus-visible{outline:2px solid var(--gold);outline-offset:-3px}
+.m2addons .spawn-row .item-copy{min-width:0;flex:1}
+.m2addons .spawn-zone-count{color:var(--muted);font-size:10px;white-space:nowrap}
+.m2addons .atlas-inspection>p{margin:0;color:var(--muted);font-size:12px}
+.m2addons .atlas-creature-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.m2addons .atlas-creature-head>.item-copy{flex:1}
+.m2addons .atlas-drop-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin:12px 0}
+.m2addons .atlas-drop-grid .item-reference{min-width:0;max-width:100%}
+.m2addons .atlas-creature-drops>small{font-size:11px;color:var(--muted)}
+.m2addons .atlas-toolbar input{min-width:180px;flex:1}
+.m2addons .atlas-feature{cursor:crosshair}
+@media(max-width:950px){.m2addons .atlas-layout{grid-template-columns:1fr;height:auto}.m2addons .atlas-map-panel .atlas-canvas{min-height:400px;height:55vh;flex:auto}.m2addons .atlas-spawn-panel .atlas-list{min-height:420px;height:65vh;max-height:780px;flex:auto}}
+.m2addons .atlas-map-panel{position:relative}
+.m2addons .atlas-map-panel .atlas-inspection{position:absolute;left:12px;right:12px;bottom:12px;margin:0;background:#141b22f5;border:1px solid var(--line);border-radius:7px;padding:12px;z-index:1;max-height:45%;min-height:0;overflow:auto;box-shadow:0 8px 24px #0008}
+.m2addons .atlas-inspection:has(>p){width:fit-content;font-size:11px}
+.m2addons .atlas-inspection .atlas-creature-head{gap:8px;margin-bottom:8px}
+.m2addons .atlas-inspection .item-copy strong{font-size:12px}
+.m2addons .atlas-inspection .atlas-drop-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin:8px 0}
+.m2addons .atlas-inspection .item-reference{font-size:10px;padding:4px;gap:6px}
+.m2addons .atlas-inspection .item-reference .item-copy small{font-size:9px}
+.economy-methodology{padding:12px 18px;border:1px solid var(--line);border-radius:6px}
+.economy-methodology h3{font-size:12px;margin-top:18px}
+.m2addons .atlas-map-panel .atlas-inspection:not(:has(>p)){top:64px;bottom:auto}
+.mob-reference{display:flex;align-items:center;gap:9px;min-width:190px;text-align:left}
+.mob-reference:focus-visible{outline:2px solid var(--gold);outline-offset:3px}

@@ -96,29 +96,33 @@ class ClientCatalogue:
         pack = self.root.parent / 'Klient/pack'
         self.reader = self.root / 'files/client_protos.py'
         self.paths = [self.reader] + [pack / (name + suffix) for name in ('gamedata', 'locale', 'icon') for suffix in ('.index', '.data')]
+        self.paths += [pack / ('patch_wiki' + suffix) for suffix in ('.index', '.data')]
 
     def load(self):
         before = fingerprint(self.paths)
         try:
             cached = json.loads(self.cache.read_text('utf-8'))
-            if (not isinstance(cached, dict) or cached.get('schema') not in (1,2) or cached.get('root') != str(self.root.resolve())
+            if (not isinstance(cached, dict) or cached.get('schema') not in (1,2,3) or cached.get('root') != str(self.root.resolve())
                     or any(not isinstance(cached.get(key), dict) for key in ('names','descriptions','mobs','proto','icons'))
-                    or any(value is not None and (not isinstance(value,str) or not re.fullmatch(r'[a-f0-9]{64}\.png',value)) for value in cached['icons'].values())
+                    or any(not isinstance(cached.get(key, {}), dict) for key in ('mobIcons','mobBadges'))
+                    or any(value is not None and (not isinstance(value,str) or not re.fullmatch(r'[a-f0-9]{64}\.png',value)) for key in ('icons','mobIcons','mobBadges') for value in cached.get(key, {}).values())
                     or any(not isinstance(value,str) for key in ('names','descriptions','mobs') for value in cached[key].values())
                     or any(not isinstance(value,dict) or not isinstance(value.get('name'),str) for value in cached['proto'].values())):
                 cached = None
         except (OSError, ValueError):
             cached = None
-        if cached and cached.get('schema')==2 and isinstance(cached.get('terms'),dict) and cached.get('fingerprint') == before and all(self.icon_path(name) for name in set(cached.get('icons', {}).values()) if name):
+        if cached and cached.get('schema')==3 and isinstance(cached.get('terms'),dict) and cached.get('fingerprint') == before and all(self.icon_path(name) for key in ('icons','mobIcons','mobBadges') for name in set(cached.get(key, {}).values()) if name):
             return cached, 'current'
         try:
-            if any(value[1] is None for value in before):
+            if any(value[1] is None for value in before[:7]):
                 raise ValueError('Client packs are unavailable')
             spec = importlib.util.spec_from_file_location('studio_catalogue_reader', self.reader)
             reader = importlib.util.module_from_spec(spec)
             exec(compile(self.reader.read_bytes(), str(self.reader), 'exec'), reader.__dict__)
             packs = {}
             for index in range(1, len(self.paths), 2):
+                if not self.paths[index].is_file() or not self.paths[index + 1].is_file():
+                    continue
                 _, entries = reader.read_pack(self.paths[index].read_bytes(), self.paths[index + 1].read_bytes())
                 packs[self.paths[index].stem] = {asset_key(entry.key()): entry for entry in entries}
             game, locale, assets = packs['gamedata'], packs['locale'], packs['icon']
@@ -141,10 +145,11 @@ class ClientCatalogue:
                     aliases[match[1]] = asset_key(match[2])
             self.images.mkdir(parents=True, exist_ok=True)
             converted = {}
-            def image(path):
+            def image(path, entries=None):
+                entries = assets if entries is None else entries
                 if path not in converted:
                     try:
-                        raw = png_pixels(entry(assets, path))
+                        raw = png_pixels(entry(entries, path))
                         name = hashlib.sha256(raw).hexdigest() + '.png'
                         target = self.images / name
                         if not target.is_file():
@@ -175,10 +180,18 @@ class ClientCatalogue:
                 candidates = by_name.get(original, set())
                 if ident not in icons and len(candidates) == 1:
                     icons[ident] = next(iter(candidates))
+            wiki = packs.get('patch_wiki', {})
+            portraits = {}
+            for path in wiki:
+                match = re.fullmatch(r'ui/game/wiki/portraits/([1-9][0-9]{0,9})\.tga', path)
+                if match:
+                    portraits[match[1]] = image(path, wiki)
+            badges = {kind: image('ui/game/wiki/badges/' + kind + '.tga', wiki) for kind in ('boss','metin','monster')}
             if before != fingerprint(self.paths):
                 raise ValueError('Client files changed while reading')
-            result = {'schema': 2, 'root': str(self.root.resolve()), 'fingerprint': before,
-                      'names': names, 'descriptions': descriptions, 'mobs': mobs, 'proto': proto, 'icons': icons,'terms':terms}
+            result = {'schema': 3, 'root': str(self.root.resolve()), 'fingerprint': before,
+                      'names': names, 'descriptions': descriptions, 'mobs': mobs, 'proto': proto, 'icons': icons,'terms':terms,
+                      'mobIcons': portraits, 'mobBadges': badges}
             atomic_json(self.cache, result)
             return result, 'current'
         except Exception:

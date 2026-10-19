@@ -113,6 +113,16 @@ class NativeEditorTests(unittest.TestCase):
     def recipe(self, ident=1, window='101'):
         return next(r for r in self.s.native_crafting.catalog()['recipes'] if r['index'] == ident and r['window'] == window)
 
+    def test_custom_filter_metadata_covers_created_and_edited_native_recipes(self):
+        self.assertFalse(self.recipe()['custom'])
+        recipe = self.recipe(); recipe['fields']['percent'] = '95'
+        self.s.commit(self.s.native_crafting.plan(recipe)['id'])
+        self.assertTrue(self.recipe()['custom'])
+        self.assertFalse(self.recipe(2)['custom'])
+        recipe = copy.deepcopy(self.recipe()); recipe.update(new=True, index=100000)
+        self.s.commit(self.s.native_crafting.plan(recipe)['id'])
+        self.assertTrue(self.recipe(100000)['custom'])
+
     def test_catalog_lists_shared_npcs_and_excludes_general_store(self):
         access = discover_native(self.s)
         self.assertEqual({r['id'] for r in access}, {'20016', '11001', '11003', '11005'})

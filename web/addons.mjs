@@ -1,5 +1,5 @@
 import {jobActive,transferLabel,watchJob} from './addon_jobs.mjs';
-import {escapeHtml as e, descriptionSummary, descriptionMarkup, unwrap, asArray, filterCatalog, installedRecord, addonStatus, compatibilityStatus, formatTime, humanize, changeRows, planMessages, sourceLabel, mapRegions, mapBounds, respawnLabel, settingFields, parseSettingValue} from './addon_helpers.mjs';
+import {escapeHtml as e, descriptionSummary, descriptionMarkup, unwrap, asArray, filterCatalog, installedRecord, addonStatus, compatibilityStatus, formatTime, humanize, changeRows, planMessages, sourceLabel, atlasSpecies, mapRegions, mapBounds, respawnLabel, settingFields, parseSettingValue} from './addon_helpers.mjs';
 
 const paths = {
   overview:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
@@ -47,7 +47,7 @@ let host = null;
 const $ = selector => host?.root?.querySelector(selector) ?? document.querySelector(selector);
 const names = {overview:'Overview',discover:'Discover',installed:'Installed',atlas:'Boss atlas',activity:'Activity',settings:'Settings'};
 const store = {state:{installed:[]}, catalog:[], history:[], maps:[], mapsMeta:{}, map:null, diagnostics:null, csrf:'',repositories:[],releases:[],updates:[]};
-const ui = {page:'overview',query:'',category:'all',mapId:'',busy:false,loaded:false,error:'',atlasFilter:'all',detailsId:null,plan:null,jobWatch:0};
+const ui = {page:'overview',query:'',category:'all',mapId:'',busy:false,loaded:false,error:'',atlasFilter:'enemies',atlasSearch:'',atlasPinned:'',atlasFocus:'',atlasHoverRequest:0,detailsId:null,plan:null,jobWatch:0};
 let integrityTimer,checkingIntegrity=false;
 const batchSelection=new Set();
 
@@ -304,32 +304,52 @@ function settings() {
 }
 
 function sourceMarkup(map) {
-  const source=map?.source??store.mapsMeta.source;const coverage=map?.coverage??store.mapsMeta.coverage;
-  return `<div class="source-box"><strong>${icon('info').replace('<svg ','<svg class="inline-icon" ')}Local configuration, not live boss status</strong><p>Configured zones and base respawn intervals describe the source files. They do not indicate whether a boss is alive, an exact countdown, or whether every configured point is accessible.</p><p>Source: <code>${e(sourceLabel(source))}</code></p>${coverage?`<p>Coverage: ${e(typeof coverage==='string'?coverage:Object.entries(coverage).map(([key,value])=>`${humanize(key)}: ${typeof value==='object'?JSON.stringify(value):value}`).join(' · '))}</p>`:''}</div>`;
+  return `<details class="source-box help-details"><summary>Sources & coverage</summary><p>${e(map?.coverage?.scope||'Installed spawn configuration.')}</p><p>Base intervals; no live presence or countdown. ${e(map?.coverage?.intervals||'')}</p><p class="mono">${e(sourceLabel(map?.source))}</p>${map?.coverage?.omitted?.length?`<p>${map.coverage.omitted.length} unsupported or malformed rows omitted.</p>`:''}</details>`;
 }
-
+const atlasDrops=new Map();
 function atlas() {
-  const map=store.map;const regions=mapRegions(map).filter(region=>ui.atlasFilter==='all'||region.type===ui.atlasFilter);
-  const maps=store.maps;
-  return heading('KNOW THE WORLD','Boss atlas','Explore boss spawn zones from local configuration. A source-backed preview of the first add-on.')+banners()+
-    `<div class="atlas-toolbar"><label class="sr-only" for="ah-map-select">Choose a map</label><select id="ah-map-select" ${maps.length?'':'disabled'}>${maps.length?maps.map(item=>`<option value="${e(item.id)}" ${String(item.id)===String(ui.mapId)?'selected':''}>${e(item.name??item.id)}</option>`).join(''):'<option>No map data loaded</option>'}</select><label class="sr-only" for="ah-spawn-filter">Spawn type</label><select id="ah-spawn-filter"><option value="all">All configured spawns</option><option value="boss" ${ui.atlasFilter==='boss'?'selected':''}>Bosses</option><option value="metin" ${ui.atlasFilter==='metin'?'selected':''}>Metin stones</option></select><span>${map?`${regions.length} configured ${regions.length===1?'zone':'zones'}`:'Local source data'}</span></div>`+
-    (ui.atlasError?`<div class="callout danger">${icon('warning')}<p>${e(ui.atlasError)}</p><button class="button small ghost" data-action="reload-atlas">Retry</button></div>`:ui.atlasLoading?`<section class="panel"><div class="loading-state"><span class="loader"></span><p>Reading local map configuration…</p></div></section>`:map?
-    `<div class="atlas-layout"><section class="panel"><div class="panel-header"><h2>${e(map.name??map.id)}</h2><span class="pill muted">${map.image_url?'Local map image':'Coordinate view'}</span></div>${mapGraphic(map,regions)}<div class="atlas-scale">${map.image_url?'Map image served from the local installation.':'Grid shows local map coordinates; no terrain image is available.'} Zones are configured extents.</div></section><section class="panel"><div class="panel-header"><h2>Configured spawns</h2><span class="pill copper">BASE INTERVALS</span></div><div class="atlas-list">${regions.length?regions.map(region=>`<article class="spawn-row"><div class="spawn-header"><span class="spawn-index">${region.index+1}</span><h3>${e(region.name)}</h3></div><div class="spawn-info"><span>${Number.isFinite(region.x)&&Number.isFinite(region.y)?`X ${e(region.x)} · Y ${e(region.y)}`:'Coordinates unavailable'}${region.type?` · ${e(humanize(region.type))}`:''}</span><span>${e(respawnLabel(region))}</span>${region.width||region.height?`<span>Zone ${e(region.width)} × ${e(region.height)} units</span>`:''}<button class="button small ghost" data-action="open-drops" data-id="${e(region.mob_id)}">View drops in Studio ↗</button>${region.source?`<button class="button small ghost" data-action="open-map-source" data-path="${e(region.source)}">Inspect spawn configuration ↗</button><span class="mono">${e(sourceLabel(region.source))}${region.line?`:${e(region.line)}`:''}</span>`:''}</div></article>`).join(''):empty('No spawns in this view','Choose another map or spawn type.','',true,'pin')}</div></section></div>`:
-    `<section class="panel">${empty('No local map data yet','Connect an installation with supported spawn configuration, then refresh the atlas.','<button class="button ghost" data-action="reload-atlas">'+icon('refresh')+'Load map data</button>',false,'atlas')}</section>`)+sourceMarkup(map);
+  const map=store.map,species=atlasSpecies(map,ui.atlasFilter,ui.atlasSearch),regions=species.flatMap(m=>m.zones);
+  const label=m=>host.mobContent?host.mobContent(m.mob_id):`<span><strong>${e(m.name)}</strong><small>#${e(m.mob_id)} · Lv. ${e(m.level??'?')}</small></span>`;
+  return heading('KNOW THE WORLD','World atlas','Explore creatures, spawn zones and configured drops.')+banners()+
+    `<div class="atlas-toolbar"><select id="ah-map-select" aria-label="Map">${store.maps.map(m=>`<option value="${e(m.id)}" ${String(m.id)===String(ui.mapId)?'selected':''}>${e(m.name)}</option>`).join('')}</select><select id="ah-spawn-filter" aria-label="Spawn type">${[['enemies','All enemies'],['all','All creatures & NPCs'],['monster','Monsters'],['metin','Metins'],['boss','Bosses'],['npc','NPCs']].map(([id,name])=>`<option value="${id}" ${ui.atlasFilter===id?'selected':''}>${name}</option>`).join('')}</select><input id="ah-atlas-search" type="search" aria-label="Search atlas creatures" placeholder="Creature name or ID…" value="${e(ui.atlasSearch)}"><span>${species.length} creatures · ${regions.length} zones</span></div>`+
+    (ui.atlasError?`<div class="callout danger">${e(ui.atlasError)}<button data-action="reload-atlas" class="button">Retry</button></div>`:ui.atlasLoading?'<div class="loading">Loading map…</div>':map?
+      `<div class="atlas-layout"><section class="panel atlas-map-panel"><div class="panel-header"><h2>${e(map.name)}</h2><button class="button small ghost" id="atlas-clear-focus">Show all zones</button></div>${mapGraphic(map,regions)}<section class="atlas-inspection" id="atlas-inspection" aria-label="Creature details"><p>Hover a creature to see its level and drops.</p></section></section><section class="panel atlas-spawn-panel"><div class="panel-header"><h2>Creatures</h2><span>Hover to isolate · click to pin</span></div><div class="atlas-list">${species.map(m=>`<button type="button" class="spawn-row" data-atlas-creature="${e(m.mob_id)}" aria-pressed="${ui.atlasPinned===m.mob_id}">${label(m)}<span class="spawn-zone-count">${m.zones.length} ${m.zones.length===1?'zone':'zones'}</span></button>`).join('')||'<div class="empty">No creatures match these filters.</div>'}</div></section></div>`:'<div class="empty">No configured maps available.</div>')+sourceMarkup(map);
 }
-
 function mapGraphic(map,regions) {
-  const bounds=mapBounds(map,regions);const {x,y,width,height}=bounds;
+  const {x,y,width,height}=mapBounds(map,mapRegions(map));
   const safeImage=typeof map.image_url==='string'&&map.image_url.startsWith('/api/addons/map-image?')?map.image_url:null;
-  const stroke=Math.max(width,height)/700;const radius=Math.max(width,height)/80;
-  const grid=Array.from({length:9},(_,index)=>{const dx=x+width*(index+1)/10,dy=y+height*(index+1)/10;return `<path d="M${dx} ${y}v${height}M${x} ${dy}h${width}" class="atlas-grid-line" vector-effect="non-scaling-stroke"/>`;}).join('');
-  const marks=regions.filter(region=>Number.isFinite(region.x)&&Number.isFinite(region.y)).map(region=>`<g><title>${e(`${region.name}: ${region.x}, ${region.y}; ${respawnLabel(region)}`)}</title>${region.width&&region.height?`<rect x="${region.x-region.width/2}" y="${region.y-region.height/2}" width="${region.width}" height="${region.height}" rx="${stroke*2}" class="atlas-region" vector-effect="non-scaling-stroke"/>`:''}<circle cx="${region.x}" cy="${region.y}" r="${radius}" class="atlas-marker ${region.type==='metin'?'metin':''}" vector-effect="non-scaling-stroke"/><text x="${region.x}" y="${region.y}" text-anchor="middle" dominant-baseline="central" font-size="${radius*1.03}" class="atlas-marker-number">${region.index+1}</text></g>`).join('');
-  return `<div class="atlas-canvas"><span class="atlas-tag">${map.coverage?.bounds_verified===false?'Map extent unverified':bounds.inferred?'Extent fitted to configured zones':'LOCAL MAP COORDINATES'}</span><svg viewBox="${x} ${y} ${width} ${height}" role="img" aria-label="${e(map.name??'Map')} configured spawn zones; coordinates are listed alongside the map" preserveAspectRatio="xMidYMid meet">${safeImage?`<image href="${e(safeImage)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="none" opacity=".7"/>`:''}${grid}${marks}</svg></div>`;
+  const radius=Math.max(width,height)/140;
+  const grid=Array.from({length:9},(_,i)=>`<path d="M${x+width*(i+1)/10} ${y}v${height}M${x} ${y+height*(i+1)/10}h${width}" class="atlas-grid-line"/>`).join('');
+  const marks=regions.filter(r=>Number.isFinite(r.x)&&Number.isFinite(r.y)).map(r=>`<g class="atlas-feature" data-atlas-mob="${e(r.mob_id)}" data-atlas-creature="${e(r.mob_id)}"><title>${e(r.name)} · ${r.x}, ${r.y} · ${e(respawnLabel(r))}</title>${r.width&&r.height?`<rect x="${r.x-r.width/2}" y="${r.y-r.height/2}" width="${r.width}" height="${r.height}" class="atlas-region" vector-effect="non-scaling-stroke"/>`:''}<circle cx="${r.x}" cy="${r.y}" r="${radius}" class="atlas-marker ${r.type==='metin'?'metin':''}" vector-effect="non-scaling-stroke"/></g>`).join('');
+  return `<div class="atlas-canvas"><span class="atlas-tag">${map.coverage?.bounds_verified===false?'Map extent unverified':'Configured spawn zones'}</span><svg viewBox="${x} ${y} ${width} ${height}" role="img" aria-label="${e(map.name)} configured spawn zones" preserveAspectRatio="xMidYMid meet">${safeImage?`<image href="${e(safeImage)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="none" opacity=".7"/>`:''}${grid}${marks}</svg></div>`;
+}
+async function focusAtlas(id,pin=false){
+  if(ui.page!=='atlas'||!host?.current())return;
+  if(pin)ui.atlasPinned=ui.atlasPinned===id?'':id;
+  const selected=pin?ui.atlasPinned:id||ui.atlasPinned;
+  ui.atlasFocus=selected;const request=++ui.atlasHoverRequest;
+  host.root.querySelectorAll('[data-atlas-mob]').forEach(node=>{node.style.display=selected&&node.dataset.atlasMob!==selected?'none':''});
+  host.root.querySelectorAll('button[data-atlas-creature]').forEach(node=>{node.classList.toggle('selected',node.dataset.atlasCreature===selected);node.setAttribute('aria-pressed',String(node.dataset.atlasCreature===ui.atlasPinned))});
+  const detail=$('#atlas-inspection');if(!detail)return;
+  if(!selected){detail.innerHTML='<p>Hover or focus a creature to see its level and drops. Click to keep it selected.</p>';return;}
+  const mob=atlasSpecies(store.map).find(m=>m.mob_id===selected);if(!mob)return;
+  detail.innerHTML=`<div class="atlas-creature-head">${host.mobContent?host.mobContent(selected):`<strong>${e(mob.name)}</strong>`}<span class="pill">${ui.atlasPinned===selected?'Pinned':'Preview'} · ${mob.zones.length} zones</span><button class="button small" data-action="open-drops" data-id="${e(selected)}">View drops in Studio ↗</button></div><div class="atlas-creature-drops" role="status">Loading configured drops…</div><details class="help-details"><summary>Spawn configuration</summary>${mob.zones.map(r=>`<p>X ${e(r.x)} · Y ${e(r.y)} · ${e(respawnLabel(r))}${r.random_group?' · possible random group':r.group_spawn?' · group spawn':''} <button class="subtle-link" data-action="open-map-source" data-path="${e(r.source)}">${e(r.source)}:${e(r.line)}</button></p>`).join('')}</details>`;
+  if(!host.mobSummary)return;
+  try{
+    let cached=atlasDrops.get(selected);
+    if(!cached||Date.now()-cached.at>30000){cached={at:Date.now(),promise:host.mobSummary(selected)};atlasDrops.set(selected,cached);}
+    const data=await cached.promise;
+    if(request!==ui.atlasHoverRequest||ui.atlasFocus!==selected||!host.current())return;
+    const target=$('.atlas-creature-drops');if(!target)return;
+    const preview=data.drops.slice(0,4);
+    target.innerHTML=`<strong>${data.dropCount} configured items</strong><div class="atlas-drop-grid">${preview.map(item=>host.itemReference(item)).join('')||'<span>No configured drops in Studio’s sources.</span>'}</div><small>${e(data.scope)}${data.dropCount>preview.length?' Showing '+preview.length+'; open View drops for all.':''}</small>`;
+    host.bindImages?.(detail);
+  }catch{if(request===ui.atlasHoverRequest&&$('.atlas-creature-drops'))$('.atlas-creature-drops').textContent='Drop details unavailable. Hover again to retry.';atlasDrops.delete(selected);}
 }
 
 async function loadAtlas(force=false) {
   const request=(ui.atlasRequest??0)+1;ui.atlasRequest=request;
-  ui.atlasLoading=true;ui.atlasError='';if(ui.page==='atlas')render();
+  ui.atlasPinned='';ui.atlasFocus='';atlasDrops.clear();ui.atlasLoading=true;ui.atlasError='';if(ui.page==='atlas')render();
   try {
     if(force||!store.maps.length){const response=unwrap(await api('maps'),'data');if(request!==ui.atlasRequest)return;store.maps=asArray(response.maps??response.items);store.mapsMeta=response;}
     if(!ui.mapId||!store.maps.some(map=>String(map.id)===String(ui.mapId)))ui.mapId=String(store.maps[0]?.id??'');
@@ -349,6 +369,8 @@ function render() {
   if(ui.error){host.root.innerHTML=`<div class="m2addons"><section class="error-page"><h1>Add-on tools unavailable</h1><p>${e(ui.error)}</p><button class="button" data-action="refresh">Try again</button></section></div>`;return;}
   if(!ui.loaded)return;
   host.root.innerHTML='<div class="m2addons">'+toolbar+'<div id="ah-network-job">'+networkJobMarkup()+'</div>'+({overview,discover,installed:installedPage,atlas,activity,settings,repositories}[ui.page]??discover)()+'</div>';
+  host.bindImages?.(host.root);
+  if(ui.page==='atlas'&&ui.atlasPinned)focusAtlas(ui.atlasPinned);
 }
 
 export async function mount(context) {
@@ -533,7 +555,7 @@ document.addEventListener('change',async event=>{
   if(event.target.dataset.batchId){if(event.target.checked)batchSelection.add(event.target.dataset.batchId);else batchSelection.delete(event.target.dataset.batchId);render();}
   if(event.target.id==='ah-accept-source'){const button=$('#ah-download-confirm');button.dataset.blocked=String(!event.target.checked);button.disabled=ui.busy||jobActive(store.state.network_job)||!event.target.checked;}
   if(event.target.id==='ah-map-select'){ui.mapId=event.target.value;store.map=null;await loadAtlas();}
-  if(event.target.id==='ah-spawn-filter'){ui.atlasFilter=event.target.value;render();}
+  if(event.target.id==='ah-spawn-filter'){ui.atlasFilter=event.target.value;ui.atlasPinned='';render();}
 });
 
 function ensureDialogs(){
@@ -552,3 +574,19 @@ export function unmount(){
 }
 
 function renderRemoteResults(){ const root=$("#ah-release-results"); if(root)root.innerHTML=releaseCards(); }
+
+document.addEventListener('input',event=>{
+  if(event.target.id!=='ah-atlas-search'||ui.page!=='atlas')return;
+  ui.atlasSearch=event.target.value;ui.atlasPinned='';
+  const start=event.target.selectionStart;render();
+  const replacement=$('#ah-atlas-search');replacement?.focus();replacement?.setSelectionRange(start,start);
+});
+document.addEventListener('pointerover',event=>{const row=event.target.closest?.('[data-atlas-creature]');if(row&&!row.contains(event.relatedTarget))focusAtlas(row.dataset.atlasCreature)});
+document.addEventListener('pointerout',event=>{const row=event.target.closest?.('[data-atlas-creature]');if(row&&!row.contains(event.relatedTarget))focusAtlas('')});
+document.addEventListener('focusin',event=>{const row=event.target.closest?.('button[data-atlas-creature]');if(row)focusAtlas(row.dataset.atlasCreature)});
+document.addEventListener('focusout',event=>{const row=event.target.closest?.('button[data-atlas-creature]');if(row&&!row.contains(event.relatedTarget))focusAtlas('')});
+document.addEventListener('click',event=>{
+  const row=event.target.closest?.('[data-atlas-creature]');if(row)focusAtlas(row.dataset.atlasCreature,true);
+  if(event.target.closest?.('#atlas-clear-focus')){ui.atlasPinned='';focusAtlas('');}
+});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ui.page==='atlas'){ui.atlasPinned='';focusAtlas('')}});

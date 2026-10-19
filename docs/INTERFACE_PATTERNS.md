@@ -20,6 +20,39 @@ selection behavior and expose a separate **Inspect item** action. Back preserves
 the underlying picker or returns focus to the source view. Selecting a reward
 does not save or deploy an editor's draft.
 
+## Creatures and atlas
+
+Use `mobContent` / `mobHelpAttrs` for shared names, levels, portraits and hover
+help. Portraits and category badges are derived from the optional installed
+`patch_wiki` client pack and refreshed with the catalogue. Category badges are
+labelled as such; unavailable portraits use a neutral fallback. No game pixels
+are included in the source or portable release.
+
+The atlas groups configured zones by creature. Type and name/ID filters combine.
+Pointer hover and keyboard focus isolate its zones without rebuilding the list
+or changing map bounds. Click (or Enter/Space) pins it; Escape or Show all zones
+clears the pin. The map card previews up to four configured drops through the
+same cycle-safe sources used by the drop editor. Open View drops for all sources.
+Random groups show possible members, not simultaneous spawns or live positions.
+The map list includes regular spawns; existing in-game atlas exports retain their
+boss/Metin scope.
+
+## Copy and Economy loading
+
+Keep page introductions brief. Put methodology in optional help; keep errors,
+conflicts and review requirements visible. Economy collects measurement notes
+in one disclosure. Its most recent matching observation stays visible during
+refresh, with its timestamp and stale/error state. Session storage is scoped by
+world and filters; cache availability never implies a fresh or live observation.
+The database read still uses bounded, read-only queries. Activity is grouped by
+character before joining cohort metadata, preserving current-level attribution.
+
+Custom-content filters include Studio-created and Studio-modified definitions.
+Cube provenance compares normalized recipe blocks with tracked originals and
+counts duplicate blocks separately. Native recipes use saved before/after records;
+quests use Studio origin or registered source customizations. Untracked edits
+made outside Studio cannot be reliably classified as Studio customizations.
+
 ## Server operations
 
 `deployment_progress.py` records observed stages around existing commands. A

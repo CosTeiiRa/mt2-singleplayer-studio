@@ -55,6 +55,19 @@ class ManagementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'destination'):
             self.s.recipe_plan(recipe)
 
+    def test_custom_recipe_provenance_survives_saving_and_ignores_unrelated_entries(self):
+        rows = self.s.recipes()
+        self.assertFalse(any(r['custom'] for r in rows))
+        recipe = copy.deepcopy(rows[0]); recipe['fields']['gold'] = str(int(recipe['fields'].get('gold', '0')) + 1)
+        self.s.commit(self.s.recipe_plan(recipe)['id'])
+        changed = self.s.recipes()
+        self.assertEqual(sum(r['custom'] for r in changed), 1)
+        self.assertTrue(changed[0]['custom'])
+        clone = copy.deepcopy(changed[0]); clone['new'] = True; clone.pop('index', None)
+        clone['fields']['gold'] = str(int(clone['fields']['gold']) + 10)
+        self.s.commit(self.s.recipe_plan(clone)['id'])
+        self.assertEqual(sum(r['custom'] for r in self.s.recipes()), 2)
+
     def test_recipe_removal_preserves_every_other_byte_and_is_undoable(self):
         recipe = self.s.recipes()[0]
         count = len(self.s.recipes())

@@ -247,6 +247,7 @@ class NativeCrafting:
                     'requirements': {key: proto[key] for key in ('req_progress', 'req_level', 'recipe_vnum')},
                     'windows': list(row['windows']), 'sharedWith': [r['name'] for r in routes if r['window'] in row['windows'] and r['window'] != window],
                     'hash': fingerprint(row), 'configHash': fingerprint(config), 'file': self.path.relative_to(self.studio.root).as_posix(),
+                    'custom': ident in config['recipes'] and config['recipes'][ident]['before'] != row,
                     'conflicted': any(c['recipe'] == ident for c in conflicts)})
         return {'available': True, 'npcs': routes, 'recipes': recipes, 'configHash': fingerprint(config), 'conflicts': conflicts,
                 'nextId': max([99999] + [int(i) for i in effective]) + 1,

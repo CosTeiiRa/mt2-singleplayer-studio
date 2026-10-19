@@ -179,3 +179,15 @@ export function parseSettingValue(value,spec,label='Setting'){
   }
   return String(value);
 }
+
+export function atlasSpecies(map, type='all', search='') {
+  const species=new Map(),query=search.trim().toLocaleLowerCase();
+  for(const region of mapRegions(map)){
+    if(type==='enemies'?region.type==='npc':type!=='all'&&region.type!==type)continue;
+    if(query&&!`${region.name} ${region.mob_id} ${region.level??''}`.toLocaleLowerCase().includes(query))continue;
+    const id=String(region.mob_id);
+    if(!species.has(id))species.set(id,{...region,mob_id:id,zones:[]});
+    species.get(id).zones.push(region);
+  }
+  return [...species.values()].sort((a,b)=>(a.level??0)-(b.level??0)||a.name.localeCompare(b.name));
+}

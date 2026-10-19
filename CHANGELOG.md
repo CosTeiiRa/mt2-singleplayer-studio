@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Reduce explanatory copy and collect Economy methodology under one disclosure.
+- Speed up Economy’s active-account query by deduplicating logged characters;
+  retain the last matching observation while refreshing, including after reload.
+- Sync creature portraits and category badges from the installed client wiki pack.
+- Filter crafting and quests by custom content, including edited game definitions.
+- Filter the atlas by creature type, name or ID. Hover or focus to isolate a
+  creature’s zones and preview its level, portrait and configured drops; click to pin.
+- Include regular and random-group spawns in Studio’s atlas, keep the spawn list
+  tall, and retain the existing boss/Metin scope of in-game atlas exports.
+
 - Use one item identity renderer across search, drops, crafting, quest rewards,
   saved items and economy tables, with shared icon fallback and hover/focus help.
 - Keep Server Apply progress visible across tabs, expose observed deployment

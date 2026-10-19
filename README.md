@@ -107,8 +107,8 @@ Install or update a group with one review and one apply, then reopen the game
 client once. Studio verifies installed files and flags add-ons that need reinstalling.
 Installed add-ons work with Studio closed. The [add-on guide](docs/ADDONS.md)
 covers installation, controls, settings, updates and creating your own extensions.
-The browser's **World atlas** also links configured spawns to their drop editors
-and saved map files.
+The browser’s **World atlas** filters creatures by type or name. Hover to isolate
+their zones and preview portraits, levels and drops; click to pin.
 
 **Follow the economy across progression stages.** Separate GM accounts, inspect Yang, item stock, recorded sales and upgrade activity, then export a report. Coverage notes explain what the existing game data can establish.
 

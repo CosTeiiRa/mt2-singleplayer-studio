@@ -259,14 +259,25 @@ class Catalogue:
                 ident, rank, typ = str(row[0]), int(row[3]), int(row[4])
                 mobs[ident] = {'id':ident,'name':client.get('mobs',{}).get(ident) or mob_names.get(ident) or row[2],
                                'original':row[2],'category':'metin' if typ == 2 else 'npc' if typ not in (0,2) else 'boss' if rank >= 4 else 'monster','level':int(row[6])}
-        result = {'items':items,'mobs':mobs,'definitions':definitions,'icons':icons,'legacyIcons':legacy}
+        mob_icons = {}
+        for ident, mob in mobs.items():
+            portrait = client.get('mobIcons', {}).get(ident)
+            badge = client.get('mobBadges', {}).get(mob['category'])
+            picture = portrait or badge
+            mob['iconAvailable'] = picture in available
+            mob['iconKind'] = 'portrait' if portrait else 'category' if badge else 'unavailable'
+            if mob['iconAvailable']:
+                mob_icons[ident] = picture
+        result = {'items':items,'mobs':mobs,'definitions':definitions,'icons':icons,'legacyIcons':legacy,'mobIcons':mob_icons}
         result['revision'] = checksum(result)
         return result
 
-    def icon(self, ident):
+    def icon(self, ident, kind='item'):
         # Snapshots and content-addressed images stay immutable after publication.
         # Serving cached pixels must not wait for a database connection attempt.
         snapshot = self.snapshot
+        if kind == 'mob':
+            return self.client.icon_path(snapshot.get('mobIcons', {}).get(ident)) if snapshot else None
         if snapshot and ident in snapshot['icons']:
             return self.client.icon_path(snapshot['icons'][ident])
         return icon_path(self.root, snapshot['legacyIcons'] if snapshot else {}, ident)

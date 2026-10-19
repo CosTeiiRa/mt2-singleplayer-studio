@@ -29,7 +29,7 @@ def _literal_maps(panel):
     return result
 
 
-def _groups(path):
+def _groups(path, all_members=False):
     groups, current, leader, members = {}, None, None, []
     if not path.is_file():
         return groups
@@ -46,18 +46,34 @@ def _groups(path):
         elif parts[0].isdigit() and len(parts) >= 3 and parts[-1].isdigit():
             members.append(int(parts[-1]))
         elif parts[0] == '}' and current is not None:
-            groups[current] = leader or (members[0] if members else None)
+            groups[current] = list(dict.fromkeys(([leader] if leader else []) + members)) if all_members else leader or (members[0] if members else None)
     return groups
 
 
 class WorldData:
-    def __init__(self, server_root, mobs=None):
+    def __init__(self, server_root, mobs=None, include_monsters=False):
         self.root = Path(server_root).resolve()
         self.locale = self.root / 'linux-port' / 'docker' / 'game' / 'share' / 'locale' / 'poland'
         self.panel = self.root / 'linux-port' / 'docker' / 'seban-panel'
         self.maps_root = self.locale / 'map'
         self.metadata = _literal_maps(self.panel)
         self.groups = _groups(self.locale / 'group.txt')
+        self.group_members = _groups(self.locale / 'group.txt', all_members=True)
+        self.random_groups = {}
+        group_group = self.locale / 'group_group.txt'
+        if group_group.is_file():
+            current = None
+            for line in _text(group_group).splitlines():
+                parts = line.split('//', 1)[0].split()
+                if parts and parts[0].lower() == 'group':
+                    current = None
+                elif len(parts) >= 2 and parts[0].lower() == 'vnum' and parts[1].isdigit():
+                    current = int(parts[1])
+                    self.random_groups[current] = []
+                elif current is not None and len(parts) >= 3 and all(p.isdigit() for p in parts[:3]) and int(parts[2]) > 0:
+                    self.random_groups[current].append(int(parts[1]))
+        self.mobs = mobs or {}
+        self.include_monsters = include_monsters
         self.names = {}
         names_file = self.panel / 'static' / 'mob_names_en.json'
         if mobs is not None:
@@ -91,7 +107,10 @@ class WorldData:
                 elif len(p) >= 3 and p[0] == 'BasePosition':
                     bx, by = int(p[1]), int(p[2])
         regions, omitted = [], []
-        for filename, category in [('boss.txt', 'boss'), ('stone.txt', 'metin')]:
+        sources = [('boss.txt', 'boss'), ('stone.txt', 'metin')]
+        if self.include_monsters:
+            sources += [('regen.txt', 'monster'), ('npc.txt', 'npc')]
+        for filename, category in sources:
             path = folder / filename
             if not path.is_file():
                 continue
@@ -103,10 +122,18 @@ class WorldData:
                     if len(p) < 11:
                         raise ValueError()
                     spawn_type, vnum = p[0].lower(), int(p[10])
-                    if spawn_type not in ('m', 's', 'g', 'ga', 'gd'):
+                    if spawn_type not in ('m', 's', 'g', 'ga', 'gd') and not (self.include_monsters and spawn_type == 'r'):
                         omitted.append('%s:%d: unsupported spawn type %s' % (filename, number, spawn_type))
                         continue
                     mob = self.groups.get(vnum) if spawn_type.startswith('g') else vnum
+                    random_members = []
+                    if spawn_type == 'r':
+                        candidates = self.random_groups.get(vnum, [])
+                        if not candidates or any(not self.group_members.get(group) for group in candidates):
+                            omitted.append('%s:%d: unresolved random group %s' % (filename, number, vnum))
+                            continue
+                        random_members = list(dict.fromkeys(member for group in candidates for member in self.group_members[group]))
+                        mob = random_members[0]
                     if mob is None:
                         omitted.append('%s:%d: unresolved group %s' % (filename, number, vnum))
                         continue
@@ -124,6 +151,16 @@ class WorldData:
                                     'respawn': p[7] if interval_valid else 'Unverified: ' + p[7], 'raw_interval': p[7], 'interval_valid': interval_valid,
                                     'count': int(p[9]), 'group_id': vnum if spawn_type.startswith('g') else None,
                                     'mob_id': mob, 'source': path.relative_to(self.root).as_posix(), 'line': number})
+                    if self.include_monsters:
+                        base = regions.pop()
+                        members = random_members or (self.group_members.get(vnum, []) if spawn_type.startswith('g') else [mob])
+                        for member in members:
+                            metadata = self.mobs.get(str(member), {})
+                            regions.append({**base, 'id': base['id'] + '-' + str(member), 'mob_id': member,
+                                            'name': metadata.get('name', self.names.get(str(member), 'Mob %s' % member)),
+                                            'level': metadata.get('level'), 'type': metadata.get('category', category),
+                                            'group_spawn': spawn_type.startswith('g') or spawn_type == 'r',
+                                            'random_group': spawn_type == 'r'})
                 except (ValueError, IndexError, OverflowError):
                     omitted.append('%s:%d: malformed configured row' % (filename, number))
         images = self.metadata.get('MAP_IMAGE_FILES', {})
@@ -136,7 +173,7 @@ class WorldData:
                   'image_url': '/api/map-image?map=%s' % ident if has_image else None,
                   'source': {'path': folder.relative_to(self.root).as_posix(), 'kind': 'installed-configuration'},
                   'coverage': {'live': False, 'intervals': 'base configured intervals; server overrides are not applied',
-                               'scope': 'boss.txt and stone.txt; quest-spawned and dynamic dungeon encounters are excluded',
+                               'scope': ('boss.txt, stone.txt, regen.txt and npc.txt' if self.include_monsters else 'boss.txt and stone.txt') + '; quest-spawned and dynamic dungeon encounters are excluded',
                                'omitted': omitted, 'bounds_verified': bool(width and height)}}
         self._cache[ident] = result
         return result
@@ -160,4 +197,6 @@ class WorldData:
                 'coverage': {'live': False, 'scope': 'Configured boss and Metin zones; no live presence or precise timers'}}
 
     def runtime_data(self):
+        if self.include_monsters:
+            return WorldData(self.root, self.mobs).runtime_data()
         return {self.directories[i]: self.map(i) for i in self.directories if self.map(i)['regions']}

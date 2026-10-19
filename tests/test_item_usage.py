@@ -1,7 +1,8 @@
 from types import SimpleNamespace
 import unittest
 
-from metin2_studio.item_usage import drop_route, drop_summary, item_usage, item_drop_summary
+from metin2_studio.item_usage import drop_route, drop_summary, item_usage, item_drop_summary, mob_summary
+from unittest.mock import patch
 
 
 def node(ident, entries, source='chest-base'):
@@ -62,3 +63,18 @@ class DropRouteTests(unittest.TestCase):
         self.assertEqual(result['counts']['pools'], 2)
         self.assertEqual(result['counts']['metins'], 0)
         self.assertTrue(result['zeroParameter'])
+
+    def test_creature_preview_follows_pools_deduplicates_and_bounds_the_hover(self):
+        first, second = node('1', ['s2', '20']), node('2', ['s1', '21'])
+        target = node('target', ['s1', '20'] + [str(i) for i in range(30, 42)], 'mob-base')
+        target['meta']['id'] = '101'
+        studio = SimpleNamespace(mobs={'101': {'id':'101','name':'Wolf','level':1}}, items={},
+                                 _drop_hover_cache={'nodes':[target], 'pools':{'1':[first], '2':[second]}})
+        with patch('metin2_studio.item_usage.item_drop_summary'):
+            result = mob_summary(studio, '101')
+        self.assertEqual(result['dropCount'], 14)
+        self.assertEqual(len(result['drops']), 8)
+        self.assertTrue(all(not item.startswith('s') for item in result['drops']))
+        self.assertEqual(result['mob']['level'], 1)
+        with self.assertRaises(ValueError):
+            mob_summary(studio, '../101')

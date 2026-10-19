@@ -9,7 +9,7 @@ let addonModule;
 async function loadAddonTools(page,current){
   addonModule=await import('/addons.mjs');
   if(!current())return;
-  await addonModule.mount({page,root:$('#content'),api,toast,current,onState:renderAddonNotice,openDrops:openAtlasDrops,openMapSource:openAtlasSource,
+  await addonModule.mount({page,root:$('#content'),api,toast,current,onState:renderAddonNotice,openDrops:openAtlasDrops,openMapSource:openAtlasSource,mobContent,itemReference,bindImages,mobSummary:id=>api('/api/mob-summary?id='+encodeURIComponent(id)),
     importPackage:file=>api('/api/addons/packages/import',file,{'Content-Type':'application/zip','X-Addon-Filename':encodeURIComponent(file.name)})});
 }
 async function openAtlasDrops(id){
@@ -64,10 +64,51 @@ function iconPlaceholder(id){return `<span class="item-icon item-placeholder" ar
 function icon(id){if(typeof S!=='undefined'&&S.itemMap?.[id]?.iconAvailable===false)return iconPlaceholder(id);return /^\d{1,10}$/.test(String(id)) ? `<img class="item-icon" src="/icons/${encodeURIComponent(id)}" alt="" loading="lazy" data-icon-id="${esc(id)}">` : iconPlaceholder(id)}
 function bindImages(root=document){$$('img.item-icon',root).forEach(img=>{
   if(img.dataset.iconBound)return;img.dataset.iconBound='1';
-  const fallback=()=>{const el=document.createElement('span');el.className='item-icon item-placeholder';el.setAttribute('aria-hidden','true');el.title='No local icon available for item #'+(img.dataset.iconId||'unknown');el.textContent='◇';img.replaceWith(el)};
+  const fallback=()=>{const el=document.createElement('span');el.className='item-icon item-placeholder';el.setAttribute('aria-hidden','true');el.title=img.classList.contains('mob-icon')?'Creature portrait unavailable':'No local icon available for item #'+(img.dataset.iconId||'unknown');el.textContent='◇';img.replaceWith(el)};
   img.addEventListener('error',fallback,{once:true});
   if(img.complete&&img.naturalWidth===0)fallback();
 })}
+function mobIcon(id){
+  const mob=S.mobMap?.[id],kind=mob?.category||'monster';
+  if(mob?.iconAvailable)return `<img class="item-icon mob-icon" src="/mob-icons/${encodeURIComponent(id)}" alt="" loading="lazy" title="${mob.iconKind==='portrait'?'Client portrait':'Client category badge'}">`;
+  return `<span class="item-icon mob-placeholder" aria-hidden="true" title="Portrait unavailable">${({metin:'◆',boss:'♛',monster:'♜',npc:'♙'})[kind]||'◇'}</span>`;
+}
+function mobContent(id,options={}){
+  const mob=S.mobMap?.[id];return `${mobIcon(id)}<span class="item-copy"><strong>${esc(options.title||mob?.name||'#'+id)}</strong><small>#${esc(id)} · Lv. ${esc(mob?.level??'?')} · ${esc(options.detail||mob?.category||'Creature')}</small></span>`;
+}
+function mobHelpAttrs(id){return `data-help-mob="${esc(id)}"`}
+function helpDetails(title,body){return `<details class="help-details"><summary>${esc(title)}</summary><div>${body}</div></details>`}
+// Methodology belongs beside the data it explains, behind one explicit disclosure.
+function compactEconomyHelp(){
+  const root=$('#economy-view');if(!root||Econ.tab==='coverage')return;
+  const notes=$$('.eco-caption',root).filter(node=>!node.closest('details'));
+  if(!notes.length)return;
+  const details=document.createElement('details');details.className='help-details economy-methodology';
+  const summary=document.createElement('summary');summary.textContent='How these figures are measured';details.append(summary);
+  let previous='';
+  for(const node of notes){
+    const title=node.closest('section')?.querySelector('h2')?.textContent||'Scope';
+    if(title!==previous){const heading=document.createElement('h3');heading.textContent=title;details.append(heading);previous=title;}
+    details.append(node);
+  }
+  root.append(details);
+}
+async function showMobHelp(anchor){
+  clearTimeout(helpHideTimer);if(helpAnchor===anchor&&!$('#item-tooltip').hidden)return positionItemHelp();
+  hideItemHelp();if(typeof hideQuestHelp==='function')hideQuestHelp();helpAnchor=anchor;
+  const id=anchor.dataset.helpMob,tooltip=$('#item-tooltip'),owner=anchor.closest('dialog')||document.body;
+  if(tooltip.parentElement!==owner)owner.append(tooltip);
+  tooltip.innerHTML=`<div class="item-help-head">${mobContent(id)}</div><div class="mob-drop-preview" role="status">Loading configured drops…</div>`;
+  const described=(anchor.getAttribute('aria-describedby')||'').split(/\s+/).filter(Boolean);
+  anchor.setAttribute('aria-describedby',[...new Set([...described,'item-tooltip'])].join(' '));tooltip.hidden=false;tooltip.showPopover();positionItemHelp();
+  const request=helpRequest;
+  try{
+    const data=await api('/api/mob-summary?id='+encodeURIComponent(id));
+    if(request!==helpRequest||helpAnchor!==anchor)return;
+    $('.mob-drop-preview',tooltip).innerHTML=`<strong>${data.dropCount} configured items</strong><div class="mob-drop-items">${data.drops.map(item=>`<div class="item-reference">${itemContent(item)}</div>`).join('')||'<p>No configured drops in Studio’s sources.</p>'}</div><small>${esc(data.scope)}</small>`;
+    bindImages(tooltip);positionItemHelp();
+  }catch(error){if(request===helpRequest&&helpAnchor===anchor)$('.mob-drop-preview',tooltip).textContent='Drop details unavailable. Hover again to retry.'}
+}
 function pool(id){return String(id).startsWith('s')?S.data.groups.find(g=>g.source.startsWith('chest')&&g.id===String(id).slice(1)):null}
 function name(kind,id){const p=kind==='item'?pool(id):null;return p?p.name+' · shared pool':(kind==='item'?S.itemMap[id]:S.mobMap[id])?.name || `#${id}`}
 function itemHelpAttrs(id){return `data-help-item="${esc(id)}"`}
@@ -196,6 +237,7 @@ function positionItemHelp(){
   tooltip.style.top=Math.max(edge,Math.min(top,viewportHeight-box.height-edge))+'px';
 }
 function showItemHelp(anchor){
+  if(anchor.dataset.helpMob)return showMobHelp(anchor);
   if(typeof hideQuestHelp==='function')hideQuestHelp();
   clearTimeout(helpHideTimer);
   if(helpAnchor===anchor&&!$('#item-tooltip').hidden)return positionItemHelp();
@@ -270,13 +312,13 @@ function renderOverview(){
     <div class="section-label"><h3>Make it your own</h3><span class="muted small-text">Start with what you want to change</span></div>
     <div class="quick-grid"><article class="feature-card"><div class="feature-symbol">◇</div><div class="mini-label">LOOT & REWARDS</div><h2>Better drops. Your way.</h2><p>Pick a Metin, find an item by name, and tune its rewards. No memorizing item IDs.</p><button class="button primary" data-go="drops">Open drop editor <span>↗</span></button></article><article class="feature-card secondary"><div class="feature-symbol">▤</div><div class="mini-label">STORIES & ADVENTURES</div><h2>A new reason to explore.</h2><p>Give an NPC a mission, choose a hunt, and make the reward worth the journey.</p><button class="button" data-go="quests">Create a quest <span>↗</span></button></article></div>
     <div class="overview-lower"><div class="panel"><div class="panel-header"><h3>Your editing toolkit</h3><span>Built around this installation</span></div>${[['☷','World & progression','Difficulty, waits, extra drops and bot population','Forms','settings'],['▧','Game configuration','Crafting, shops, fishing, spawns, skills and maps','File catalog','files'],['↶','Every change has a way back','Review diffs, save backups, restore earlier files','History','history']].map(([i,t,d,p,page])=>`<button class="capability file-entry" data-go="${page}"><span class="glyph">${i}</span><span><strong>${t}</strong><small>${d}</small></span><span class="pill">${p}</span></button>`).join('')}</div><div class="panel"><div class="panel-header"><h3>From idea to in game</h3><span>THREE SIMPLE STEPS</span></div><div class="steps">${[['Make your changes','Search the real item catalog and edit the files your server uses.'],['Review & save','Check exactly what changes. Studio backs up the originals.'],['Apply to server','Build the updated game files, compile quests, and restart.']].map(([t,d],i)=>`<div class="step"><span>${i+1}</span><div><strong>${t}</strong><p>${d}</p></div></div>`).join('')}</div></div></div>
-    <p class="notice info">Your server files stay on this computer. Catalog names come from the installed package; database changes made elsewhere may differ. Database-only item stats, shop prices and refine tables are available in the package’s existing admin panel.</p>`;
+    <p class="notice info">Catalogue synced from your server and client. Advanced database editing is available in the game admin panel.</p>`;
   bindNavigation();
 }
 function bindNavigation(){$$('[data-go]',$('#content')).forEach(n=>n.addEventListener('click',()=>navigate(n.dataset.go)))}
 function renderDrops(){
-  $('#content').innerHTML=head('LOOT & REWARDS','Drop editor','Choose the target. Choose the loot. Shape the adventure.','<button class="button" id="new-group">＋ New drop group</button>')+
-    `<div class="toolbar"><div class="tabs" id="drop-tabs">${[['metin','Metin stones'],['boss','Bosses'],['monster','Monsters'],['chest','Chests']].map(([k,v])=>`<button data-kind="${k}" class="${S.dropKind===k?'selected':''}">${v}</button>`).join('')}</div><div class="searchbox"><span>⌕</span><input id="drop-search" value="${esc(S.dropSearch)}" placeholder="Search targets by name or ID…" aria-label="Search drop targets"><kbd>⌕</kbd></div></div><div class="editor-layout"><div class="panel"><div class="list-head" id="group-count"></div><div id="group-list" class="entity-list"></div></div><div class="panel" id="drop-detail"><div class="empty"><div class="empty-symbol">◇</div>Select a target to explore its rewards.</div></div></div><p class="small-text muted">Names and IDs come from your installed package. Probability rules match the package’s drop parser. Some loot also comes from quests, common tables, and world settings.</p>`;
+  $('#content').innerHTML=head('LOOT & REWARDS','Drop editor','Browse targets and edit their configured rewards.','<button class="button" id="new-group">＋ New drop group</button>')+
+    `<div class="toolbar"><div class="tabs" id="drop-tabs">${[['metin','Metin stones'],['boss','Bosses'],['monster','Monsters'],['chest','Chests']].map(([k,v])=>`<button data-kind="${k}" class="${S.dropKind===k?'selected':''}">${v}</button>`).join('')}</div><div class="searchbox"><span>⌕</span><input id="drop-search" value="${esc(S.dropSearch)}" placeholder="Search targets by name or ID…" aria-label="Search drop targets"><kbd>⌕</kbd></div></div><div class="editor-layout"><div class="panel"><div class="list-head" id="group-count"></div><div id="group-list" class="entity-list"></div></div><div class="panel" id="drop-detail"><div class="empty"><div class="empty-symbol">◇</div>Select a target to explore its rewards.</div></div></div>${helpDetails('Drop sources','<p>Names, IDs and base parameters follow the installed game. Quests, common tables and runtime settings can add or alter loot.</p>')}`;
   $('#drop-search').addEventListener('input',e=>{S.dropSearch=e.target.value;renderGroupList()});
   $$('#drop-tabs button').forEach(n=>n.addEventListener('click',()=>{if(!leaveOkay())return;dirty(false);S.dropKind=n.dataset.kind;S.selected=null;S.group=null;renderDrops()}));
   $('#new-group').addEventListener('click',()=>{if(leaveOkay())newGroup()});
@@ -287,7 +329,8 @@ function renderDrops(){
 function filteredGroups(){return S.data.groups.filter(g=>(S.dropKind==='chest'?g.source.startsWith('chest'):g.source.startsWith('mob')&&g.category===S.dropKind)&&`${g.name} ${g.id} ${g.key}`.toLowerCase().includes(S.dropSearch.toLowerCase())).sort((a,b)=>Number(a.level||0)-Number(b.level||0)||Number(a.id)-Number(b.id))}
 function renderGroupList(){
   const groups=filteredGroups();$('#group-count').textContent=`${fmt(groups.length)} DROP GROUPS`;
-  $('#group-list').innerHTML=groups.length?groups.map((g,i)=>`<button class="entity ${S.selected===g.source+'|'+g.key?'selected':''}" data-index="${i}"><span class="entity-glyph">${S.dropKind==='chest'?'▣':'◇'}</span><span><strong>${esc(g.name)}</strong><small>${g.level?`Lv. ${g.level} · `:''}#${esc(g.id)} · ${esc(g.type)}${g.source==='mob-m3'?' · add-on':''}</small></span><span class="pill">${g.count}</span></button>`).join(''):'<div class="no-results">No matching drop groups.<br>Create a group for another target.</div>';
+  $('#group-list').innerHTML=groups.length?groups.map((g,i)=>`<button class="entity ${S.selected===g.source+'|'+g.key?'selected':''}" data-index="${i}" ${S.dropKind==='chest'?itemHelpAttrs(g.id):mobHelpAttrs(g.id)}>${S.dropKind==='chest'?itemContent(g.id,{title:g.name,detail:g.type}):mobContent(g.id,{title:g.name,detail:g.type})}<span class="pill">${g.count}</span></button>`).join(''):'<div class="no-results">No matching drop groups.<br>Create a group for another target.</div>';
+  bindImages($('#group-list'));
   $$('.entity',$('#group-list')).forEach(n=>n.addEventListener('click',()=>{if(leaveOkay())loadGroup(groups[Number(n.dataset.index)])}));
 }
 async function loadGroup(g){await workspaceFlush();await attempt(async()=>{S.group=await api(`/api/group?source=${encodeURIComponent(g.source)}&key=${encodeURIComponent(g.key)}`);S.selected=g.source+'|'+g.key;dirty(false);renderGroupList();renderDropDetail();await workspaceRestore()})}
@@ -345,13 +388,14 @@ function renderPicker(){
   $('#picker-quick').innerHTML=quick.filter(key=>key==='all'||items.some(e=>StudioCatalog.groupKeys(e,kind).includes(key))).map(key=>`<button class="filter-chip" data-category="${key}" aria-pressed="${filters.category===key}">${key==='all'?'All':esc(categories.find(([id])=>id===key)[1])}<span>${fmt(counts[key]||0)}</span></button>`).join('');
   $$('[data-category]',$('#picker-quick')).forEach(n=>n.addEventListener('click',()=>setPickerCategory(n.dataset.category)));
   const visible=results.slice(0,limit);
-  $('#picker-results').innerHTML=visible.length?visible.map((e,i)=>`<button class="pick-result ${kind==='item'?'item-reference':''}" data-pick="${i}">${kind==='item'?itemContent(e.id,{detail:e.requiredLevel?`Requires level ${e.requiredLevel}`:'',fallback:e.name}):`<span class="entity-glyph" aria-hidden="true">◇</span><span class="pick-name"><strong>${esc(e.name)}</strong><small>#${esc(e.id)}${e.level?` · Level ${esc(e.level)}`:''}</small></span>`}<span class="pill">${esc(StudioCatalog.label(e,kind))}</span></button>`).join(''):'<div class="empty"><strong>No matching results</strong><p>Try a broader category, another function, or fewer search words.</p><button class="button small" id="picker-empty-reset">Clear filters</button></div>';
+  $('#picker-results').innerHTML=visible.length?visible.map((e,i)=>`<button class="pick-result ${kind==='item'?'item-reference':''}" data-pick="${i}">${kind==='item'?itemContent(e.id,{detail:e.requiredLevel?`Requires level ${e.requiredLevel}`:'',fallback:e.name}):mobContent(e.id)}<span class="pill">${esc(StudioCatalog.label(e,kind))}</span></button>`).join(''):'<div class="empty"><strong>No matching results</strong><p>Try a broader category, another function, or fewer search words.</p><button class="button small" id="picker-empty-reset">Clear filters</button></div>';
   $('#picker-count').textContent=`${fmt(results.length)} ${results.length===1?'match':'matches'}`;
   $('#picker-shown').textContent=results.length?`Showing ${fmt(visible.length)} of ${fmt(results.length)} · ${S.picker.inspectOnly?'Select an item to inspect it':'Select a result to use it; ↗ shows its references'}`:'No results to display';
   $('#picker-more').hidden=visible.length>=results.length;
   $('#picker-more').textContent=`Show ${Math.min(100,results.length-visible.length)} more`;
   $('#picker-reset').hidden=filters.category==='all'&&filters.function==='all'&&(kind!=='item'||filters.scope==='installed')&&!$('#picker-search').value;
   $$('[data-pick]',$('#picker-results')).forEach(n=>{
+    if(kind==='mob')n.dataset.helpMob=visible[Number(n.dataset.pick)].id;
     if(kind==='item'){
       const item=visible[Number(n.dataset.pick)];n.dataset.helpItem=item.id;
       if(!item.id.startsWith('s')&&!S.picker.inspectOnly){
@@ -433,7 +477,7 @@ function renderFiles(){
   const categories=[...new Set(topic.map(f=>f.category))].sort();if(!categories.includes(S.fileCategory))S.fileCategory='all';
   const folders=[...new Set(topic.map(StudioNavigation.mapFolder))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
   $('#content').innerHTML=head('GAME CONFIGURATION','Config files',menu?'Choose a topic to find the files you need.':section?.description||'Browse every editable configuration file.','<span class="head-note">Advanced editors · review before saving</span>')+
-    (menu?configTopicMenu('files'):configSubmenu('files')+`<div class="config-section-heading"><h2>${esc(section?.label||'All files')}</h2><span>${topic.length} files in this topic</span></div><div class="toolbar config-file-toolbar"><div class="searchbox"><span>⌕</span><input id="file-search" value="${esc(S.fileSearch)}" placeholder="Search names, folders or file paths…" aria-label="Search configuration files"></div><select id="file-category" aria-label="Configuration category" ${categories.length<2?'hidden':''}><option value="all">All source categories</option>${categories.map(c=>`<option ${c===S.fileCategory?'selected':''}>${esc(c)}</option>`).join('')}</select>${S.section==='maps'?`<select id="file-map-folder" aria-label="Map folder"><option value="all">All maps and shared tables</option>${folders.map(folder=>`<option value="${esc(folder)}" ${S.mapFolder===folder?'selected':''}>${esc(folder==='shared'?'Shared spawn tables':folder)} (${topic.filter(f=>StudioNavigation.mapFolder(f)===folder).length})</option>`).join('')}</select>`:''}</div>${S.section==='quests'?'<p class="notice info">For guided objectives and rewards, use Quests in the sidebar. These files expose the original scripts and shared helpers.</p>':''}<div class="file-layout"><div class="panel"><div class="list-head" id="file-count"></div><div id="file-list" class="file-list"></div></div><div class="panel" id="file-detail"><div class="empty"><div class="empty-symbol">▧</div>Choose a file to inspect or edit.<p>Unfinished edits are preserved as drafts when you switch topics.</p><p>Database-only changes use the existing game admin panel.</p></div></div></div>`);
+    (menu?configTopicMenu('files'):configSubmenu('files')+`<div class="config-section-heading"><h2>${esc(section?.label||'All files')}</h2><span>${topic.length} files in this topic</span></div><div class="toolbar config-file-toolbar"><div class="searchbox"><span>⌕</span><input id="file-search" value="${esc(S.fileSearch)}" placeholder="Search names, folders or file paths…" aria-label="Search configuration files"></div><select id="file-category" aria-label="Configuration category" ${categories.length<2?'hidden':''}><option value="all">All source categories</option>${categories.map(c=>`<option ${c===S.fileCategory?'selected':''}>${esc(c)}</option>`).join('')}</select>${S.section==='maps'?`<select id="file-map-folder" aria-label="Map folder"><option value="all">All maps and shared tables</option>${folders.map(folder=>`<option value="${esc(folder)}" ${S.mapFolder===folder?'selected':''}>${esc(folder==='shared'?'Shared spawn tables':folder)} (${topic.filter(f=>StudioNavigation.mapFolder(f)===folder).length})</option>`).join('')}</select>`:''}</div>${S.section==='quests'?'<p class="notice info">Edit quest objectives and rewards in Quests. Shared scripts are listed here.</p>':''}<div class="file-layout"><div class="panel"><div class="list-head" id="file-count"></div><div id="file-list" class="file-list"></div></div><div class="panel" id="file-detail"><div class="empty"><div class="empty-symbol">▧</div>Choose a file to inspect or edit.<p>Unfinished edits are preserved as drafts when you switch topics.</p><p>Database-only changes use the existing game admin panel.</p></div></div></div>`);
   if(!menu){
     $('#file-search').addEventListener('input',e=>{S.fileSearch=e.target.value;renderFileList()});
     $('#file-category').addEventListener('change',e=>{S.fileCategory=e.target.value;renderFileList()});
@@ -590,10 +634,10 @@ document.addEventListener('DOMContentLoaded',async()=>{
   $('#usage-back').addEventListener('click',backToItemResults);
   $('#usage-refresh').addEventListener('click',()=>showItemUsage(S.usageId));
   $('#item-usage').addEventListener('close',()=>{usageRequest++;$('#usage-refresh').disabled=false});
-  document.addEventListener('pointerover',e=>{const anchor=e.target.closest('[data-help-item]');if(anchor)showItemHelp(anchor)});
-  document.addEventListener('pointerout',e=>{const anchor=e.target.closest('[data-help-item]');if(anchor&&!anchor.contains(e.relatedTarget))scheduleHideItemHelp()});
-  document.addEventListener('focusin',e=>{const anchor=e.target.closest('[data-help-item]');if(anchor)showItemHelp(anchor);else hideItemHelp()});
-  document.addEventListener('focusout',e=>{if(e.target.closest('[data-help-item]'))scheduleHideItemHelp()});
+  document.addEventListener('pointerover',e=>{const anchor=e.target.closest('[data-help-item],[data-help-mob]');if(anchor)showItemHelp(anchor)});
+  document.addEventListener('pointerout',e=>{const anchor=e.target.closest('[data-help-item],[data-help-mob]');if(anchor&&!anchor.contains(e.relatedTarget))scheduleHideItemHelp()});
+  document.addEventListener('focusin',e=>{const anchor=e.target.closest('[data-help-item],[data-help-mob]');if(anchor)showItemHelp(anchor);else hideItemHelp()});
+  document.addEventListener('focusout',e=>{if(e.target.closest('[data-help-item],[data-help-mob]'))scheduleHideItemHelp()});
   $('#item-tooltip').addEventListener('pointerenter',()=>clearTimeout(helpHideTimer));
   $('#item-tooltip').addEventListener('pointerleave',scheduleHideItemHelp);
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#item-tooltip').hidden){e.preventDefault();e.stopImmediatePropagation();hideItemHelp()}},true);

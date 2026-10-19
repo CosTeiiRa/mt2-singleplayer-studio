@@ -37,9 +37,12 @@ These examples are bundled with Studio; you choose which to install:
 
 Install **Add-on Menu** to open your installed extensions from one in-game button. It is optional: other add-ons retain their own controls when it is disabled or removed.
 
-The **World atlas** page in Studio is also available in the browser. It links
-configured spawns to the corresponding drop editor and saved map files. Installing
-an in-game atlas add-on is a separate choice.
+The browser’s **World atlas** includes regular monsters, bosses, Metins and NPCs.
+Filter by type, name or ID; hover or focus a creature to isolate its configured
+zones and preview its portrait, level and drops. Click to pin; Escape or Show all
+zones clears the selection. The tall creature list scrolls independently. Random
+groups show possible members. View drops opens the shared editor; Spawn
+configuration opens the saved source. In-game atlas add-ons are installed separately.
 
 ## Install and manage
 

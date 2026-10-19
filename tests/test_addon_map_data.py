@@ -45,3 +45,25 @@ class MapDataTests(unittest.TestCase):
         world = WorldData(self.root)
         with self.assertRaises(ValueError):
             world.map(999)
+
+    def test_studio_atlas_expands_regular_group_members_without_changing_runtime_export(self):
+        folder = self.locale / 'map/test_map'
+        (self.locale / 'group.txt').write_text('Group wolves\n{\nVnum 10\nLeader wolf 101\n1 blue_wolf 102\n2 wolf 101\n}\n')
+        (folder / 'regen.txt').write_text('g 20 30 4 5 0 0 30s 100 2 10\n')
+        mobs = {'101': {'name': 'Wolf', 'category': 'monster', 'level': 1}, '102': {'name': 'Blue Wolf', 'category': 'monster', 'level': 2}}
+        world = WorldData(self.root, mobs, include_monsters=True)
+        regular = [r for r in world.map(64)['regions'] if r['source'].endswith('/regen.txt')]
+        self.assertEqual([(r['mob_id'], r['level'], r['name']) for r in regular], [(101, 1, 'Wolf'), (102, 2, 'Blue Wolf')])
+        self.assertTrue(all(r['group_spawn'] and r['count'] == 2 and r['width'] == 8 for r in regular))
+        self.assertFalse(any(r['source'].endswith('/regen.txt') for r in world.runtime_data()['test_map']['regions']))
+
+    def test_random_groups_show_possible_members_and_omit_unresolved_alternatives(self):
+        (self.locale / 'group_group.txt').write_text('Group random\n{\nVnum 50\n1 2316 10\n}\nGroup incomplete\n{\nVnum 51\n1 9999 1\n}\n')
+        (self.locale / 'map/test_map/regen.txt').write_text('r 10 20 3 4 0 0 30s 100 1 50\nr 20 30 3 4 0 0 30s 100 1 51\n')
+        world = WorldData(self.root, {'2382': {'name': 'Boss', 'category': 'boss', 'level': 50}}, include_monsters=True)
+        result = world.map(64)
+        rows = [r for r in result['regions'] if r['source'].endswith('/regen.txt')]
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]['random_group'])
+        self.assertEqual(rows[0]['mob_id'], 2382)
+        self.assertTrue(any('unresolved random group 51' in warning for warning in result['coverage']['omitted']))

@@ -293,11 +293,18 @@ test('batch update review includes only packages already ready to install',async
 test('atlas uses namespaced images and links the resolved mob to Studio editors',async()=>{
   await views.mount(context('atlas'));
   assert.match(root.innerHTML,/href="\/api\/addons\/map-image\?map=64"/);
-  assert.match(root.innerHTML,/data-action="open-drops" data-id="691"/);
-  assert.match(root.innerHTML,/data-action="open-map-source" data-path="map\/boss.txt"/);
+  assert.match(root.innerHTML,/data-atlas-creature="691"/);
+  assert.match(root.innerHTML,/Search atlas creatures/);
+  const inspection=new Element();inspection.id='atlas-inspection';
+  root.querySelectorAll=()=>[];
+  const row={dataset:{atlasCreature:'691'},closest:selector=>selector==='[data-atlas-creature]'?row:null};
+  await listeners.get('click').at(-1)({target:row});
+  assert.match(inspection.innerHTML,/data-action="open-drops" data-id="691"/);
+  assert.match(inspection.innerHTML,/data-action="open-map-source" data-path="map\/boss.txt"/);
   const button={dataset:{action:'open-drops',id:'691'},closest:()=>button};
   await listeners.get('click')[0]({target:button});
   assert.equal(opened,'691');
+  await listeners.get('keydown').at(-1)({key:'Escape'});
 });
 test('repository view exposes source controls and discovery separates download from install',async()=>{
   await views.mount(context('repositories'));
@@ -592,4 +599,38 @@ test('collection download review identifies the selected folder and leaves sibli
     assert.match(html,/other collection members stay unselected/);
     assert.match(html,/creator.atlas\/v1.0.0/);
   }finally{state.network_job=null;nodes.get('ah-download-dialog').close();views.unmount();}
+});
+
+test('atlas hover isolates a creature without rebuilding the list and restores a pinned selection',async()=>{
+  const ctx=context('atlas');await views.mount(ctx);
+  const inspection=new Element();inspection.id='atlas-inspection';
+  const features=['691','8001'].map(id=>({dataset:{atlasMob:id},style:{}}));
+  root.querySelectorAll=selector=>selector==='[data-atlas-mob]'?features:[];
+  const row=id=>({dataset:{atlasCreature:id},contains:()=>false,closest:selector=>selector==='[data-atlas-creature]'?rowNode:null});
+  let rowNode=row('691');const before=root.innerHTML;
+  listeners.get('pointerover').at(-1)({target:rowNode,relatedTarget:null});
+  assert.equal(features[0].style.display,'');assert.equal(features[1].style.display,'none');
+  assert.match(inspection.innerHTML,/Preview/);assert.equal(root.innerHTML,before);
+  listeners.get('click').at(-1)({target:rowNode});
+  assert.match(inspection.innerHTML,/Pinned/);
+  rowNode=row('8001');listeners.get('pointerover').at(-1)({target:rowNode,relatedTarget:null});
+  assert.equal(features[0].style.display,'none');assert.equal(features[1].style.display,'');
+  listeners.get('pointerout').at(-1)({target:rowNode,relatedTarget:null});
+  assert.equal(features[0].style.display,'');assert.equal(features[1].style.display,'none');
+  listeners.get('keydown').at(-1)({key:'Escape'});
+  assert.ok(features.every(f=>f.style.display===''));
+});
+
+test('atlas drop preview displays four items and retains the full configured count',async()=>{
+  await views.mount({...context('atlas'),mobSummary:async()=>({dropCount:57,drops:['1','2','3','4','5','6','7','8'],scope:'Configured drops'}),itemReference:id=>`<button data-preview-item="${id}">${id}</button>`});
+  const inspection=new Element();inspection.id='atlas-inspection';
+  const drops=new Element(),originalQuery=document.querySelector;
+  document.querySelector=selector=>selector==='.atlas-creature-drops'?drops:originalQuery(selector);
+  root.querySelectorAll=()=>[];
+  const row={dataset:{atlasCreature:'691'},closest:selector=>selector==='[data-atlas-creature]'?row:null};
+  try{
+    listeners.get('click').at(-1)({target:row});await Promise.resolve();await Promise.resolve();
+    assert.equal((drops.innerHTML.match(/data-preview-item=/g)||[]).length,4);
+    assert.match(drops.innerHTML,/57 configured items/);assert.match(drops.innerHTML,/Showing 4/);
+  }finally{document.querySelector=originalQuery;listeners.get('keydown').at(-1)({key:'Escape'});}
 });

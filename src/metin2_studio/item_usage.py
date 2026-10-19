@@ -81,6 +81,31 @@ def item_drop_summary(studio, ident):
     return cache['items'][ident]
 
 
+def mob_summary(studio, ident):
+    """Small hover response from the same configured drops used by the editor."""
+    ident = str(ident)
+    if ident not in studio.mobs:
+        raise ValueError('Choose a mob from the installed catalogue.')
+    item_drop_summary(studio, '25041')
+    cache = studio._drop_hover_cache
+    pending = [n for n in cache['nodes'] if n['meta']['source'].startswith('mob') and n['meta']['id'] == ident]
+    seen, items = set(), set()
+    while pending:
+        node = pending.pop()
+        key = node['meta']['source'], node['meta']['key']
+        if key in seen:
+            continue
+        seen.add(key)
+        for entry in node['group'].entries:
+            if entry.item.startswith('s'):
+                pending.extend(cache['pools'].get(entry.item[1:], []))
+            else:
+                items.add(entry.item)
+    return {'mob': studio.mobs[ident], 'dropCount': len(items),
+            'drops': sorted(items, key=lambda i: (studio.items.get(i, {}).get('name', ''), i))[:8],
+            'scope': 'Configured drops; runtime rates and quest drops can differ.'}
+
+
 def item_usage(studio, ident, sql_rows, native=False):
     ident = str(ident)
     if not re.fullmatch(r'[1-9][0-9]{0,9}', ident) or int(ident) > 4294967295:

@@ -11,7 +11,7 @@ function helpers(images=[]){
   return context;
 }
 function image(complete,width){
-  return {dataset:{iconId:'30353'},complete,naturalWidth:width,handlers:[],addEventListener(event,handler){this.handlers.push(handler)},replaceWith(node){this.replacement=node}};
+  return {classList:{contains:()=>false},dataset:{iconId:'30353'},complete,naturalWidth:width,handlers:[],addEventListener(event,handler){this.handlers.push(handler)},replaceWith(node){this.replacement=node}};
 }
 test('observed item IDs can render icons without a catalog entry',()=>{
   const ctx=helpers();

@@ -213,3 +213,4 @@ tests/item_views.test.js
 tests/operations.test.js
 tests/test_deployment_progress.py
 docs/INTERFACE_PATTERNS.md
+tests/economy_loading.test.js

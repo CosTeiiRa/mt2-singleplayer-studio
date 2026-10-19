@@ -149,7 +149,7 @@ class Economy:
                 f"CAST(l.how AS CHAR),{target},COALESCE(p.level,0),{cohort},COUNT(*)",
                 'FROM log.log l ' + joined.format(pid='l.who') + f" WHERE l.time>=UTC_TIMESTAMP()-INTERVAL {days} DAY AND l.how IN ({hows}) GROUP BY l.how,{target},COALESCE(p.level,0),{cohort}")
             add('active', {**identity, 'log.log': 'who time type'}, f"p.account_id,p.level,{cohort}",
-                'FROM log.log l ' + joined.format(pid='l.who') + f" WHERE p.id IS NOT NULL AND l.type IN ('CHARACTER','ITEM') AND l.time>=UTC_TIMESTAMP()-INTERVAL {days} DAY GROUP BY p.account_id,p.level,{cohort}")
+                f"FROM (SELECT DISTINCT who FROM log.log WHERE type IN ('CHARACTER','ITEM') AND time>=UTC_TIMESTAMP()-INTERVAL {days} DAY) l " + joined.format(pid='l.who') + f" WHERE p.id IS NOT NULL GROUP BY p.account_id,p.level,{cohort}")
             # Banks share the account classification but have no stage attribution.
             add('banks', {**identity, 'player.safebox': 'account_id gold'}, f"'Account safebox Yang',COALESCE(SUM(s.gold),0),0,{cohort}",
                 'FROM player.safebox s LEFT JOIN account.account a ON a.id=s.account_id ' + gm_join() + f' GROUP BY {cohort}')

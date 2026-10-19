@@ -86,6 +86,24 @@ class CatalogueTests(unittest.TestCase):
     def service(self):
         return Catalogue(self.root,self.state,server_query=self.query)
 
+    def test_client_portraits_and_category_badges_refresh_and_survive_offline(self):
+        data, write = packs(self.root)
+        picture = data['icon']['icon/item/00010.tga']
+        data['patch_wiki'] = {'d:/ymir work/ui/game/wiki/portraits/691.tga': picture,
+                              'd:/ymir work/ui/game/wiki/badges/boss.tga': picture}
+        write('patch_wiki')
+        self.rows['catalog-mobs'].append(['692','other','Other boss','4','0','0','60'])
+        service = self.service(); snapshot = service.refresh(True)
+        self.assertEqual(snapshot['mobs']['691']['iconKind'], 'portrait')
+        self.assertEqual(snapshot['mobs']['692']['iconKind'], 'category')
+        self.assertTrue(service.icon('691', 'mob').is_file())
+        self.assertIsNone(service.icon('../secret', 'mob'))
+        (self.root.parent / 'Klient/pack/patch_wiki.data').write_bytes(b'broken')
+        self.online = False
+        snapshot = service.refresh(True)
+        self.assertTrue(snapshot['mobs']['691']['iconAvailable'])
+        self.assertEqual(service.status['clientMode'], 'cached')
+
     def test_live_definitions_and_client_display_data_feed_one_snapshot(self):
         packs(self.root)
         service = self.service(); snapshot = service.refresh(force=True)

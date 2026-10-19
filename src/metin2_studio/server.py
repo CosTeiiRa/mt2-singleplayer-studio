@@ -411,14 +411,28 @@ class Studio:
                 'note': 'Only Cube-opening quest routes are listed. Other crafting windows use a separate system; dialogue can still have level or quest requirements.'}
 
     def recipes(self):
+        from collections import Counter
         access = self.crafting_access()
         supported = {row['id'] for row in access['npcs']}
         hashes = {source: info['hash'] for source, info in access['tables'].items()}
         result = []
         for source, path in self.recipe_sources().items():
             raw = self.read(path)
+            pattern = rb"(?mi)^[ \t]*section[^\n]*\n.*?^[ \t]*end[^\n]*(?:\n|$)"
+            baseline = path.read_bytes() if path.is_file() else b''
+            if hasattr(self, 'workspace'):
+                record = next((r for r in self.workspace.tracked() if r['path'] == path.relative_to(self.root).as_posix()), None)
+                if record:
+                    baseline = record['original'] or b''
+            def signature(block):
+                return tuple(tuple(line.split()) for line in block.splitlines() if line.strip() and not line.lstrip().startswith(b'#'))
+            originals = Counter(signature(m.group()) for m in re.finditer(pattern, baseline, re.S))
             # Latin-1 gives an exact mapping between byte offsets and characters.
             for index, match in enumerate(re.finditer(rb"(?mi)^[ \t]*section[^\n]*\n.*?^[ \t]*end[^\n]*(?:\n|$)", raw, re.S)):
+                key = signature(match.group())
+                custom = originals[key] == 0
+                if not custom:
+                    originals[key] -= 1
                 fields, materials, rewards = {}, [], []
                 for line in match.group().splitlines():
                     parts = line.strip().split()
@@ -429,7 +443,7 @@ class Studio:
                     elif parts[0] in (b"npc", b"percent", b"gold") and len(parts) >= 2:
                         fields[parts[0].decode()] = parts[1].decode("ascii")
                 reward = rewards[0]["item"] if rewards else "0"
-                result.append({"source": source, "index": index, "name": self.items.get(reward, {}).get("name", f"Recipe #{index + 1}"), "npcName": self.mobs.get(fields.get("npc"), {}).get("name", "Unknown NPC"), "fields": fields, "materials": materials, "rewards": rewards, "hash": digest(raw), "file": path.relative_to(self.root).as_posix(), "start": match.start(), "end": match.end(), "npcSupported": fields.get("npc") in supported, "sourceHashes": hashes})
+                result.append({"source": source, "custom": custom, "index": index, "name": self.items.get(reward, {}).get("name", f"Recipe #{index + 1}"), "npcName": self.mobs.get(fields.get("npc"), {}).get("name", "Unknown NPC"), "fields": fields, "materials": materials, "rewards": rewards, "hash": digest(raw), "file": path.relative_to(self.root).as_posix(), "start": match.start(), "end": match.end(), "npcSupported": fields.get("npc") in supported, "sourceHashes": hashes})
         return result
 
     def crafting_catalog(self, fresh=False):
@@ -994,7 +1008,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(image.read_bytes(), mime='image/png')
                 return self.send({'ok': True, **s.addons.get(route, q)})
             ACTIVE_CHANGESET.set(q.get('changeset') or self.headers.get('X-Studio-Changeset') or None)
-            if u.path.startswith('/api/economy') or u.path in ('/api/item-usage', '/api/item-drop-summary'):
+            if u.path.startswith('/api/economy') or u.path in ('/api/item-usage', '/api/item-drop-summary', '/api/mob-summary'):
                 ACTIVE_CHANGESET.set(None)
             if u.path == '/api/workspace':
                 return self.send(s.workspace.summary())
@@ -1105,6 +1119,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send({'items': sorted(rows, key=activity_time, reverse=True)[:100]})
             if u.path == "/api/status":
                 return self.send({"docker": s.docker_status(), "health": s.runtime_health(), "job": s.public_job(), "catalogue": s.catalogue_status()})
+            if u.path.startswith('/mob-icons/'):
+                ident = unquote(u.path.split('/')[-1])
+                p = s.catalogue.icon(ident, 'mob')
+                return self.send(p.read_bytes() if p else b'', 200 if p else 404, 'image/png')
+            if u.path == '/api/mob-summary':
+                from metin2_studio.item_usage import mob_summary
+                with s.lock:
+                    return self.send(mob_summary(s, q.get('id', '')))
             if u.path.startswith("/icons/"):
                 ident = unquote(u.path.split("/")[-1])
                 p = s.catalogue.icon(ident) if hasattr(s, 'catalogue') else icon_path(s.root, s.icons, ident)
