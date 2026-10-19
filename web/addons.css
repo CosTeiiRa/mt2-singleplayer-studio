@@ -29,3 +29,4 @@ dialog.m2addons{padding:0;max-width:720px;width:calc(100% - 32px);max-height:cal
 .m2addons .addon-description-section h3{margin:0 0 10px;color:var(--text);font-size:15px}
 .m2addons .addon-description ul,.m2addons .addon-description ol{margin:10px 0;padding-left:22px;color:var(--muted);font-size:12px;line-height:1.8}
 .m2addons .addon-description li+li{margin-top:7px}
+.m2addons .addon-batch{margin-bottom:20px}.m2addons .addon-batch .panel-body{margin:0;padding-top:0}.m2addons .batch-choice{display:flex;align-items:center;gap:6px;font-size:12px}.m2addons .batch-choice input{width:auto}.m2addons .addon-card-footer{flex-wrap:wrap}

@@ -536,12 +536,19 @@ class Manager:
             result['addons'][addon_id] = {'status': status, 'missing_files': absent, 'changed_files': modified}
         return result
 
-    def plan(self, addon_id: str, action: str = "install", settings: dict | None = None) -> dict:
+    def plan_batch(self, addon_ids: list[str]) -> dict:
+        if (not isinstance(addon_ids, list) or not 1 <= len(addon_ids) <= 100
+                or any(not isinstance(ident, str) or not ident for ident in addon_ids)
+                or len(set(addon_ids)) != len(addon_ids)):
+            raise ValueError('Select between 1 and 100 distinct add-ons for this batch.')
+        return self.plan(addon_ids[0], 'batch', addon_ids=addon_ids)
+
+    def plan(self, addon_id: str, action: str = "install", settings: dict | None = None, *, addon_ids=None) -> dict:
         with self._lock:
             backend = self._require()
             if self._journal_path.exists():
                 raise ValueError("Recover the unfinished transaction before planning another change.")
-            if action not in ("install", "remove", "enable", "disable", "update", "configure", "refresh-data", "reapply", "repair"):
+            if action not in ("install", "remove", "enable", "disable", "update", "configure", "refresh-data", "reapply", "repair", "batch"):
                 raise ValueError("Unsupported action: %s" % action)
             if not isinstance(addon_id, str):
                 raise ValueError("addon_id must be a string.")
@@ -549,7 +556,24 @@ class Manager:
             stored = self._stored()
             desired = copy.deepcopy(stored["installed"])
             new_packages: dict[str, Package] = {}
-            if action in ("install", "update"):
+            batch = []
+            if action == 'batch':
+                if (not isinstance(addon_ids, list) or not 1 <= len(addon_ids) <= 100
+                        or any(not isinstance(ident, str) or not ident for ident in addon_ids)
+                        or len(set(addon_ids)) != len(addon_ids)):
+                    raise ValueError('Select between 1 and 100 distinct add-ons for this batch.')
+                for ident in addon_ids:
+                    if ident not in packages:
+                        raise ValueError('Add-on %s is unavailable or invalid. Inspect catalog validation errors.' % ident)
+                    package, previous = packages[ident], desired.get(ident)
+                    operation = 'install' if previous is None else 'update' if previous.get('package_digest') != package.digest else 'keep'
+                    if operation != 'keep':
+                        new_packages[ident] = package
+                        desired[ident] = self._record(package, previous)
+                    batch.append({'addon_id': ident, 'name': package.manifest['name'], 'action': operation,
+                                  'before_version': previous['manifest']['version'] if previous else None,
+                                  'version': package.manifest['version'], 'enabled': desired[ident]['enabled']})
+            elif action in ("install", "update"):
                 if addon_id not in packages:
                     raise ValueError("Add-on %s is unavailable or invalid. Inspect catalog validation errors." % addon_id)
                 if action == "install" and addon_id in desired:
@@ -597,7 +621,7 @@ class Manager:
             conflicts, warnings = self._desired_valid(desired, profile)
             if game_update:
                 warnings.append(game_update['message'])
-            elif action != 'repair':
+            elif action != 'repair' and not (action == 'batch' and self._repairable(stored, logical)):
                 conflicts.extend(self._drift(stored, logical, physical))
             if action == 'repair':
                 warnings.append('Reinstall restores the recorded add-on files, loading hooks and settings.')
@@ -624,6 +648,8 @@ class Manager:
                                     "bytes_before": len(before) if before is not None else 0,
                                     "bytes_after": len(after) if after is not None else 0,
                                     "generated": after is not None and composed.get(name) != after})
+            if action == 'batch' and not changes:
+                raise ValueError('The selected add-ons already match this client. There are no installation changes to apply.')
             public = {"id": uuid.uuid4().hex, "action": action, "addon_id": addon_id, "changes": changes,
                       "reference": copy.deepcopy(getattr(backend, 'reference_metadata', None)),
                       "game_update": game_update,
@@ -632,6 +658,8 @@ class Manager:
                       "installed": self._installed_public(desired, profile), "desired_state": self._installed_public(desired, profile),
                       "preview_kind": "backend" if callable(preview) else "composition",
                       "created_at": _now(), "physical_changes": "Pack files are built and validated in staging during apply."}
+            if action == 'batch':
+                public.update(batch=batch, summary='Install/update %d selected add-ons together: %d logical file changes' % (len(batch), len(changes)))
             self._pending = {"public": public, "desired": desired, "new_packages": new_packages,
                              "baseline": baseline, "composed": composed, "generation": self._generation,
                              "reviewed_logical_hashes": _hashes(reviewed_files) if callable(preview) else None,

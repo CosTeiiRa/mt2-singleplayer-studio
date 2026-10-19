@@ -208,6 +208,88 @@ test('returning to Studio rechecks files and failed checks cannot leave a health
   }finally{current=true;for(const key of Object.keys(state))delete state[key];Object.assign(state,previous);}
 });
 
+test('review all combines local installs into one preview and one explicit apply',async()=>{
+  const extra={...item,id:'community.second',name:'Second package'},invalid={...item,id:'broken.package',error:'Invalid checksum'};
+  const ctx=context('addons'),original=ctx.api,operations=[];
+  ctx.api=async(path,body)=>{
+    if(path.endsWith('/catalog'))return {catalog:{items:[item,extra,invalid]}};
+    if(path.endsWith('/plan/batch')){operations.push({path,body});return {plan:{id:'batch-plan',action:'batch',addon_id:item.id,batch:[{name:item.name,action:'install',version:'1.0'},{name:extra.name,action:'update',version:'2.0',enabled:false}],can_apply:true,changes:[],warnings:[],conflicts:[]}};}
+    if(path.endsWith('/apply')){operations.push({path,body});return {ok:true,status:'success'};}
+    return original(path,body);
+  };
+  try{
+    await views.mount(ctx);
+    assert.match(root.innerHTML,/Review all \(2\)/);
+    const review={dataset:{action:'batch-all'},closest:()=>review};
+    await listeners.get('click')[0]({target:review});
+    assert.deepEqual(operations,[{path:'/api/addons/plan/batch',body:{addon_ids:[item.id,extra.id]}}]);
+    assert.match(nodes.get('ah-plan-content').innerHTML,/2 add-ons in one installation/);
+    assert.match(nodes.get('ah-plan-content').innerHTML,/stays disabled/);
+    assert.match(nodes.get('ah-plan-content').innerHTML,/Example &lt;unsafe&gt;/);
+    const apply={dataset:{action:'apply'},closest:()=>apply};
+    await listeners.get('click')[0]({target:apply});
+    assert.equal(operations.filter(item=>item.path.endsWith('/apply')).length,1);
+    assert.equal(operations[1].body.plan_id,'batch-plan');
+  }finally{nodes.get('ah-plan-dialog').close();}
+});
+
+test('selected batch review excludes unselected packages',async()=>{
+  const extra={...item,id:'selected.second',name:'Selected package'};
+  const ctx=context('addons'),original=ctx.api;let reviewed;
+  ctx.api=async(path,body)=>{
+    if(path.endsWith('/catalog'))return {catalog:{items:[item,extra]}};
+    if(path.endsWith('/plan/batch')){reviewed=body;return {plan:{id:'selected-batch',action:'batch',can_apply:true,batch:[],changes:[],warnings:[],conflicts:[]}};}
+    return original(path,body);
+  };
+  const input={dataset:{batchId:extra.id},checked:true,classList:{contains:()=>false},closest:()=>root};
+  try{
+    await views.mount(ctx);
+    await listeners.get('change')[0]({target:input});
+    assert.match(root.innerHTML,/Review selected \(1\)/);
+    const button={dataset:{action:'batch-selected'},closest:()=>button};
+    await listeners.get('click')[0]({target:button});
+    assert.deepEqual(reviewed,{addon_ids:[extra.id]});
+  }finally{input.checked=false;await listeners.get('change')[0]({target:input});nodes.get('ah-plan-dialog').close();}
+});
+
+test('opening the client after the batch is an explicit option on the one apply request',async()=>{
+  const previous=state.installation;
+  state.installation={kind:'installation',writable:true};
+  const ctx=context('addons'),original=ctx.api;let applied;
+  ctx.api=async(path,body)=>{
+    if(path.endsWith('/plan/batch'))return {plan:{id:'batch-open',action:'batch',batch:[],can_apply:true,changes:[],warnings:[],conflicts:[]}};
+    if(path.endsWith('/apply')){applied=body;return {ok:true,status:'success',client_launch:{status:'launched'}};}
+    return original(path,body);
+  };
+  try{
+    await views.mount(ctx);
+    const review={dataset:{action:'batch-all'},closest:()=>review};
+    await listeners.get('click')[0]({target:review});
+    const markup=nodes.get('ah-plan-content').innerHTML;
+    assert.match(markup,/Open the game client once after all changes succeed/);
+    assert.doesNotMatch(markup,/id="ah-launch-client" checked/);
+    const checkbox=new Element();checkbox.id='ah-launch-client';checkbox.checked=true;
+    const apply={dataset:{action:'apply'},closest:()=>apply};
+    await listeners.get('click')[0]({target:apply});
+    assert.deepEqual(applied,{plan_id:'batch-open',launch_client:true});
+  }finally{state.installation=previous;nodes.delete('ah-launch-client');nodes.get('ah-plan-dialog').close();}
+});
+
+test('batch update review includes only packages already ready to install',async()=>{
+  const ctx=context('installed'),original=ctx.api;let reviewed;
+  ctx.api=async(path,body)=>{
+    if(path.endsWith('/updates'))return {updates:[{id:'ready.one',download_ready:true},{id:'remote.only',download_ready:false}]};
+    if(path.endsWith('/plan/batch')){reviewed=body;return {plan:{id:'updates-batch',action:'batch',can_apply:true,batch:[],changes:[],warnings:[],conflicts:[]}};}
+    return original(path,body);
+  };
+  try{
+    await views.mount(ctx);
+    const button={dataset:{action:'batch-updates'},closest:()=>button};
+    await listeners.get('click')[0]({target:button});
+    assert.deepEqual(reviewed,{addon_ids:['ready.one']});
+  }finally{nodes.get('ah-plan-dialog').close();}
+});
+
 test('atlas uses namespaced images and links the resolved mob to Studio editors',async()=>{
   await views.mount(context('atlas'));
   assert.match(root.innerHTML,/href="\/api\/addons\/map-image\?map=64"/);

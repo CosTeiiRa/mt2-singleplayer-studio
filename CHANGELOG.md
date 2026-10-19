@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added combined add-on install/update reviews, selected/all package controls,
+  one pack rebuild and one recoverable transaction, with an optional client
+  reopen after the complete batch succeeds.
+- Added live installed-file checks, missing-file/reinstall statuses and a main
+  Studio notice. Reviewed repair preserves settings and current game updates.
+- Added the installed add-on manager screenshot to the main README.
+
 - Focused the main README on startup, architecture and feature examples. Detailed
   add-on, setup, storage, update/backup and development guides are linked from it.
 

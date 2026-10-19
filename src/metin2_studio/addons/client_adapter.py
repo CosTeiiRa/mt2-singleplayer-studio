@@ -248,6 +248,16 @@ class ClientAdapter:
             return ['Close this Metin2 game client before applying add-ons. The game server can stay running.']
         return []
 
+    def launch_client(self):
+        profile = self.profile()
+        if profile['kind'] not in ('installation', 'test-client') or not profile['writable']:
+            raise ValueError('Only a supported normal client or playable test copy can be opened.')
+        executable = self.target_root / 'metin2client.exe'
+        if running_client(executable):
+            return {'status': 'already_running', 'message': 'The selected game client is already open.'}
+        process = subprocess.Popen([str(executable)], cwd=str(self.target_root), close_fds=True)
+        return {'status': 'launched', 'pid': process.pid}
+
     @staticmethod
     def is_clean_game_baseline(files):
         owned = {'m2hub_config.py', 'm2hub_runtime.py', 'm2hub_client.py', 'm2hub_world.py', 'm2hub_reference.py'}

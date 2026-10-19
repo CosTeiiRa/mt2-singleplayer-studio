@@ -1,6 +1,6 @@
 # Metin2 Studio
 
-**beta-1.11.1** · A local dashboard for your Metin2 Singleplayer world and client add-ons.
+**beta-1.12.0** · A local dashboard for your Metin2 Singleplayer world and client add-ons.
 
 Edit drops, create quests, manage crafting, explore items and follow the economy.
 Add in-game tools such as Boss Atlas and Pocket Wiki through the same application.
@@ -103,6 +103,8 @@ Real dashboard captures from an installed world. Item names, available recipes a
 
 ![Installed add-on manager showing the four bundled add-ons, verified client files, enabled switches and available updates](docs/screenshots/addons.png)
 
+Install or update a group with one review and one apply, then reopen the game
+client once. Studio verifies installed files and flags add-ons that need reinstalling.
 Installed add-ons work with Studio closed. The [add-on guide](docs/ADDONS.md)
 covers installation, controls, settings, updates and creating your own extensions.
 The browser's **World atlas** also links configured spawns to their drop editors

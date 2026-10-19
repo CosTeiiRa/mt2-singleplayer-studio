@@ -99,6 +99,95 @@ class ManagerTests(unittest.TestCase):
         self.assertFalse(self.manager._state_path.exists())
         self.assertEqual(self.backend.physical_snapshot(), self.original_physical)
 
+    def test_batch_installs_dependencies_with_one_review_pack_build_and_transaction(self):
+        self.make_package('demo.markers', 'markers', requires=['demo.legend'])
+        self.assertFalse(self.manager.plan('demo.markers')['can_apply'])
+        plan = self.manager.plan_batch(['demo.markers', 'demo.legend'])
+        self.assertTrue(plan['can_apply'], plan['conflicts'])
+        self.assertEqual([row['action'] for row in plan['batch']], ['install', 'install'])
+        self.assertEqual(self.backend.physical_snapshot(), self.original_physical)
+        builds = self.backend.prepare_calls
+        self.manager.apply(plan['id'])
+        self.assertEqual(self.backend.prepare_calls, builds + 1)
+        self.assertEqual(len(self.manager.state()['installed']), 2)
+        self.assertEqual(len(self.manager.history()), 1)
+        self.assertEqual(self.manager.history()[0]['action'], 'batch')
+        self.apply('demo.markers', 'remove')
+        self.apply('demo.legend', 'remove')
+        self.assertEqual(self.backend.physical_snapshot(), self.original_physical)
+
+    def test_batch_can_update_and_install_together_preserving_disabled_settings(self):
+        self.apply('demo.markers')
+        self.manager.apply(self.manager.plan('demo.markers', 'configure', {'show_labels': False})['id'])
+        self.apply('demo.markers', 'disable')
+        self.make_package('demo.markers', 'markers', content=b'# release two\n', version='2.0.0')
+        plan = self.manager.plan_batch(['demo.markers', 'demo.legend'])
+        self.assertEqual([row['action'] for row in plan['batch']], ['update', 'install'])
+        self.manager.apply(plan['id'])
+        records = {row['id']: row for row in self.manager.state()['installed']}
+        self.assertFalse(records['demo.markers']['enabled'])
+        self.assertFalse(records['demo.markers']['settings']['show_labels'])
+        self.assertEqual(records['demo.markers']['version'], '2.0.0')
+        self.assertTrue(records['demo.legend']['enabled'])
+
+    def test_invalid_batch_and_ownership_conflicts_never_install_a_partial_selection(self):
+        for ids in ([], ['demo.markers'] * 2, ['demo.markers', 1], 'demo.markers', ['demo.markers', 'missing.package']):
+            with self.subTest(ids=ids), self.assertRaises(ValueError):
+                self.manager.plan_batch(ids)
+            self.assertEqual(self.backend.physical_snapshot(), self.original_physical)
+            self.assertFalse(self.manager.state()['installed'])
+        self.make_package('demo.legend', 'markers', content=b'# conflicting owner\n')
+        plan = self.manager.plan_batch(['demo.markers', 'demo.legend'])
+        self.assertFalse(plan['can_apply'])
+        self.assertTrue(any('both own' in conflict for conflict in plan['conflicts']))
+
+    def test_batch_failure_rolls_back_the_whole_pack_pair(self):
+        plan = self.manager.plan_batch(['demo.markers', 'demo.legend'])
+        original_write = self.manager._write_physical
+        calls = []
+        def fail_once(name, content):
+            original_write(name, content)
+            calls.append(name)
+            if len(calls) == 1:
+                raise OSError('batch write failed')
+        self.manager._write_physical = fail_once
+        with self.assertRaisesRegex(ValueError, 'previous files were restored'):
+            self.manager.apply(plan['id'])
+        self.assertEqual(self.backend.physical_snapshot(), self.original_physical)
+        self.assertFalse(self.manager.state()['installed'])
+
+    def test_any_selected_package_change_invalidates_the_batch_before_writes(self):
+        plan = self.manager.plan_batch(['demo.markers', 'demo.legend'])
+        self.make_package('demo.legend', 'legend', content=b'# changed after review\n', version='2.0.0')
+        with self.assertRaisesRegex(ValueError, 'release changed after review'):
+            self.manager.apply(plan['id'])
+        self.assertEqual(self.backend.physical_snapshot(), self.original_physical)
+
+    def test_batch_after_game_update_keeps_upstream_files_and_reinstalls_saved_addons_once(self):
+        self.apply('demo.markers')
+        fresh, physical = self.updated_game()
+        plan = self.manager.plan_batch(['demo.markers', 'demo.legend'])
+        self.assertTrue(plan['game_update']['detected'])
+        self.manager.apply(plan['id'])
+        for name, content in fresh.items():
+            self.assertEqual(self.backend.snapshot()[name], content)
+        self.apply('demo.markers', 'remove')
+        self.apply('demo.legend', 'remove')
+        self.assertEqual(self.backend.physical_snapshot(), physical)
+
+    def test_batch_repairs_a_missing_saved_payload_while_updating_another_addon(self):
+        self.manager.apply(self.manager.plan_batch(['demo.markers', 'demo.legend'])['id'])
+        files = self.backend.snapshot()
+        files.pop('m2hub_addons/legend.py')
+        self.set_target(files)
+        self.make_package('demo.markers', 'markers', content=b'# updated\n', version='2.0.0')
+        plan = self.manager.plan_batch(['demo.markers', 'demo.legend'])
+        self.assertTrue(plan['can_apply'], plan['conflicts'])
+        self.manager.apply(plan['id'])
+        self.assertEqual(self.manager.state()['integrity']['status'], 'healthy')
+        with self.assertRaisesRegex(ValueError, 'no installation changes'):
+            self.manager.plan_batch(['demo.markers', 'demo.legend'])
+
     def updated_game(self):
         self.backend.is_clean_game_baseline = lambda files: not any(name == 'm2hub_config.py' or name.startswith('m2hub_addons/') for name in files)
         fresh = {'ui.py': b'# new game UI\n', 'game.py': b'# new upstream lifecycle\n', 'new.py': b'# upstream addition\n'}

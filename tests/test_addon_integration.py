@@ -186,6 +186,61 @@ class AddonIntegrationTests(unittest.TestCase):
         for name, raw in self.original.items():
             self.assertEqual((self.client / 'pack' / name).read_bytes(), raw)
 
+    def test_batch_service_reviews_and_applies_two_addons_together_with_client_guard(self):
+        running = self.supported_client()
+        plan = self.service.post('plan/batch', {'addon_ids': ['community.boss-atlas', 'community.map-legend']})['plan']
+        self.assertTrue(plan['can_apply'], plan['conflicts'])
+        self.assertEqual(len(plan['batch']), 2)
+        running.return_value = True
+        with self.assertRaisesRegex(ValueError, 'Close this Metin2'):
+            self.service.post('apply', {'plan_id': plan['id']})
+        for name, raw in self.original.items():
+            self.assertEqual((self.client / 'pack' / name).read_bytes(), raw)
+        running.return_value = False
+        self.service.post('apply', {'plan_id': plan['id']})
+        state = self.service.state()
+        self.assertEqual(len(state['installed']), 2)
+        self.assertEqual(state['integrity']['status'], 'healthy')
+        self.assertEqual(len(self.service.manager.history()), 1)
+
+    def test_batch_opens_the_supported_client_once_only_after_successful_apply(self):
+        self.supported_client()
+        plan = self.service.post('plan/batch', {'addon_ids': ['community.boss-atlas', 'community.map-legend']})['plan']
+        with patch('metin2_studio.addons.client_adapter.subprocess.Popen', return_value=SimpleNamespace(pid=12345)) as start:
+            result = self.service.post('apply', {'plan_id': plan['id'], 'launch_client': True})
+        start.assert_called_once_with([str(self.client / 'metin2client.exe')], cwd=str(self.client), close_fds=True)
+        self.assertEqual(result['client_launch']['status'], 'launched')
+        self.assertEqual(self.service.state()['integrity']['status'], 'healthy')
+
+    def test_failed_batch_does_not_open_client_and_launch_failure_keeps_committed_addons(self):
+        running = self.supported_client()
+        plan = self.service.post('plan/batch', {'addon_ids': ['community.boss-atlas', 'community.map-legend']})['plan']
+        with patch('metin2_studio.addons.client_adapter.subprocess.Popen', side_effect=OSError('Client could not start')) as start:
+            running.return_value = True
+            with self.assertRaisesRegex(ValueError, 'Close this Metin2'):
+                self.service.post('apply', {'plan_id': plan['id'], 'launch_client': True})
+            start.assert_not_called()
+            running.return_value = False
+            result = self.service.post('apply', {'plan_id': plan['id'], 'launch_client': True})
+            start.assert_called_once()
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['client_launch']['status'], 'failed')
+        self.assertEqual(len(self.service.state()['installed']), 2)
+        self.assertEqual(self.service.state()['integrity']['status'], 'healthy')
+
+    def test_batch_does_not_open_a_duplicate_client_if_it_was_just_started(self):
+        running = self.supported_client()
+        plan = self.service.post('plan/batch', {'addon_ids': ['community.boss-atlas', 'community.map-legend']})['plan']
+        original_apply = self.service.manager.apply
+        def apply_then_external_open(ident):
+            result = original_apply(ident)
+            running.return_value = True
+            return result
+        with patch.object(self.service.manager, 'apply', side_effect=apply_then_external_open), patch('metin2_studio.addons.client_adapter.subprocess.Popen') as start:
+            result = self.service.post('apply', {'plan_id': plan['id'], 'launch_client': True})
+        start.assert_not_called()
+        self.assertEqual(result['client_launch']['status'], 'already_running')
+
     def test_missing_client_pack_is_visible_after_service_restart_and_can_be_rechecked(self):
         self.supported_client()
         self.apply('community.boss-atlas')

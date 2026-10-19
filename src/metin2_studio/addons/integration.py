@@ -244,15 +244,35 @@ class AddonService:
                     raise ValueError('This world has no sibling client to copy.')
                 client = create_playable_copy(self.source, self.state_dir)
                 return {'state': self.manager.connect(client), 'path': str(client)}
+            if route == 'plan/batch':
+                ids = data.get('addon_ids')
+                if not isinstance(ids, list) or not 1 <= len(ids) <= 100 or any(not isinstance(ident, str) for ident in ids):
+                    raise ValueError('Select between 1 and 100 add-ons for this batch.')
+                catalog = {item['id']: item for item in self.manager.catalog()['items'] if item.get('valid', True)}
+                for ident in ids:
+                    item = catalog.get(ident, {})
+                    action = 'update' if item.get('update_available') else 'reapply' if item.get('installed') else 'install'
+                    self.repositories.policy_check(ident, action)
+                plan = self.manager.plan_batch(ids)
+                self._review_tokens = {plan['id']: self.repositories.fingerprint()}
+                return {'plan': plan}
             if route == 'plan':
                 self.repositories.policy_check(data['addon_id'], data.get('action', 'install'))
                 plan = self.manager.plan(data['addon_id'], data.get('action', 'install'), settings=data.get('settings'))
                 self._review_tokens = {plan['id']: self.repositories.fingerprint()}
                 return {'plan': plan}
             if route == 'apply':
+                if type(data.get('launch_client', False)) is not bool:
+                    raise ValueError('Choose whether to open the game client after installation.')
                 if self._review_tokens.get(data['plan_id']) != self.repositories.fingerprint():
                     raise ValueError('Repository policy changed or this review expired. Review a new installation plan.')
-                return self.manager.apply(data['plan_id'])
+                result = self.manager.apply(data['plan_id'])
+                if data.get('launch_client'):
+                    try:
+                        result['client_launch'] = self.manager._require().launch_client()
+                    except (OSError, ValueError) as error:
+                        result['client_launch'] = {'status': 'failed', 'message': str(error)}
+                return result
             if route == 'recover':
                 return self.manager.recover()
             if route == 'releases/review':

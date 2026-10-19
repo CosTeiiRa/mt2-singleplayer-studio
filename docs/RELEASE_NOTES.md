@@ -1,4 +1,19 @@
-# beta-1.11.1 — detect missing add-ons and review reinstalls
+# beta-1.12.0 — batch add-on installation and one client reopen
+
+Discover add-ons supports selecting several packages or reviewing every ready
+bundled/downloaded package together. Installed add-ons can review all ready
+updates in one step. One combined preview checks dependencies and ownership for
+the final group; one Apply builds the packs once and commits one recoverable
+transaction. Saved settings and disabled preferences are preserved.
+
+The review can optionally open the supported game client once after all changes
+succeed. This starts unchecked, never closes a running game and avoids opening
+a second copy. A launch failure is reported separately from the successful
+installation. The server can stay running.
+
+The main README includes a real add-on manager screenshot.
+
+## beta-1.11.1 — detect missing add-ons and review reinstalls
 
 Studio checks the current client pack fingerprints against the last successful
 add-on installation. Missing payloads or loading hooks show **Needs reinstall**;

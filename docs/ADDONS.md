@@ -2,7 +2,7 @@
 
 [Back to the overview](../README.md#see-what-you-can-do) · [All documentation](README.md)
 
-This guide covers **beta-1.11.1**: installing, configuring, updating and removing
+This guide covers **beta-1.12.0**: installing, configuring, updating and removing
 client add-ons, plus creating and sharing your own. Choose authors and sources
 you trust; add-ons run with the game client's permissions.
 
@@ -86,6 +86,29 @@ installation, keeping settings and pack backups. Unexpected manual changes are
 shown for review and block repair. If whole game packs are missing or unreadable,
 repair the game through its launcher first, then return to Studio. The server can
 stay running throughout add-on repair.
+
+## Install or update several add-ons together
+
+In **Discover add-ons**, select the packages you want and choose **Review selected**,
+or choose **Review all** for every bundled or downloaded package ready to install
+or update. The installed page also offers **Review all ready updates**. Repository
+releases need to be downloaded and verified before they join an installation batch.
+
+The preview lists each add-on and the combined file changes. Dependencies and
+ownership are checked for the whole group, and existing settings and disabled
+preferences are preserved. One **Apply batch** builds the client packs once and
+uses one transaction with backups; a failed write rolls back the whole group.
+
+Close the game client once before applying. Tick **Open the game client once
+after all changes succeed** to reopen the supported normal client or playable
+copy after the complete batch succeeds. This option starts unchecked. Studio
+does not close a running game for you. A client that is already open is not
+started a second time. If reopening fails, the successful installation is kept
+and Studio reports the separate launch error. The server can stay running.
+
+After a clean game update, **Review reinstall** already covers all saved add-ons
+in one transaction. You can also combine newly selected packages with that
+updated baseline through the batch workflow.
 
 ## Package sources
 
