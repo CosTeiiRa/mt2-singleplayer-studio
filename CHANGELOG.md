@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Focused the main README on startup, architecture and feature examples. Detailed
+  add-on, setup, storage, update/backup and development guides are linked from it.
+
 - Organized Python application code under `src/metin2_studio/`, Windows helpers
   under `scripts/windows/`, and release configuration under `config/`.
 - Added the shared `studio.py serve` / `studio.py setup` entry point while keeping

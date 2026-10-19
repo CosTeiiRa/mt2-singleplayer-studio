@@ -1,6 +1,29 @@
 # Operator guide
 
-Installation and first launch: [README](../README.md). `<stateDir>` is the local world data folder printed by setup.
+Installation and first launch: [setup guide](GETTING_STARTED.md). `<stateDir>` is the local world data folder printed by setup.
+
+## What is included
+
+| Area | Features |
+|---|---|
+| Drops and chests | Metin/boss/monster filters, searchable items, quantities, weights/chances, shared pools and combined-source views |
+| Item catalog | Category/function filters, descriptions, icons and existing drop/craft/shop/refinement references |
+| Quests | A quest library, guided editing of supported existing fields, hunt/turn-in/exchange templates, cooldowns, NPC guidance, cloning and removal of Studio quests |
+| Crafting | Existing Cube and native NPC menus, automatic system selection, ingredients/reward/chance/cost/requirements, cloning, shared-definition warnings and removal |
+| Economy | GM-separated views, stock/trade/price/activity indicators, snapshots, experiments, event journal and CSV/JSON exports with coverage limits |
+| Configuration | Submenus for gameplay settings, spawns/maps, fishing, alchemy and supported advanced files |
+| Change management | Drafts, named change sets, reviewable backups/rollbacks, pending Apply counts and custom-difference update protection |
+| Client add-ons | Discover, repositories, local import, reviewed install/update/settings/enable/disable/removal, pack backups and recovery |
+| Bundled in-game tools | Add-on Menu, Boss Atlas, Atlas Legend and Pocket Wiki; install the ones you want in your normal game client |
+
+See the [operator guide](USER_GUIDE.md) for mechanics, source coverage and limitations. Normal configuration edits use the game's existing systems. **New quests are opt-in server-side scripts:** saving one adds `.quest` source and a backed-up compiler integration; generated templates use the existing game logging API for their limited item-flow records. They do not change engine or client binaries. Native crafting saves a Studio JSON configuration; its database changes happen only during Apply.
+
+Change history separates **Gameplay changes** (recipes, drops, quests, EXP and settings) from **Update reconciliations** (game-update merges and conflict resolutions). **All changes** shows both. Rollback still checks newer edits across both categories.
+
+Use **Change type** to filter either view by Quests, Crafting, Drops, World settings,
+Maps & spawns, Shops, Fishing, Alchemy, Items, Skills, Events or Other server files.
+Existing backups are included. A save touching several types appears under each;
+**Review rollback** still reviews the whole save. Select **All types** to clear the filter.
 
 ## Client add-ons
 

@@ -8,7 +8,7 @@ Test code that mutates packs or simulates failures uses disposable fixtures;
 native harnesses use an explicitly prepared test client. Preserve normal game
 packs and private Studio state when collecting evidence.
 
-Run the commands in [Development and verification](../README.md#development-and-verification)
+Run the commands in [Development and verification](DEVELOPMENT.md#development-and-verification)
 for the complete current test list. Optional codec checks require **Install Add-on
 Support.bat**. Game-dependent suites need the supported installation; skips must
 be recorded rather than counted as successful gameplay checks. Current beta

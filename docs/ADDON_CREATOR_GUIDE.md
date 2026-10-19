@@ -85,7 +85,7 @@ An example manifest:
 }
 ```
 
-The checksum placeholder intentionally fails validation. After creating this manual example in `creator/example`, refresh the payload hashes with the [README checksum block](ADDONS.md#edit-and-build), then validate:
+The checksum placeholder intentionally fails validation. After creating this manual example in `creator/example`, refresh the payload hashes with the [add-on guide checksum block](ADDONS.md#edit-and-build), then validate:
 
 ```powershell
 python tools/addon.py validate creator/example
@@ -93,7 +93,7 @@ python tools/addon.py validate creator/example
 
 The validator reads and hashes payload bytes; it does not execute them. A valid package is not proof of safe behavior or working in-game compatibility.
 
-The scaffold generates a unique filename rather than `example.py`. The [README checksum block](ADDONS.md#edit-and-build) refreshes every declared payload hash without assuming a particular filename.
+The scaffold generates a unique filename rather than `example.py`. The [add-on guide checksum block](ADDONS.md#edit-and-build) refreshes every declared payload hash without assuming a particular filename.
 
 `src/metin2_studio/addons/schemas/addon.schema.json` can be used for editor assistance. The CLI/package loader is authoritative and checks additional path, file, checksum, and namespace rules not represented by the editor schema.
 
@@ -165,7 +165,7 @@ A registration error removes that add-on's registered listeners. A failing event
 
 Set `api_version: 2` in the same schema-1 manifest for standalone windows, game
 lifecycle callbacks, local preferences and generated reference data. The scaffold
-does not switch APIs automatically. Follow the [README API-v2 instructions](../README.md#api-v2-windows-shortcuts-and-add-on-menu)
+does not switch APIs automatically. Follow the [add-on API-v2 instructions](ADDONS.md#api-v2-windows-shortcuts-and-add-on-menu)
 for the manifest fragment and registration example, and the [API-v2 reference](ADDON_API_V2.md)
 for the complete context contract.
 

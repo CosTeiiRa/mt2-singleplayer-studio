@@ -8,7 +8,7 @@ for sensitive reports.
 
 ## Development scope
 
-Follow the [project layout](README.md#project-layout): Python application code
+Follow the [project layout](docs/DEVELOPMENT.md#project-layout): Python application code
 belongs in `src/metin2_studio/`, frontend files in `web/`, and Windows helpers in
 `scripts/windows/`. Use package imports under `metin2_studio`; keep private state
 in the ignored `data/` folder. Add distributable files to
@@ -25,7 +25,7 @@ credentials or generated support reports. Do not require a new playable client
 copy for ordinary users. Explain compatibility evidence separately from publisher
 declarations and from logged-in gameplay acceptance.
 
-Run the [developer checks](README.md#development-and-verification) for the affected area and
+Run the [developer checks](docs/DEVELOPMENT.md#development-and-verification) for the affected area and
 document game-dependent checks that were skipped. A passing build or mocked UI
 test does not prove connected gameplay. Include the problem, resulting behavior,
 validation and limits when submitting a change.
@@ -38,6 +38,6 @@ Game code, assets, trademarks and separately licensed third-party dependencies
 are not relicensed by Studio. Add only material you have permission to contribute;
 record new dependency licenses and keep game assets out of distributable fixtures.
 
-Creators of client extensions should start with the [README developer
-requirements](README.md#developer-package-requirements) and [API v2
+Creators of client extensions should start with the [add-on package
+requirements](docs/ADDONS.md#developer-package-requirements) and [API v2
 reference](docs/ADDON_API_V2.md). Add-ons have their own license and release notes.

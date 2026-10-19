@@ -1,22 +1,82 @@
-# Create and install Metin2 Studio add-ons
+# Add-on guide
 
-Studio lists **Add-on Menu** first, alongside Boss Atlas, Atlas Legend and **Pocket Wiki**. Install Add-on Menu to get one in-game **Add-ons** button listing installed extensions and opening their windows or atlas overlays. It is an ordinary optional add-on and can be disabled or removed independently.
-Its [usage guide](POCKET_WIKI.md) covers crafts, upgrades, sources/uses and
-reference-data refresh. [API v2](ADDON_API_V2.md) adds standalone windows
-and preferences while retaining API v1. Add-ons apply to your normal supported
-game client, with backups of changed pack files. Extra development targets are
-optional under **Add-on settings → Advanced testing tools**.
+[Back to the overview](../README.md#see-what-you-can-do) · [All documentation](README.md)
 
-An add-on is original client Python code with an `addon.json` manifest and declared payload files. Studio uses that common format to validate files, compose add-ons, manage settings and apply reviewed updates/removals. Users choose which authors and sources to trust.
+This guide covers **beta-1.11.0**: installing, configuring, updating and removing
+client add-ons, plus creating and sharing your own. Choose authors and sources
+you trust; add-ons run with the game client's permissions.
 
-This guide describes **alpha-1.10.0**. Public GitHub repositories, local ZIP import and Studio-format HTTPS catalogs work today. GitHub sources use the same manifest/payload format; creators do not need to upload an add-on ZIP or maintain a catalog. Arbitrary projects still need to adopt this layout. The local ZIP importer accepts creator-tool packages, not generic GitHub “Download ZIP” archives.
+For players: [bundled add-ons](#bundled-add-ons) · [install and manage](#install-and-manage) · [GitHub sources](#install-from-github) · [updates](#see-updates-and-read-the-changelog).
 
-**Compatibility unverified** is a warning, not a declaration that an add-on is
-broken. A new game/client version outside its publisher's list can still use the
-normal review and Apply workflow on an supported game client. Details show
-the current and declared versions. **Declared compatible** records publisher
-coverage; **Known incompatibility** requires a specific recorded problem. Actual
-adapter, integrity, dependency and ownership checks remain blocking.
+For creators: [package requirements](#developer-package-requirements) · [API v2 windows](#api-v2-windows-shortcuts-and-add-on-menu) · [first add-on](#create-your-first-add-on) · [edit and build](#edit-and-build) · [collections](#publish-a-collection-from-one-repository).
+
+## How add-ons work
+
+An add-on extends the game's client interface with Python modules, a manifest and
+declared files. Studio checks the package, shows the proposed changes, and installs
+its files and shared runtime integration into the client's root packs. The game
+loads that code when you launch it. **Installed add-ons work with Studio closed**;
+Studio is needed again to manage them or refresh their generated reference data.
+
+## Bundled add-ons
+
+These examples are bundled with Studio; you choose which to install:
+
+| Add-on | What it adds inside the game | How to open it after installation |
+| --- | --- | --- |
+| **Add-on Menu** | One in-game list of installed add-ons, with actions to open windows or atlas overlays. Disabled and unavailable entries are identified. It is listed first and can be disabled or removed like any other add-on. | Click **Add-ons** near the top-left of the game screen after entering a character. No shortcut is required. |
+| **Boss Atlas** | Boss and optional Metin spawn areas, names and base respawn ranges from the installed server's configuration. These describe configured zones, not live boss presence or a live countdown. | Open the game's normal atlas map; enabled overlays appear on it. |
+| **Atlas Legend** | A compact atlas label explaining that the displayed zones come from configuration. It demonstrates independent add-ons sharing the same atlas hooks. | Open the game's normal atlas map; the label appears at the bottom. |
+| **Pocket Wiki** | Searchable crafts, upgrade chains, ingredient sources and reverse uses, plus bookmarks, history, attempt-cost totals and pinned recipe cards. See [usage and data coverage](POCKET_WIKI.md). | Enter a character, then click **Pocket Wiki** near the top-left of the game screen or press **Ctrl+U** with chat closed. |
+
+Install **Add-on Menu** to open your installed extensions from one in-game button. It is optional: other add-ons retain their own controls when it is disabled or removed.
+
+The **World atlas** page in Studio is also available in the browser. It links
+configured spawns to the corresponding drop editor and saved map files. Installing
+an in-game atlas add-on is a separate choice.
+
+## Install and manage
+
+1. Run **Install Add-on Support.bat** once and restart Studio if pack support is not installed.
+2. Open **Add-on settings**, select **Normal game client**, and close that client. The game server can stay running; no extra playable copy is required.
+3. Open **Discover add-ons**, choose an add-on, and select **Review install**. Read its source, compatibility notes and file changes, then **Apply** that plan.
+4. Launch the game using your usual shortcut, enter a character, and use the add-on's button, shortcut or existing game window listed above. Studio retains backups of the changed pack files.
+
+Use **Installed add-ons** to review settings changes, enable/disable an add-on,
+update it or remove it. Removing the last add-on restores the current captured
+game-pack baseline. **Repositories** manages package sources; **Activity** shows
+operations and recovery records. Optional pack sandboxes and playable copies are
+under **Add-on settings → Advanced testing tools**.
+
+**Opening Pocket Wiki:** first install and enable **Pocket Wiki** itself; installing
+Boss Atlas or downloading a package does not install it. After Apply, launch the
+selected client again and use the **Pocket Wiki** button or **Ctrl+U** in-game.
+Change **Shortcut** or **Show button** under **Installed add-ons → Pocket Wiki →
+Details**, then review/apply with the client closed and launch it again. Game key
+bindings and focused chat/input take priority over add-on shortcuts.
+
+**Add-on Apply changes client packs. Server Apply builds and restarts the server.**
+Each has its own review. Installing a client add-on does not deploy a quest or
+restart the server. API v1 provides atlas callbacks; API v2 also supports standalone
+windows, shortcuts and local preferences. Add-ons run with the game client's
+permissions, so choose packages you trust.
+
+World and Pocket Wiki data are generated from local game sources during a reviewed
+operation. They are snapshots, not a live connection to Studio or a complete view
+of every engine rule. Refresh reference data after content changes. If a game
+update replaces the managed packs with clean game files, **Review reapply** uses
+the new files as the proposed baseline and retains your installed add-on settings.
+Nothing is reapplied automatically; see [game updates](UPDATES_AND_BACKUPS.md#updating-the-game-or-studio).
+
+## Package sources
+
+| Installation source | Available now? | What you provide |
+| --- | --- | --- |
+| Local package | Yes | A `.m2addon.zip` built with the creator CLI |
+| HTTPS catalog | Yes | The URL of a Studio-format catalog JSON file |
+| Public GitHub repository | Yes | A public repository URL with root `addon.json`, or `addons.json` listing separate add-on folders |
+
+GitHub sources use the same manifest/payload format; creators do not need an uploaded add-on ZIP or a hosted catalog. Arbitrary projects must adopt this layout. The local ZIP importer accepts creator-tool `.m2addon.zip` packages, rather than generic GitHub Download ZIP archives.
 
 ## Install from GitHub
 
@@ -32,6 +92,15 @@ Only public GitHub repositories are supported; no account or access token is use
 
 ## See updates and read the changelog
 
+**Compatibility unverified** means the current version/profile is outside the
+publisher's declared coverage, or in-game verification is still pending. It is a
+warning: you can review and apply the add-on to a supported game client
+without editing its version lists. Details show your current versions and the
+publisher's declarations. **Declared compatible** records a matching declaration,
+not independent proof. **Known incompatibility** requires a specific recorded
+problem. Actual adapter, package, dependency and file ownership checks still
+block operations they cannot safely perform.
+
 Add-on updates are always manual. Open **Installed add-ons → Check for updates** to check enabled sources. The background job fetches metadata only, reports individual source failures and never downloads an add-on archive or applies code. Disabled sources are skipped. No startup timer, remote polling or automatic update option is enabled.
 
 Available updates show installed/available versions and **Read changelog**. Studio also shows a count in its overview and add-on toolbar. The changelog contains known release notes since the installed version, or the notes of an imported/selected package. Read it and choose **Not now**, **Review download**, or—after selecting the package—**Review installation changes**. Downloading alone keeps the notification and installed code/settings unchanged. Apply the reviewed plan separately when ready.
@@ -39,6 +108,8 @@ Available updates show installed/available versions and **Read changelog**. Stud
 Notifications follow the installed repository source and selected channel. Competing, disabled or blocked sources are not advertised as repository updates. Failed checks retain last-known notes with a warning and block uncached downloads. Development snapshots compare package content, so a README-only commit does not create a reinstall notice. Imported same-version changes are shown as selected package changes for review.
 
 Changelogs are displayed as escaped text. Published GitHub Releases use their release body; development/local packages use manifest `release_notes`. Include useful changes, compatibility changes and migration/removal notes when publishing. A missing changelog is shown as missing; Studio does not invent one. Known release history is limited by the provider/catalog (up to the first 50 GitHub release records).
+
+Opening Installed, the add-on toolbar or Studio overview reads cached metadata; it does not contact publishers.
 
 ## Progress, cancellation and interrupted requests
 
@@ -61,6 +132,97 @@ Import validates and adds the package to the local catalog. Installation is a se
 In **Installed add-ons**, open **Details** to review settings changes, use the switch to review disable/enable, or choose removal to review an uninstall. Import a newer build to expose **Review update**; installed code stays unchanged until you apply it, and compatible saved settings are retained. A changed settings schema can require adjusting settings before the update is valid.
 
 **Remove from catalog** forgets a local package selection. It retains installed code, cached bytes and recovery data; uninstall remains a separate action in Installed. Existing installed settings remain editable after the catalog selection is removed. To select that local package again, import its ZIP again.
+
+## Developer package requirements
+
+Studio reads an `addon.json` manifest and the payload files it declares. The
+current package type is **client-python**: Python extensions loaded inside the
+game client. Server quests use Studio's separate server-editing workflow.
+
+For a single add-on, use this layout at the source repository's root:
+
+```text
+my-addon/
+  addon.json
+  README.md          # recommended: usage, opening controls and tested versions
+  payload/
+    my_addon.py
+```
+
+| Requirement | What to provide |
+| --- | --- |
+| Manifest format | `schema_version: 1`. `api_version` accepts `1` or `2`; omission means API v1. Use API v2 for standalone windows and Add-on Menu window actions. |
+| Identity and metadata | A stable unique lowercase id such as `yourname.example`; `name`, `version`, `description`, `author` and `category`. Use a SemVer version such as `0.1.0` for packaging and releases. Explain how to open the add-on and its shortcuts in the description. |
+| Package and entry point | `kind: "client-python"` and an `entry` such as `m2hub_addons.my_addon`. Include that module in the declared files and implement `def register(context):` in it. |
+| Declared files | A nonempty `files` array. Each entry has `source` relative to `payload/`, `target` below `m2hub_addons/`, and the lowercase SHA-256 checksum of those exact source bytes. For example, `my_addon.py` installs as `m2hub_addons/my_addon.py`. Refresh hashes after every payload edit. |
+| Dependencies and capabilities | Supply `requires`, `conflicts` and `capabilities` arrays, even when empty. Dependencies name add-on ids; optional `dependency_versions` constrains required versions. Required add-ons must be installed and enabled separately. |
+| Client code | Use Python 2.7-compatible syntax for the supported embedded client. Studio's Python 3 requirement applies to its manager and creator tools. Use the runtime context for shared hooks; Studio owns the game integration. |
+| Optional configuration | `settings` and `settings_schema` describe reviewed installation settings. `compatibility` declares client/server versions and profiles covered by the publisher. Include a license and release notes before sharing. |
+
+Use unique module and asset names. Packages cannot replace game/framework files
+or an entire root pack. Paths must be relative, use `/`, and avoid traversal,
+symbolic links and case collisions. Limits are 16 MiB per payload file, 64 MiB of
+payload, 2,048 declared files and a 256 KiB manifest. The [manifest schema](../src/metin2_studio/addons/schemas/addon.schema.json)
+helps editors; the creator CLI/package loader performs the authoritative checks.
+
+Compatibility declarations describe coverage. An unlisted version/profile or
+`experimental: true` produces **Compatibility unverified**, which still permits
+reviewed installation on a supported client. Matching declarations mean
+**Declared compatible**, not independently proven compatibility. Actual adapter,
+API, dependency, integrity and file-ownership failures can still block an install;
+**Known incompatibility** requires a concrete recorded problem.
+
+## API v2: windows, shortcuts and Add-on Menu
+
+The scaffold below starts with API v1 atlas events. For an independent game window,
+set these fields in its existing `addon.json` (this is a manifest fragment):
+
+```json
+{
+  "api_version": 2,
+  "capabilities": ["ui.window"]
+}
+```
+
+Implement your window using the game's UI controls, then register a lazy factory
+in your entry module. Here `ExampleWindow` is your own window class, accepting the
+runtime context and game window:
+
+```python
+def register(context):
+    context.register_window(
+        'main',
+        lambda game: ExampleWindow(context, game),
+        shortcut='NONE'
+    )
+```
+
+- The factory runs when the player opens the window. Its result must provide
+  `IsShow()`, `Open()`, `Close()` and `Destroy()`. Window names are unique within
+  an add-on. `Destroy()` must clean up owned widgets and references; the host calls
+  it when the game session closes or a created window fails.
+- With **Add-on Menu** installed and enabled, a successfully loaded add-on's
+  registered window appears as an opening action automatically. The menu is
+  optional. Keep a visible route in your add-on when players do not use it;
+  `register_window` returns a handle whose `toggle()` can be wired to your button.
+- Supported shortcut values are `NONE`, `CTRL_U` and `F12`. Start with `NONE` to
+  avoid competing for a shortcut. Duplicate add-on shortcuts are refused; game
+  bindings and focused chat/IME inputs take priority.
+- Use `context.on('game.open', callback)` and `context.on('game.close', callback)`
+  for your launcher widgets; callbacks receive the game window. The host owns
+  shared lifecycle and input hooks, so add-ons should register callbacks rather
+  than patching those methods themselves.
+- API v2 also provides `context.load_state()` / `save_state(object)` for up to
+  32 KiB of personal preferences per world/add-on, `context.reference()` for the
+  generated local knowledge snapshot, and `context.module(...)` for namespaced
+  helpers. Add the descriptive `preferences.local` or `knowledge.read`
+  capabilities when using those services. Manifest settings remain a separate
+  reviewed pack operation.
+
+Capabilities describe integration needs; they do not sandbox Python permissions.
+See the [API v2 reference](ADDON_API_V2.md) for the full contract and launcher
+APIs, and [Pocket Wiki's entry module](../src/metin2_studio/addons/catalog/community.pocket-wiki/payload/pocket_wiki.py)
+for a complete window, launcher button and registration example.
 
 ## Create your first add-on
 
@@ -96,6 +258,8 @@ Client payloads must use Python 2.7-compatible syntax for the supported game pro
 @'
 import json
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path('src').resolve()))
 from metin2_studio.addons.hubcore.packages import confined_file, sha256, validate_manifest
 
 package = Path("creator/example")
@@ -206,4 +370,4 @@ The first 50 GitHub Release records are shared across the whole repository. Sour
 
 GitHub supports a root single add-on or an explicitly declared collection with independent add-on folders. Private repositories, undeclared project layouts, arbitrary build systems and automatic dependency downloads are unsupported. Source archives are limited to 66 MiB; declared payload is limited to 64 MiB and the README to 256 KiB. No publisher registration, certification or signing is required.
 
-The [roadmap](ADDON_ROADMAP.md#direct-github-repositories--implemented) records the implementation and its evidence. Browser/gameplay acceptance and an independent creator trial remain pending. Automated pack tests do not establish in-game compatibility.
+The [roadmap](ADDON_ROADMAP.md#implemented-platform) records the implementation and its evidence. Browser/gameplay acceptance and an independent creator trial remain pending. Automated pack tests do not establish in-game compatibility.

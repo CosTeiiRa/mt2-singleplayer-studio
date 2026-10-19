@@ -25,11 +25,16 @@ docs/ADDON_CREATOR_GUIDE.md
 docs/ADDON_REPOSITORIES.md
 docs/ADDON_ROADMAP.md
 docs/ADDON_TESTING.md
+docs/ARCHITECTURE.md
 docs/BETA_REVIEW.md
+docs/DEVELOPMENT.md
+docs/GETTING_STARTED.md
 docs/MERGED_STUDIO.md
 docs/POCKET_WIKI.md
+docs/README.md
 docs/RELEASE_NOTES.md
 docs/THIRD_PARTY.md
+docs/UPDATES_AND_BACKUPS.md
 docs/USER_GUIDE.md
 docs/screenshots/README.md
 docs/screenshots/drop-editor.jpg
