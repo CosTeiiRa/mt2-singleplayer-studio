@@ -118,12 +118,7 @@ def render(values):
             end
 ''' if not hunt else ''
     turnin = f'''            -- Inventory checked before the turn-in.
-            local before_turnin = pc.count_item({item})
             pc.remove_item({item}, {required})
-            local spent = before_turnin - pc.count_item({item})
-            if spent > 0 then
-                char_log(0, "STUDIO_Q_ITEM", "v1:OUT:{item}:" .. spent)
-            end
 ''' if not hunt else ''
     finish = f'pc.setqf("next_available", get_time() + {cooldown})\n            set_state(start)' if cooldown else 'set_state(complete)'
     reward_progress = f'say("Completed: {count} x " .. mob_name({target}) .. ".")' if hunt else progress
@@ -186,12 +181,7 @@ quest {ident} begin
             clear_letter()
             -- Move out of this state before granting a reward.
             {finish}
-            local before_reward = pc.count_item({reward})
             pc.give_item2({reward}, {qty})
-            local gained = pc.count_item({reward}) - before_reward
-            if gained > 0 then
-                char_log(0, "STUDIO_Q_ITEM", "v1:IN:{reward}:" .. gained)
-            end
             pc.change_gold({yang})
             pc.give_exp2({exp})
             say_title({title})

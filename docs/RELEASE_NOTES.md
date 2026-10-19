@@ -1,3 +1,14 @@
+# beta-1.18.0 — game dashboard economy
+
+Economy now opens the installed game dashboard from the sidebar and homepage.
+Studio’s duplicate analytics, automatic collector, experiments, watchlists and
+report interface have been removed. Existing schedules are disabled; saved
+snapshots and notes remain intact and downloadable as a SQLite archive.
+
+Native crafting uses the shared read-only database helper directly. New quest
+templates no longer add economy-only item-flow logging. Existing game files,
+compiled quests and the game’s own collector are unchanged by this migration.
+
 # beta-1.16.0 — consistent items and visible operation feedback
 
 Search, drops, crafting, quest rewards, saved items and economy tables share one

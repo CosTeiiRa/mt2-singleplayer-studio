@@ -3,7 +3,7 @@
 [Back to the overview](../README.md#see-what-you-can-do) · [All documentation](README.md)
 
 Studio builds one catalogue from the running server and installed client. Editors,
-search, economy labels, Pocket Wiki reference exports and atlas names use this
+search, Pocket Wiki reference exports and atlas names use this
 shared snapshot. The catalogue status above the page shows whether Studio is using
 live data, a previous cache or the package's bundled fallback files.
 
@@ -65,7 +65,7 @@ behind its details. **Back to items**, **Back to item search**, Close or Escape
 return to that picker with its search, filters, loaded results and scroll intact.
 Selecting an item in an editing field still selects it and closes that picker.
 
-Search, saved items, drops, crafting, quest rewards and economy tables share the
+Search, saved items, drops, crafting, quest rewards share the
 same item identity and hover/focus details. Hover or focus an item for its configured effects. Weapon attack/magic attack
 ranges, armour defence and fixed bonuses use server definition fields; their
 displayed formulas follow the installed client tooltip. Bonus names and native

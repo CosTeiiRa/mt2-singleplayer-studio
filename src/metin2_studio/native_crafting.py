@@ -12,6 +12,8 @@ import secrets
 import subprocess
 import time
 
+from metin2_studio.database import query as database_query
+
 COLS = ('vnum', 'item_vnum', 'count', 'price', 'chance', 'recipe', 'req_progress', 'req_level', 'recipe_vnum', 'comment')
 CONFIG = 'share-add/studio-crafting.json'
 EMPTY = {'version': 1, 'recipes': {}, 'accepted': {}}
@@ -198,7 +200,7 @@ class NativeCrafting:
     def live(self, fresh=False):
         if not fresh and self.cached is not None and time.time() - self.cached_at < 15:
             return copy.deepcopy(self.cached)
-        rows = self.studio.economy.query([
+        rows = database_query(self.studio.compose, [
             "SELECT JSON_OBJECT('set','engine','row',JSON_ARRAY(TABLE_NAME,ENGINE)) FROM information_schema.TABLES WHERE TABLE_SCHEMA='world' AND TABLE_NAME IN ('crafting_proto','crafting_window','crafting_window_name');",
             "SELECT JSON_OBJECT('set','proto','row',JSON_ARRAY(" + ','.join('`' + c + '`' for c in COLS) + ")) FROM world.crafting_proto ORDER BY vnum;",
             "SELECT JSON_OBJECT('set','windows','row',JSON_ARRAY(window_id,recipe_id,sort_order)) FROM world.crafting_window ORDER BY window_id,sort_order,recipe_id;",

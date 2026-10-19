@@ -11,7 +11,7 @@ override the visible title without renaming their reward item in the catalogue.
 Unknown IDs remain inspectable and missing assets receive explicit labels.
 
 Use these helpers in search, pickers, saved items, drop tables, crafting, quest
-rewards and economy tables. Call `bindImages` after replacing markup so failed
+rewards. Call `bindImages` after replacing markup so failed
 images use the same fallback. `itemHelpAttrs` connects both pointer and keyboard
 focus to the same tooltip, with escaped catalogue content and configured effects.
 
@@ -37,15 +37,13 @@ Random groups show possible members, not simultaneous spawns or live positions.
 The map list includes regular spawns; existing in-game atlas exports retain their
 boss/Metin scope.
 
-## Copy and Economy loading
+## Copy and dashboard links
 
 Keep page introductions brief. Put methodology in optional help; keep errors,
-conflicts and review requirements visible. Economy collects measurement notes
-in one disclosure. Its most recent matching observation stays visible during
-refresh, with its timestamp and stale/error state. Session storage is scoped by
-world and filters; cache availability never implies a fresh or live observation.
-The database read still uses bounded, read-only queries. Activity is grouped by
-character before joining cohort metadata, preserving current-level attribution.
+conflicts and review requirements visible. Game dashboard links use the selected
+installation’s configured public port and bind address, open separately, and
+never start the game or duplicate its analytics collection. Old `#economy`
+bookmarks open the shortcut and preserved-history download page.
 
 Custom-content filters include Studio-created and Studio-modified definitions.
 Cube provenance compares normalized recipe blocks with tracked originals and

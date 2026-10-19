@@ -40,7 +40,6 @@ docs/USER_GUIDE.md
 docs/screenshots/README.md
 docs/screenshots/addons.png
 docs/screenshots/drop-editor.jpg
-docs/screenshots/economy.jpg
 docs/screenshots/item-search.jpg
 docs/screenshots/item-usage.jpg
 docs/screenshots/native-crafting.jpg
@@ -98,9 +97,6 @@ src/metin2_studio/catalogue_client.py
 src/metin2_studio/configuration_policy.py
 src/metin2_studio/crafting_access.py
 src/metin2_studio/database.py
-src/metin2_studio/economy.py
-src/metin2_studio/economy_export.py
-src/metin2_studio/economy_tools.py
 src/metin2_studio/filesystem.py
 src/metin2_studio/installation.py
 src/metin2_studio/item_help.py
@@ -156,8 +152,6 @@ tests/test_client_profiles.py
 tests/test_catalogue.py
 tests/test_content_management.py
 tests/test_customisations.py
-tests/test_economy.py
-tests/test_economy_export.py
 tests/test_history_categories.py
 tests/test_history_import.py
 tests/test_installation.py
@@ -197,15 +191,12 @@ web/addons.mjs
 web/app.js
 web/catalog.js
 web/crafting.js
-web/economy.js
-web/economy_tools.js
 web/editors.js
 web/index.html
 web/navigation.js
 web/quests.js
 web/style.css
 web/workspace.js
-
 src/metin2_studio/deployment_progress.py
 web/interface.css
 web/operations.js
@@ -213,4 +204,8 @@ tests/item_views.test.js
 tests/operations.test.js
 tests/test_deployment_progress.py
 docs/INTERFACE_PATTERNS.md
-tests/economy_loading.test.js
+src/metin2_studio/game_dashboard.py
+web/game_dashboard.js
+tests/test_game_dashboard.py
+tests/test_database.py
+tests/game_dashboard.test.js

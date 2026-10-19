@@ -8,7 +8,7 @@ Detailed requirements, setup choices, your first server edit and common startup 
 
 - **Windows 10/11** and **Python 3.10+** for base Studio. The initial small-beta target uses 64-bit Python **3.13**; optional add-on pack support needs 64-bit Python **3.11+** and matching binary wheels. Download Python from [python.org](https://www.python.org/downloads/windows/); enable its launcher/PATH option if offered.
 - An existing, working **Metin2 Singleplayer Linux/Docker server package**, with a `Serwer` directory containing `files/`, `linux-port/docker/` and `VERSION`. The initial beta target is server **2.2.110** / client **2.0.114**; exact executable and integration support are checked before pack writes. Older fixtures used 2.2.106–2.2.109 and are historical evidence, not a current all-version guarantee. Other Metin2 distributions, remote servers, WSL-only paths and standalone client folders are unsupported.
-- The game's normal Docker Desktop / Docker Compose setup. Keep using its launcher to start the game. Docker is needed for live economy data, native crafting and Apply; file-based editors remain usable with Docker stopped.
+- The game's normal Docker Desktop / Docker Compose setup. Keep using its launcher to start the game. Docker is needed for native crafting and Apply; file-based editors remain usable with Docker stopped.
 - Write access to the selected server and Studio folders.
 
 **Base Studio needs no pip/npm packages, Node.js or separate database server.**
@@ -23,7 +23,7 @@ change client packs. The package contains Studio code, not the game or its asset
 2. Confirm Python is installed. If a terminal is available, `py -3 --version` or `python --version` should show Python 3.10 or newer.
 3. Double-click **Install Studio.bat**. Choose the **existing `Serwer` folder** in the folder picker. You can also select its `Metin2 Singleplayer` parent folder. Setup validates the package files, saves your choice locally and creates a desktop shortcut. It does not copy or replace game files, start Docker, build images or restart the game.
 4. Double-click **Start Studio.bat**, or the **Metin2 Studio** desktop shortcut. The dashboard opens at **http://127.0.0.1:8765**. Starting an already running matching instance reuses it.
-5. For live economy data and native crafts, start the world with its **existing game launcher**, wait until it is healthy, then refresh the relevant page in Studio.
+5. For native crafts and the game dashboard, start the world with its **existing game launcher**, wait until it is healthy, then refresh the relevant page in Studio.
 
 If you skip step 3, **Start Studio.bat** opens setup on its first run. No administrator launch is normally necessary. **Stop Studio.bat** stops only Studio; the game remains running. The batch files use a process-local PowerShell execution policy; no system-wide policy change is needed.
 
@@ -66,7 +66,7 @@ For an existing working world, use the game's backup feature before your first A
 |---|---|
 | Python not found / Store alias opens | Install Python from python.org with its launcher/PATH option, reopen the terminal and rerun Install Studio.bat. Both `py -3` and `python` are supported. |
 | Missing `files/items.json`, SQL dump or Cube files | Select the server's **Serwer** folder, not the game client. Setup lists missing files. Arbitrary Metin2 distributions are unsupported. |
-| Docker/economy/native crafting unavailable | Start Docker Desktop and the world using the existing launcher, wait for healthy services, then Refresh. No new Docker stack is installed by Studio. |
+| Docker/game dashboard/native crafting unavailable | Start Docker Desktop and the world using the existing launcher, wait for healthy services, then Refresh. No new Docker stack is installed by Studio. |
 | Port already in use / wrong world opens | Close that Studio instance, or configure another port with `scripts/windows/Setup-Studio.ps1 -ServerRoot "...\Serwer" -Port 8766`. The launcher checks the world/data identity before reusing an instance. |
 | Data belongs to another server | Choose the correct game folder or a new data folder. Do not overwrite another world's binding/history. |
 | Studio fails to start | Read `studio.err.log` in the data folder printed by setup. Run `python studio.py setup --check` to verify the remembered paths. |

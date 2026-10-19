@@ -79,20 +79,6 @@ function mobContent(id,options={}){
 function mobHelpAttrs(id){return `data-help-mob="${esc(id)}"`}
 function helpDetails(title,body){return `<details class="help-details"><summary>${esc(title)}</summary><div>${body}</div></details>`}
 // Methodology belongs beside the data it explains, behind one explicit disclosure.
-function compactEconomyHelp(){
-  const root=$('#economy-view');if(!root||Econ.tab==='coverage')return;
-  const notes=$$('.eco-caption',root).filter(node=>!node.closest('details'));
-  if(!notes.length)return;
-  const details=document.createElement('details');details.className='help-details economy-methodology';
-  const summary=document.createElement('summary');summary.textContent='How these figures are measured';details.append(summary);
-  let previous='';
-  for(const node of notes){
-    const title=node.closest('section')?.querySelector('h2')?.textContent||'Scope';
-    if(title!==previous){const heading=document.createElement('h3');heading.textContent=title;details.append(heading);previous=title;}
-    details.append(node);
-  }
-  root.append(details);
-}
 async function showMobHelp(anchor){
   clearTimeout(helpHideTimer);if(helpAnchor===anchor&&!$('#item-tooltip').hidden)return positionItemHelp();
   hideItemHelp();if(typeof hideQuestHelp==='function')hideQuestHelp();helpAnchor=anchor;
@@ -292,7 +278,7 @@ async function navigate(route,{reload=false}={}){
   if(location.hash.slice(1)!==canonical)location.hash=canonical;
   await attempt(async()=>{
     if(page==='overview'){await workspaceRefresh();if(current())renderOverview()}
-    if(page==='economy') await loadEconomy();
+    if(page==='economy') await renderGameEconomy();
     if(page==='drops') await renderDrops();
     if(page==='quests') await renderQuests();
     if(page==='crafting'){const data=await api('/api/crafting');if(!current())return;S.recipes=data.recipes;S.craftingAccess=data.access;S.recipe=null;S.recipeSearch='';renderCrafting()}
@@ -607,6 +593,7 @@ async function updateStatus(){
   refreshAddonNotice();
   try{
     const data=await api('/api/status');if(request!==statusRequest)return;S.status=data;
+    S.data.gameDashboard=data.gameDashboard;bindGameDashboardLinks();
     await refreshCatalogue(data.catalogue);
     if(request!==statusRequest)return;
     const badge=$('#docker-badge');
@@ -648,6 +635,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     if(document.activeElement===helpAnchor&&rect.bottom>0&&rect.top<window.innerHeight)positionItemHelp();else hideItemHelp();
   },true);
   $$('dialog').forEach(dialog=>dialog.addEventListener('close',hideItemHelp));
+  bindGameDashboardLinks();
   $$('nav [data-page]').forEach(n=>n.addEventListener('click',()=>navigate(n.dataset.page)));
   $$('.brand').forEach(n=>n.addEventListener('click',e=>{e.preventDefault();navigate('overview')}));
   $$('[data-close]').forEach(n=>n.addEventListener('click',()=>$('#'+n.dataset.close).close()));
@@ -668,5 +656,5 @@ document.addEventListener('DOMContentLoaded',async()=>{
   $('#run-validate').addEventListener('click',()=>runServerOperation(true));
   $('#run-apply').addEventListener('click',()=>runServerOperation(false));
   $('#apply-interrupted-ack').addEventListener('change',refreshApplyControl);
-  try{S.data=await api('/api/bootstrap');renderCatalogueStatus(S.data.catalogue);S.itemMap=Object.fromEntries(S.data.items.map(e=>[e.id,e]));S.mobMap=Object.fromEntries(S.data.mobs.map(e=>[e.id,e]));await initWorkspace();initSidebarNavigation();if(WUI.activeSet)S.data.groups=(await api('/api/bootstrap')).groups;$('#version').textContent='Game '+S.data.version+' · Connected';$('#studio-version').textContent='METIN2 STUDIO '+(S.data.studioVersion||'');await navigate(location.hash.slice(1)||'overview');updateStatus();setInterval(()=>{if(!applyTimer)updateStatus()},30000)}catch(e){$('#content').innerHTML='<div class="empty">Studio could not read the installation.<p></p></div>';$('#content .empty p').textContent=e.message}
+  try{S.data=await api('/api/bootstrap');bindGameDashboardLinks();renderCatalogueStatus(S.data.catalogue);S.itemMap=Object.fromEntries(S.data.items.map(e=>[e.id,e]));S.mobMap=Object.fromEntries(S.data.mobs.map(e=>[e.id,e]));await initWorkspace();initSidebarNavigation();if(WUI.activeSet)S.data.groups=(await api('/api/bootstrap')).groups;$('#version').textContent='Game '+S.data.version+' · Connected';$('#studio-version').textContent='METIN2 STUDIO '+(S.data.studioVersion||'');await navigate(location.hash.slice(1)||'overview');updateStatus();setInterval(()=>{if(!applyTimer)updateStatus()},30000)}catch(e){$('#content').innerHTML='<div class="empty">Studio could not read the installation.<p></p></div>';$('#content .empty p').textContent=e.message}
 });

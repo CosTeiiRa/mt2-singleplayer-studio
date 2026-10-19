@@ -5,7 +5,6 @@ import unittest
 from unittest.mock import patch
 
 import tests.test_studio as test_studio
-from metin2_studio.economy import Economy
 from metin2_studio.server import ACTIVE_CHANGESET
 
 
@@ -70,14 +69,3 @@ class QuestSupportTests(unittest.TestCase):
         self.s.commit(plan['id'])
         self.assertIn(b'# SERVER-STUDIO CUSTOM QUESTS', dockerfile.read_bytes())
         self.assertIn(b'# native package update', dockerfile.read_bytes())
-
-    def test_custom_log_collection_is_still_read_only(self):
-        tables = {'player.player':'id account_id name level gold playtime last_play cheque',
-                  'account.account':'id login', 'common.gmlist':'mName', 'log.log':'who time type how what vnum hint'}
-        schema = [table.split('.') + [column] for table, columns in tables.items() for column in columns.split()]
-        with patch.object(self.s.economy, 'query', side_effect=[{'schema':schema}, {}]) as query:
-            data = self.s.economy.collect(7, fresh=True)
-        sql = '\n'.join(query.call_args.args[0])
-        self.assertIn('scriptFlows', data['available'])
-        self.assertIn('STUDIO_Q_ITEM', sql)
-        self.assertTrue(all(statement.startswith('SELECT ') for statement in query.call_args.args[0]))

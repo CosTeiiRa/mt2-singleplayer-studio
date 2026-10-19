@@ -10,13 +10,13 @@ Installation and first launch: [setup guide](GETTING_STARTED.md). `<stateDir>` i
 | Item catalog | Category/function filters, descriptions, icons and existing drop/craft/shop/refinement references |
 | Quests | A quest library, guided editing of supported existing fields, hunt/turn-in/exchange templates, cooldowns, NPC guidance, cloning and removal of Studio quests |
 | Crafting | Existing Cube and native NPC menus, automatic system selection, ingredients/reward/chance/cost/requirements, cloning, shared-definition warnings and removal |
-| Economy | GM-separated views, stock/trade/price/activity indicators, snapshots, experiments, event journal and CSV/JSON exports with coverage limits |
+| Economy | Shortcut to the game dashboard; download previous Studio history and notes |
 | Configuration | Submenus for gameplay settings, spawns/maps, fishing, alchemy and supported advanced files |
 | Change management | Drafts, named change sets, reviewable backups/rollbacks, pending Apply counts and custom-difference update protection |
 | Client add-ons | Discover, repositories, local import, reviewed install/update/settings/enable/disable/removal, pack backups and recovery |
 | Bundled in-game tools | Add-on Menu, Boss Atlas, Atlas Legend and Pocket Wiki; install the ones you want in your normal game client |
 
-See the [operator guide](USER_GUIDE.md) for mechanics, source coverage and limitations. Normal configuration edits use the game's existing systems. **New quests are opt-in server-side scripts:** saving one adds `.quest` source and a backed-up compiler integration; generated templates use the existing game logging API for their limited item-flow records. They do not change engine or client binaries. Native crafting saves a Studio JSON configuration; its database changes happen only during Apply.
+See the [operator guide](USER_GUIDE.md) for mechanics, source coverage and limitations. Normal configuration edits use the game's existing systems. **New quests are opt-in server-side scripts:** saving one adds `.quest` source and a backed-up compiler integration. They do not change engine or client binaries. Native crafting saves a Studio JSON configuration; its database changes happen only during Apply.
 
 Change history separates **Gameplay changes** (recipes, drops, quests, EXP and settings) from **Update reconciliations** (game-update merges and conflict resolutions). **All changes** shows both. Rollback still checks newer edits across both categories.
 
@@ -93,7 +93,7 @@ Description references: installed `item_proto` and package `CHANGELOG.md` (1.23.
 
 ## Item explorer: where an item is used
 
-Open **Item explorer** in the sidebar and choose an item with the same search/category filters. **Inspect item ↗** on an existing drop, crafting ingredient/result or quest reward opens the same read-only view. Search, saved items, combined drops, quest rewards and economy tables share the same item icon, name, ID and hover/focus details. The ↗ button beside an item-picker result inspects it without selecting it as a reward. Back retains the underlying search or returns to the source view. A numeric ID absent from the catalog can be inspected directly, which also covers native crafting items missing from the catalog.
+Open **Item explorer** in the sidebar and choose an item with the same search/category filters. **Inspect item ↗** on an existing drop, crafting ingredient/result or quest reward opens the same read-only view. Search, saved items, combined drops and quest rewards share the same item icon, name, ID and hover/focus details. The ↗ button beside an item-picker result inspects it without selecting it as a reward. Back retains the underlying search or returns to the source view. A numeric ID absent from the catalog can be inspected directly, which also covers native crafting items missing from the catalog.
 
 The view separates **Drops in**, **Found in chests**, **Reward pools & other tables**, **Can be crafted by**, **Used to craft**, **Sold by NPCs**, **Used in equipment upgrades**, and **Other file references**. It follows explicit shared-pool links, respects Studio's chest source precedence, and shows one shortest matching route per group. The same numeric value in the item and pool namespaces is never treated as the same object. A zero parameter on the displayed route is called out. Only known chest definitions are listed as physical chests; unclassified special reward tables remain in Reward pools & other tables. Route parameters are configuration values, not computed final game probabilities.
 
@@ -103,29 +103,23 @@ Other file references show exact ID tokens, filenames and line numbers with **Op
 
 Each lookup scans saved sources again; **Refresh references** rereads them after edits. Unsaved drafts are excluded and stay intact while inspecting. Opening another editor is disabled while a draft is dirty. The explorer never saves game files or applies changes.
 
-## Economy dashboard
+## Economy
 
-Open **Economy** in the sidebar. The default is **Regular economy (no GMs) / Whole server / Last 7 days**. Population filters include regular humans and bots, humans only, playerbots only, GM accounts only, everyone including GMs, and unknown ownership. Any account with a character registered in `common.gmlist` is classified as GM, including its other characters and shared storage. If the registry is unavailable, the dashboard does not claim the filtered figures exclude GMs; Everyone remains available for unseparated data. This changes analytics only, not account permissions or gameplay.
+**Economy ↗** in the sidebar and **Open game economy** on the homepage open the
+game’s existing dashboard in a new tab. Studio reads its public port and bind
+address from the installed Docker configuration. Start the world with its usual
+launcher and use the dashboard’s normal sign-in.
 
-Progression filters cover every stage equally. Default view boundaries are early 1–39, mid 40–74 and late/endgame 75+, and **Stage boundaries** changes those view boundaries without editing the game. Log periods are 1, 7 or 28 days. Stock and balances are current snapshots; log totals cover the selected period. Stage attribution uses current character levels, not historical levels. Account storage has known population where its owner is known, but no progression stage.
+Studio no longer collects economy observations, scans gameplay logs for analytics,
+or runs its own watchlists and balancing experiments. Older collection schedules
+are disabled on upgrade. The game’s own collector remains managed by the game.
 
-- **Overview:** character-wallet Yang, account activity, held item units, equipment stock by catalog upgrade grade, completed Yang-only shop turnover, upgrades, matched commodity price movement, stage comparisons, wallet distribution, bank balances and review signals. Listed units require a shop with remaining duration. Accounts are deduplicated within each view; multi-stage accounts can appear in several comparison rows. Activity requires retained CHARACTER/ITEM log activity, not seeded `last_play` timestamps. The GM banner shows the funds kept outside normal views. Unregistered demo accounts are not automatically classified as GMs.
-- **Items & demand:** search and category filters, equipment upgrade grades, stock/equipped/listed units, completed sales and median transaction unit prices. Acquisition, use, NPC-sale and destruction counts are explicitly **log records**, not consumption units. Select an item to inspect its sources and uses in Item Explorer.
-- **Activities & drops:** Metin/boss kill records and saved drop definitions, target-type/search filters, deduplicated target/pool relationships, and direct links to the drop editor. Configured source counts are not output/hour or production shares. Monster kill counts are unavailable.
-- **Save snapshot:** collects fresh data and saves aggregate history only in `<stateDir>/economy.sqlite`. Wallet charts and item stock changes use matching population/stage/period/boundaries and GM-classification version. Earlier mixed snapshots remain accessible under **Earlier snapshots · previous mixed definitions**, but are excluded from the new charts and stock comparisons. A baseline must be at least one minute old. Stock changes can reflect transfers, character stage movement or transformations, not only production/consumption. Studio can collect local snapshots while open; the schedule can be changed in Economy. It does not collect while closed.
-- **Event journal:** timestamped local notes for a change, hypothesis and expected result. This does not launch events or alter drops.
-- **Export report:** download a **CSV pack** (ZIP, for Excel/LibreOffice) or a complete **JSON report**. The CSV pack includes metrics with units/definitions, every item row in the selected economy view, progression bands, bank balances, mixed global Yang logs by source/day, activity, upgrade methods, saved drop-source definitions, all matching saved snapshots and item stocks, and all journal notes. It also contains the JSON report and a README. Exports include history beyond the chart's 90 points and journal's 50-note display. Earlier mixed definitions have separate legacy tables and retain their original scope. Exports use the selected population/stage/period/boundaries, independent of item search/category/grade/pagination; progression bands, banks, global logs, definitions and journal state their wider scope explicitly. Exporting reads the latest available observation (up to 60 seconds cached) and does not save a snapshot or change game data. With the database offline, saved history/notes remain exportable and live measurements are unavailable.
-- **Data coverage:** explains each source and missing measurement, including unknown storage ownership, partial currency logs, trade sampling and missing farming/consumption instrumentation.
-
-The collector uses the existing local Docker Compose MariaDB service. Credentials are expanded inside that container and never returned to the browser or saved in Studio. Queries run in a read-only consistent-snapshot transaction, use a per-statement timeout and a 45-second process limit, and require no database schema changes. A report is cached in memory for up to 60 seconds; **Refresh** bypasses it. Unsupported source schemas are marked unavailable. When the database is stopped, the dashboard still exposes saved history and configured drop definitions, with live figures unavailable.
-
-The **Mixed global Yang logs** panel always includes possible GM activity: `money_log` has no actor identity, so its flows cannot be reliably separated. Signed currency logs have partial coverage and do not establish total inflation. Account and shop banks follow the selected population but remain across all levels. Wallet Yang excludes Won; Won balances are shown separately. Won-denominated sales are excluded from Yang prices/turnover.
-
-Regular, human and bot market statistics exclude a transaction if either its buyer or seller belongs to a GM account. GM-only market statistics include transactions involving either GM party; their stage follows the GM seller if present, otherwise the GM buyer. Every transaction counts once. Everyone includes both. BUY_ITEM shop settlement records are limited to the latest 20,000 entries across the current and preceding equal-length periods; any truncation is reported. Direct trades, historical equipment bonus quality and the origin of past GM gifts now held by regular accounts are not reconstructed.
-
-The commodity comparison uses exact IDs in materials, potions (excluding variable blends), bonus items and scrolls; excludes equipment, books and stones whose quality can vary within one ID; requires five transactions per ID in each period and three matching IDs; and computes an equal-weight geometric price change. It is **not a fixed-basket inflation index**. Upgrade attempts exclude downgrade detail rows; successful-refine item conversions are never counted as destruction. A scroll method alone does not prove protection or exact scroll consumption. Exact net item creation, consumption units, stock coverage days, farming profit/hour, listing sell-through and hours-to-upgrade remain unmeasured rather than being inferred from unsuitable logs.
-
-CSV files use UTF-8 with BOM, comma separators, UTC timestamps and unrounded numeric values. Missing measurements are blank in CSV and `null` in JSON; availability columns and coverage explain the gaps. Formula-like catalog/journal text is escaped for spreadsheet safety; JSON retains the original text. New saved snapshots record available sources; older snapshots without this metadata are labelled accordingly, so stored zeros are not proof of source availability. Snapshot tables join by `snapshot_id`. Downloads contain aggregate data and user-entered journal text, without raw player/account records, logins or credentials.
+Previous Studio snapshots, journal notes and experiments stay in
+`<stateDir>/economy.sqlite`. The **Game economy & archived Studio history** link on
+the homepage opens a small local page with **Download history & notes**. The ZIP
+contains a consistent SQLite copy and instructions; the original stays intact.
+These old records remain separate from the game dashboard and are downloadable
+with the game offline. New Studio installations create no economy database.
 
 ## Save and apply
 
@@ -275,21 +269,9 @@ the progress display if an operation is still running.
 - **Drops:** source and level filters, contains-item filtering through shared pools, combined configured paths, target comparison, distinct target impact for pools, and reviewed bulk changes to matching direct entries. Weights and base parameters are labelled separately; valid values over 100 remain supported.
 - **Quests:** hunt, inventory collection/turn-in and material exchange templates, optional repeat cooldown, player dialogue preview, a source library, template editing and cloning. Changing a saved quest's template requires a new ID to preserve state names. Existing character flags are retained. All three generated templates were compiled with the installed `qc` in a disposable isolated container; rewards and progression still need an in-game play test before use on a live population.
 - **Crafting:** table, NPC and output filters; cloning; per-attempt ingredient/Yang comparisons; discovery of additional Lua crafting definitions. Failure material consumption is unverified, so no expected-cost estimate is presented as an engine fact.
-- **Items:** effect and restriction details beside references, favourites, recent items, effect comparisons, watchlist actions and current economy detail.
+- **Items:** effect and restriction details beside references, favourites, recent items, effect comparisons and a link to the item’s detail in the game dashboard.
 - **Settings:** On/Off controls, numeric input ranges, units, package defaults and custom-difficulty dependencies. New-world rates stay read-only.
 - **Files:** in-file search, line numbers, line jump and guided fishing/spawn tables. Guided edits replace selected tokens only, preserving legacy label bytes, delimiters, comments and line endings. Unsupported rows remain read-only in the guided view; advanced source and build validation remain available.
-
-## Economy history and experiments
-
-The Studio service collects a regular-economy/all-levels seven-day observation every 60 minutes by default, with 180 days of retention. Change or disable this under **Economy → History & watchlist**; saving a schedule uses the currently selected scope. Studio must stay running, but its browser can close. Failed observations retain an error and are not replaced with zero. History belongs to Studio's local SQLite database and never changes game data.
-
-Snapshots now retain aggregate item stock, listings, prices, sales, account-owner counts, upgrade-grade access and progression bands. Older snapshots remain compatible and unavailable fields remain blank. Watchlists show matching-scope item history. Saved observations can be compared, while the review queue flags specific evidence (stock growth without sales, substantial commodity price movement, concentrated ownership) for investigation. These are review thresholds, not automatic economic diagnoses or game changes.
-
-The event journal supports structured experiments: save a hypothesis, matching filters, watched items and an optional related change set with a baseline. Capture an outcome after one complete log period to avoid overlapping before/after windows. Activity context is retained; results are associations, not proof that the change caused the result. Current-level cohorts can move between stages.
-
-Owner IDs are used only transiently for aggregate calculations; snapshots/exports contain owner counts and shares, not identities. GM account separation remains in every attributable view. Retained-log coverage shows earliest/latest records and counts, without claiming uninterrupted logging. Native item GET/USE records still do not prove exact production or consumption. New generated quests emit `STUDIO_Q_ITEM` v1 logs measuring inventory count changes around turn-ins and rewards. These cover those quests only; ordinary loot, crafting and refining quantities remain unverified. The protected engine's item hint/step semantics could not be established with the available ELF analysis providers; no speculative parser is enabled.
-
-CSV/JSON exports include ownership, instrumented quest flows, watchlist history, review queue, refinement raw labels, equipment access and experiment baselines/outcomes. Units and missing-data definitions travel with the report. Nothing automatically changes drop rates or rarity.
 
 ## Guided editing of normal quests
 
@@ -304,13 +286,9 @@ Open **Quests → Edit quest** to use fields instead of editing Lua. The editor 
 
 Preview re-analyses the current sources and checks every source/dependency hash. Token-span edits preserve other bytes, original encoding and newlines. Changes use the same review, backups, named sets and custom-diff update protection as other editors. Guided drafts retain their original dependency versions and can be recovered into a change set after an update. No game files are written until Save; no game restart happens until Apply.
 
-## Economy while the game is offline
-
-The dashboard reads the running database; game files do not contain live balances. If Docker or the world database is stopped, the banner explains how to reconnect. Overview displays the latest **saved snapshot for exactly the selected population, stage, period and boundaries**, with its capture time. Items & demand provides a searchable saved item table. Missing observations remain unavailable and stale figures are never represented as live. Journal, history, configured drops and exports remain accessible. Start Docker Desktop and the world in the game launcher, then **Refresh** for live data. Studio does not start/restart the game automatically.
-
 ## Item icons
 
-Economy’s live and saved item tables, watchlist and review queue use the shared item icon renderer and hover descriptions. Numeric IDs observed in the database can display icons even when the web item catalog does not name them.
+Item search, drops, crafting and quest rewards use the shared item icon renderer and hover descriptions. Missing local assets have an explicit fallback.
 
 Studio reads the installed client's explicit `gamedata/item_list.txt` aliases and original icon pixels from its packs. It converts supported TGA icons into private PNGs and can recover an unambiguous icon through the client's exact original proto name. Explicit missing assets and ambiguous mappings stay labelled **Icon unavailable**. Names, descriptions, mappings and images share the installation-bound `<stateDir>/catalogue/` cache; live item/mob definitions use its server snapshot. Background checks refresh changed sources while keeping the last readable snapshot during interrupted updates or outages. Client packs and game files are unchanged. See [catalogue sources, refresh and offline use](ITEM_CATALOG.md).
 

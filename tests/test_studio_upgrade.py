@@ -10,8 +10,6 @@ from unittest.mock import patch, Mock
 import tests.test_studio as test_studio
 from metin2_studio.server import ACTIVE_CHANGESET, digest
 from metin2_studio.studio_features import combined_drops, drop_index, table_plan, table_view, bulk_drop_plan, search
-from metin2_studio.economy import analyse, options
-from tests.test_economy import observations, CATALOG
 
 
 class UpgradeTests(unittest.TestCase):
@@ -38,12 +36,12 @@ class UpgradeTests(unittest.TestCase):
     def quest(self, **values):
         return dict(id='studio_new_exchange', title='Village supplies', intro='Bring supplies.', npc='9001', target='8001', reward='25041', quantity=1, kills=10, level=5, yang=100, exp=20, **values)
 
-    def test_turnin_cooldown_inventory_guards_and_measured_logging(self):
+    def test_turnin_cooldown_inventory_guards_without_analytics_logging(self):
         _, code = self.s.quest_code(self.quest(template='exchange', requiredItem='30001', requiredCount=4, cooldown=3600))
         self.assertIn('pc.count_item(30001) < 4', code)
         self.assertIn('pc.remove_item(30001, 4)', code)
-        self.assertIn('v1:OUT:30001:', code)
-        self.assertIn('local gained = pc.count_item(25041) - before_reward', code)
+        self.assertNotIn('STUDIO_Q_ITEM', code)
+        self.assertIn('pc.give_item2(25041, 1)', code)
         self.assertIn('get_time() + 3600', code)
         self.assertNotIn('state hunting begin', code)
         self.assertLess(code.index('pc.remove_item'), code.index('pc.give_item2'))
@@ -243,35 +241,6 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(self.s.job['status'], 'unverified')
         self.assertFalse(self.s.job['runtime']['questAccess']['readable'])
         self.assertTrue(self.s.workspace.preference('nativeUpdatePending'))
-
-    def test_owner_concentration_and_instrumented_flows_exclude_gm(self):
-        raw = observations()
-        raw['available'] += ['owners','scriptFlows']
-        raw['owners'] = [[30001,20,'human',10,80],[30001,20,'human',20,20],[30001,20,'gm',30,10000]]
-        raw['scriptFlows'] = [['v1:IN:30001:4',20,'human',3],['v1:OUT:30001:2',20,'human',2],['v1:IN:30001:99',20,'gm',100],['malformed',20,'human',999]]
-        result = analyse(raw, options({}), CATALOG)
-        item = next(row for row in result['items'] if row['id']=='30001')
-        self.assertEqual((item['owners'], item['topOwnerShare']), (2,80))
-        self.assertEqual((item['scriptIn'], item['scriptOut']), (12,4))
-        encoded = json.dumps(result)
-        self.assertNotIn('owner_id', encoded)
-        self.assertNotIn('ownership', result)
-
-    def test_automatic_schedule_and_experiment_period_guards(self):
-        tools = self.s.economy.tools
-        self.assertIsNotNone(tools)
-        with self.assertRaises(ValueError):
-            tools.schedule({'minutes': 1})
-        saved = tools.schedule({'enabled': True,'minutes': 30,'retention': 90,'filters': {'stage': 'late'}})
-        self.assertEqual(saved['filters']['stage'], 'late')
-        raw = observations()
-        with patch.object(self.s.economy, 'collect', return_value=raw), patch('metin2_studio.economy.configured_sources', return_value=[]):
-            raw['at'] = time.time()
-            result = tools.experiment({'title':'Scroll trial','hypothesis':'Demand rises','items':['25041'],'filters':{'days':1}})
-            with self.assertRaises(ValueError):
-                tools.experiment({'action':'finish','id':result['id']})
-            report = self.s.economy.report({'days':1})
-            self.assertTrue(report['experiments'])
 
     def test_adopt_existing_edit_tracks_only_reviewed_backup_diff(self):
         path = self.s.locale / 'blend.txt'

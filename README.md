@@ -2,7 +2,7 @@
 
 **beta-1.16.0** · A local dashboard for your Metin2 Singleplayer world and client add-ons.
 
-Edit drops, create quests, manage crafting, explore items and follow the economy.
+Edit drops, create quests, manage crafting, explore items and manage your world.
 Add in-game tools such as Boss Atlas and Pocket Wiki through the same application.
 
 [How to start](#how-to-start) · [Architecture overview](#architecture-overview) · [See what you can do](#see-what-you-can-do)
@@ -110,9 +110,7 @@ covers installation, controls, settings, updates and creating your own extension
 The browser’s **World atlas** filters creatures by type or name. Hover to isolate
 their zones and preview portraits, levels and drops; click to pin.
 
-**Follow the economy across progression stages.** Separate GM accounts, inspect Yang, item stock, recorded sales and upgrade activity, then export a report. Coverage notes explain what the existing game data can establish.
-
-![Economy dashboard with population, progression and period filters, GM exclusion and six economic indicators](docs/screenshots/economy.jpg)
+**Open the game’s economy dashboard.** The Economy shortcut opens the installed game dashboard for currency, item circulation and shops. Studio does not run a second economy collector. Previous Studio observations and notes remain available as an archive.
 
 <details>
 <summary><strong>Edit Metin, monster and chest drops</strong></summary>

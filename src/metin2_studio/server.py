@@ -25,8 +25,7 @@ from metin2_studio.catalogue import Catalogue, sql_rows
 from metin2_studio import deployment_progress
 from metin2_studio.item_icons import icon_path
 from metin2_studio.item_usage import item_usage, item_drop_summary
-from metin2_studio.economy import Economy
-from metin2_studio.economy_export import download as economy_download
+from metin2_studio.game_dashboard import dashboard_info, retire_collection, history_archive
 from metin2_studio.workspace import Workspace, history_category, history_areas
 from metin2_studio.protected_updates import ProtectedUpdates
 from metin2_studio.studio_features import drop_index, combined_drops, bulk_drop_plan, search as studio_search, table_view, table_plan
@@ -112,7 +111,7 @@ class Studio:
         interrupted = self.workspace.interrupt_deployments()
         if interrupted:
             self.job = interrupted
-        self.economy = Economy(self)
+        retire_collection(self.workspace)
         from metin2_studio.native_crafting import NativeCrafting
         self.native_crafting = NativeCrafting(self)
         self.updates = ProtectedUpdates(self)
@@ -183,10 +182,7 @@ class Studio:
                 self.items, self.mobs = snapshot['items'], snapshot['mobs']
                 self.icons = snapshot['legacyIcons']
                 self._catalogue_revision = snapshot['revision']
-                if hasattr(self, 'economy'):
-                    self.economy.cached = None
                 self._drop_hover_cache = None
-                self._economy_sources = None
             self._catalogue_status = dict(self.catalogue.status)
         return self.catalogue_status()
 
@@ -1047,7 +1043,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(result)
             if u.path == "/api/bootstrap":
                 with s.lock:
-                    return self.send({"application": APPLICATION, "projectRoot": str(HERE), "modules": ["server", "addons"], "studioVersion": studio_version(), "stateDir": str(s.state), "mode": "configuration-and-quests", "token": s.token, "root": str(s.root), "version": (s.root / "VERSION").read_text().strip(), "counts": {"items": len(s.items), "mobs": len(s.mobs), "settings": len(s.settings_schema), "files": len(s.inventory())}, "catalogue": s.catalogue_status(), "items": list(s.items.values()), "mobs": list(s.mobs.values()), "groups": s.groups()})
+                    return self.send({"application": APPLICATION, "projectRoot": str(HERE), "modules": ["server", "addons"], "studioVersion": studio_version(), "gameDashboard": dashboard_info(s), "stateDir": str(s.state), "mode": "configuration-and-quests", "token": s.token, "root": str(s.root), "version": (s.root / "VERSION").read_text().strip(), "counts": {"items": len(s.items), "mobs": len(s.mobs), "settings": len(s.settings_schema), "files": len(s.inventory())}, "catalogue": s.catalogue_status(), "items": list(s.items.values()), "mobs": list(s.mobs.values()), "groups": s.groups()})
             if u.path == "/api/group":
                 return self.send(s.group(q["source"], q["key"]))
             if u.path == "/api/drop-source":
@@ -1088,14 +1084,12 @@ class Handler(BaseHTTPRequestHandler):
                 with s.lock:
                     data = item_drop_summary(s, q["id"])
                 return self.send(data)
-            if u.path == "/api/economy":
-                return self.send(s.economy.report(q, fresh=q.get('fresh') == '1'))
-            if u.path == "/api/economy/export":
-                format = q.get('format', 'zip')
-                if format not in ('zip', 'json'):
-                    raise ValueError('Choose a CSV pack (zip) or JSON export.')
-                raw, mime, filename = economy_download(s.economy.export(q), format)
-                return self.send(raw, mime=mime, filename=filename)
+            if u.path == '/api/game-dashboard':
+                return self.send(dashboard_info(s))
+            if u.path == '/api/economy/archive':
+                return self.send(history_archive(s.state), mime='application/zip', filename='studio-economy-history.zip')
+            if u.path.startswith('/api/economy'):
+                return self.send({'error': 'Studio Economy collection has been retired. Open the game dashboard from Studio.'}, 410)
             if u.path == "/api/file":
                 return self.send(s.file(q["id"]))
             if u.path == "/api/history":
@@ -1118,7 +1112,7 @@ class Handler(BaseHTTPRequestHandler):
                         return 0
                 return self.send({'items': sorted(rows, key=activity_time, reverse=True)[:100]})
             if u.path == "/api/status":
-                return self.send({"docker": s.docker_status(), "health": s.runtime_health(), "job": s.public_job(), "catalogue": s.catalogue_status()})
+                return self.send({"docker": s.docker_status(), "health": s.runtime_health(), "job": s.public_job(), "catalogue": s.catalogue_status(), "gameDashboard": dashboard_info(s)})
             if u.path.startswith('/mob-icons/'):
                 ident = unquote(u.path.split('/')[-1])
                 p = s.catalogue.icon(ident, 'mob')
@@ -1135,7 +1129,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(b"", 404, "image/png")
             if u.path == '/crafting.js':
                 return self.send((HERE / 'web/crafting.js').read_bytes(), mime='application/javascript; charset=utf-8')
-            static = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "application/javascript; charset=utf-8"), "/workspace.js": ("workspace.js", "application/javascript; charset=utf-8"), "/editors.js": ("editors.js", "application/javascript; charset=utf-8"), "/quests.js": ("quests.js", "application/javascript; charset=utf-8"), "/economy_tools.js": ("economy_tools.js", "application/javascript; charset=utf-8"), "/economy.js": ("economy.js", "application/javascript; charset=utf-8"), "/navigation.js": ("navigation.js", "application/javascript; charset=utf-8"), "/catalog.js": ("catalog.js", "application/javascript; charset=utf-8"), "/style.css": ("style.css", "text/css; charset=utf-8")}
+            static = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "application/javascript; charset=utf-8"), "/workspace.js": ("workspace.js", "application/javascript; charset=utf-8"), "/editors.js": ("editors.js", "application/javascript; charset=utf-8"), "/quests.js": ("quests.js", "application/javascript; charset=utf-8"), "/game_dashboard.js": ("game_dashboard.js", "application/javascript; charset=utf-8"), "/navigation.js": ("navigation.js", "application/javascript; charset=utf-8"), "/catalog.js": ("catalog.js", "application/javascript; charset=utf-8"), "/style.css": ("style.css", "text/css; charset=utf-8")}
             static.update({'/operations.js': ('operations.js', 'application/javascript; charset=utf-8'),
                            '/interface.css': ('interface.css', 'text/css; charset=utf-8')})
             if u.path in static:
@@ -1194,11 +1188,11 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
             ACTIVE_CHANGESET.set(self.headers.get('X-Studio-Changeset') or None)
-            if path.startswith("/api/economy"):
-                ACTIVE_CHANGESET.set(None)
+            if path.startswith('/api/economy'):
+                return self.send({'error': 'Studio Economy collection has been retired. Use the game dashboard.'}, 410)
             if path == "/api/preferences":
                 key = str(b.get("key", ""))
-                if key not in ("itemFavourites", "itemRecent", "economyWatchlist"):
+                if key not in ("itemFavourites", "itemRecent"):
                     raise ValueError("Unknown preference.")
                 if not isinstance(b.get('value'), list) or len(b['value']) > 200 or any(str(ident) not in s.items for ident in b['value']):
                     raise ValueError('Choose at most 200 known catalog items.')
@@ -1251,14 +1245,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(s.updates.download())
             if path == '/api/updates/install':
                 return self.send(s.updates.install(b))
-            if path == '/api/economy/schedule':
-                return self.send(s.economy.tools.schedule(b))
-            if path == '/api/economy/experiment':
-                return self.send(s.economy.tools.experiment(b))
-            if path == '/api/economy/capture':
-                return self.send(s.economy.capture(b))
-            if path == '/api/economy/note':
-                return self.send(s.economy.note(b))
+
             if path == '/api/preview/quest-fields':
                 from metin2_studio.quest_fields import plan
                 with s.lock:
@@ -1291,15 +1278,11 @@ def main():
         if lock:
             lock.close()
         parser.error(str(error))
-    if Handler.studio.workspace.preference('economySchedule', None) is None:
-        Handler.studio.economy.tools.schedule({'enabled': True, 'minutes': 60, 'retention': 180, 'filters': {}})
-    Handler.studio.economy.tools.start()
     Handler.studio.start_catalogue_sync()
     try:
         server = ThreadingHTTPServer(("127.0.0.1", selected['port']), Handler)
         server.daemon_threads = False  # Close waits for in-flight handlers.
     except OSError:
-        Handler.studio.economy.tools.stop.set()
         Handler.studio._catalogue_stop.set()
         lock.close()
         parser.error(f"Local port {selected['port']} is unavailable. Close the other Studio instance or choose another --port.")
@@ -1321,7 +1304,6 @@ def main():
                 except ValueError as error:
                     print(str(error), flush=True)
     finally:
-        Handler.studio.economy.tools.stop.set()
         Handler.studio._catalogue_stop.set()
         server.server_close()
         lock.close()

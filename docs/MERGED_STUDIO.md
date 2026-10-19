@@ -7,7 +7,7 @@ the repository or inviting testers remains a separate maintainer decision. See
 
 ## Navigation and shared world
 
-Overview, Economy and the existing Game configuration editors remain available. World atlas shows configured boss/Metin regions and base intervals from the selected server. Its View drops action opens the resolved mob in Studio, and Inspect spawn configuration opens the saved source. Neither action saves or applies a change.
+Overview and the existing Game configuration editors remain available. Economy opens the game dashboard; earlier Studio history can be downloaded from the homepage archive shortcut. World atlas shows configured boss/Metin regions and base intervals from the selected server. Its View drops action opens the resolved mob in Studio, and Inspect spawn configuration opens the saved source. Neither action saves or applies a change.
 
 Add-ons contains Discover, Repositories, Installed and Add-on settings.
 Repositories subscribes to public GitHub repositories or creator HTTPS catalogs

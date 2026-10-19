@@ -40,8 +40,8 @@ afterwards. The server can stay running; unfinished transactions have a recovery
 workflow.
 
 The existing client connects directly to the game server. Closing Studio leaves
-the game and installed add-ons running. Economy observations read existing game
-data and save aggregate snapshots in Studio's SQLite files outside Docker.
+the game and installed add-ons running. Economy opens the game’s existing
+dashboard. Older Studio observations are preserved in a read-only archive.
 Custom quests are optional server-side `.quest` scripts compiled by the existing
 build; their creation also adds a backed-up compiler integration. Client add-ons
 add Python integration to client packs. Studio does not patch engine or client
@@ -57,7 +57,7 @@ The game and Studio use separate storage:
 |---|---|---|
 | Existing game | MariaDB | Runs in the game's Docker setup; stores accounts, characters, inventories, shops, game logs and native crafting. Studio connects to this existing service. |
 | Studio workspace | `workspace.sqlite` | A local Windows file holding drafts, tracked custom changes, change sets, deployment records and preferences. |
-| Studio economy history | `economy.sqlite` | A local Windows file holding economic snapshots, journal notes and balancing experiments. |
+| Archived Studio economy history | `economy.sqlite` | Preserved snapshots, notes and experiments from earlier versions; read only for explicit archive downloads. |
 
 **SQLite is outside Docker.** Studio's Python process accesses these files directly; SQLite needs no separate server or container. They live in the selected Studio data folder, normally `data/worlds/<id>/`. Setup prints its exact path; migrated installations can keep an older or explicitly chosen data folder.
 
@@ -68,7 +68,7 @@ In-game preferences such as Pocket Wiki bookmarks live under
 `%LOCALAPPDATA%/Metin2Studio/addon-preferences/<world-id>/`.
 
 With Docker stopped, Studio can still open file-based editors and saved Studio
-history. Live economy data and live native crafting require the game's MariaDB
+history. Live native crafting requires the game's MariaDB
 service; **Server Apply** requires Docker. Client pack changes have their own
 Apply and do not rebuild or restart the server. Stopping Studio leaves the game,
 its database and installed add-ons running. Back up Studio's data folder and the
@@ -76,8 +76,13 @@ game/world database separately.
 
 ### Scalability
 
-This beta is designed for one local owner managing one world. Each Studio installation has independent local databases; players do not write to Studio's SQLite files when they kill monsters or trade. By default, Studio collects aggregate economy snapshots every 60 minutes while running, has a 180-day snapshot retention setting and caches live observations for up to 60 seconds.
+Studio is designed for one local owner managing one world. It no longer runs an
+economy collector, scans gameplay logs for analytics or processes economic
+histories during navigation. Economy links to the game’s existing dashboard;
+that dashboard and its collection workload remain owned by the game.
 
-SQLite suits this workload, but it permits only one writer per database at a time; see [SQLite's deployment guidance](https://www.sqlite.org/whentouse.html). A shared service with many simultaneous administrators would need changes to Studio's architecture as well as its storage.
-
-Larger economic histories would benefit from indexed history queries and more compact snapshot processing. Analytics also query the game's MariaDB, so performance depends on game data, queries and hardware. Some collection limits deliberately bound work—for example, 20,000 sales records per observation—with incomplete coverage flagged in the report. Functional tests do not establish a maximum supported player count.
+Old Studio economy databases remain archived and are read only when the owner
+requests a download. Catalogue sync and native crafting retain their bounded
+reads from the game’s database. File editors, review, backups and update
+protection retain their existing local state and safety checks. Functional tests
+do not establish a maximum supported player count or multi-admin deployment.

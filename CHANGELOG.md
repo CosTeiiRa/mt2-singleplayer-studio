@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Replace Studio’s Economy analytics with shortcuts to the game dashboard.
+- Remove the duplicate collector and disable old schedules; preserve existing
+  history and notes with a read-only SQLite archive download.
+- Remove retired analytics UI, exports, tests and CSS; detach native crafting
+  database access and stop adding economy-only logs to new quest templates.
+
+## beta-1.17.0
+
 - Reduce explanatory copy and collect Economy methodology under one disclosure.
 - Speed up Economy’s active-account query by deduplicating logged characters;
   retain the last matching observation while refreshing, including after reload.

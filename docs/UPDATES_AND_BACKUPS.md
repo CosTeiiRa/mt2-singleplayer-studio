@@ -7,7 +7,7 @@ Preserve your Studio history and game/world backups separately. For interrupted 
 ## Local data, backups and privacy
 
 - Local setup is saved in **`data/studio-settings.json`**. It contains the selected server path, port and data path, not database credentials.
-- By default each selected game folder gets its own **`data/worlds/<id>/`**. This holds `workspace.sqlite`, `economy.sqlite`, `backups/`, add-on state/backups under `addons/`, cached sources and reviewed update packages. Setup prints the exact location.
+- By default each selected game folder gets its own **`data/worlds/<id>/`**. This holds `workspace.sqlite`, `backups/`, add-on state/backups under `addons/`, cached sources and reviewed update packages. Existing `economy.sqlite` archives are retained when present. Setup prints the exact location.
 - Preserve the **whole `data/` folder** when updating Studio. Crafting reconciliation, rollback, drafts and history depend on it. A selected data folder is bound to its server path to prevent using another world's history accidentally.
 - Backups can include the game's original `.env`, so treat local data as private. `data/`, databases, logs, credentials and built ZIPs are excluded from Git. The release builder also excludes them.
 - Studio listens only on `127.0.0.1`. It is a local owner tool; do not expose it through a public bind, proxy or port forwarding.
