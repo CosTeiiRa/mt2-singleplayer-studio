@@ -1,5 +1,5 @@
 import unittest
-from workspace import history_category, history_areas
+from metin2_studio.workspace import history_category, history_areas
 
 
 class HistoryCategoryTests(unittest.TestCase):

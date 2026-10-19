@@ -10,11 +10,10 @@ import urllib.request
 import uuid
 
 PROJECT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT))
-sys.path.insert(0, str(PROJECT / 'tests'))
-from collection_fixture import FIRST, SECOND, CollectionFixture, specs
-from github_fixture import URL
-from server import Handler, Studio
+sys.path[:0] = [str(PROJECT), str(PROJECT / 'src')]
+from tests.collection_fixture import FIRST, SECOND, CollectionFixture, specs
+from tests.github_fixture import URL
+from metin2_studio.server import Handler, Studio
 from tools.check_github_workflow import hashes
 
 A, B = 'a'*40, 'b'*40

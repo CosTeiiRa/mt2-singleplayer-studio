@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Organized Python application code under `src/metin2_studio/`, Windows helpers
+  under `scripts/windows/`, and release configuration under `config/`.
+- Added the shared `studio.py serve` / `studio.py setup` entry point while keeping
+  the familiar Windows launch buttons and the existing private data location.
+- Updated creator tools, documentation links, portable packaging and CI for the
+  new layout; added launch checks from an unrelated working directory and a
+  freshly extracted ZIP.
+- Brief Windows sharing locks during add-on state replacement and legacy data
+  migration now receive a bounded retry. Failed writes still preserve the previous
+  file and report the error; unrelated permission failures are returned immediately.
+
 Older entries describe behavior at that release. See the README and latest entry
 for the current normal-client and game-update workflow.
 

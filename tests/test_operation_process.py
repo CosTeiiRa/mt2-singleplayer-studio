@@ -4,7 +4,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from operation_process import process_identity, previous_build_running
+from metin2_studio.operation_process import process_identity, previous_build_running
 
 
 class ProcessIdentityTests(unittest.TestCase):

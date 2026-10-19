@@ -6,7 +6,7 @@ import sys
 
 root = Path(__file__).resolve().parents[1]
 paths = list(root.glob('*.py')) + list((root / 'tests').glob('*.py')) + list((root / 'tools').glob('*.py'))
-paths += list((root / 'addonhub').rglob('*.py'))
+paths += list((root / 'src').rglob('*.py'))
 for path in paths:
     ast.parse(path.read_text('utf-8-sig'), filename=str(path))
 for path in list((root / 'web').glob('*.js')) + list((root / 'web').glob('*.mjs')):

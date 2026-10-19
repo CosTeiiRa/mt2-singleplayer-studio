@@ -4,10 +4,9 @@ import sys
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import test_studio
-from economy import Economy
-from server import ACTIVE_CHANGESET
+import tests.test_studio as test_studio
+from metin2_studio.economy import Economy
+from metin2_studio.server import ACTIVE_CHANGESET
 
 
 class QuestSupportTests(unittest.TestCase):

@@ -3,11 +3,10 @@ import json
 import sys
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import test_studio
-from server import ACTIVE_CHANGESET
-from quest_templates import library
-from quest_support import quest_name
+import tests.test_studio as test_studio
+from metin2_studio.server import ACTIVE_CHANGESET
+from metin2_studio.quest_templates import library
+from metin2_studio.quest_support import quest_name
 
 
 class QuestMenuTests(unittest.TestCase):

@@ -9,10 +9,9 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from economy import Economy, options
-from economy_export import csv_bytes, download, spreadsheet_tables
-from test_economy import CATALOG, NOW, observations
+from metin2_studio.economy import Economy, options
+from metin2_studio.economy_export import csv_bytes, download, spreadsheet_tables
+from tests.test_economy import CATALOG, NOW, observations
 
 
 def read_csv(raw):
@@ -26,7 +25,7 @@ class EconomyExportTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(dir=self.test_runs)
         self.economy = Economy(SimpleNamespace(state=Path(self.temp.name), items=CATALOG))
         self.collect = patch.object(self.economy, 'collect', return_value=observations())
-        self.sources = patch('economy.configured_sources', return_value=[])
+        self.sources = patch('metin2_studio.economy.configured_sources', return_value=[])
         self.collect.start()
         self.sources.start()
         self.addCleanup(self.sources.stop)

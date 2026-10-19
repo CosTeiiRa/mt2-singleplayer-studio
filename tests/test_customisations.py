@@ -5,9 +5,8 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from merge_custom import merge, rebase_original, minimal_numeric_edit
-from workspace import Workspace, EnvMerge
+from metin2_studio.merge_custom import merge, rebase_original, minimal_numeric_edit
+from metin2_studio.workspace import Workspace, EnvMerge
 
 
 class ThreeWayTests(unittest.TestCase):

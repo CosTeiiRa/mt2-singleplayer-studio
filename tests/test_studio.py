@@ -8,11 +8,10 @@ import unittest
 from unittest.mock import patch
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from server import Studio, DEFAULT_ROOT, digest, sql_rows
-from catalog import item_metadata
-from item_help import item_description
-from item_usage import item_usage, item_drop_summary
+from metin2_studio.server import Studio, DEFAULT_ROOT, digest, sql_rows
+from metin2_studio.catalog import item_metadata
+from metin2_studio.item_help import item_description
+from metin2_studio.item_usage import item_usage, item_drop_summary
 
 
 class StudioTests(unittest.TestCase):

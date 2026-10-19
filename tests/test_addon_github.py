@@ -6,13 +6,13 @@ import tempfile
 import unittest
 import zipfile
 
-from addonhub.artifacts import build_artifact
-from addonhub.github_source import identity
-from addonhub.hubcore.manager import Manager
-from addonhub.repositories import RepositoryStore
-from addonhub.transport import HTTPStatusError
-from github_fixture import ADDON_ID, API, URL, GitHubFixture
-from test_addon_manager import FakeBackend
+from metin2_studio.addons.artifacts import build_artifact
+from metin2_studio.addons.github_source import identity
+from metin2_studio.addons.hubcore.manager import Manager
+from metin2_studio.addons.repositories import RepositoryStore
+from metin2_studio.addons.transport import HTTPStatusError
+from tests.github_fixture import ADDON_ID, API, URL, GitHubFixture
+from tests.test_addon_manager import FakeBackend
 
 PROJECT = Path(__file__).resolve().parents[1]
 A, B, C = 'a' * 40, 'b' * 40, 'c' * 40
@@ -26,7 +26,7 @@ class GitHubTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.fetch = GitHubFixture(self.root / 'creator')
         self.package = self.fetch.add('1.0.0', A)
-        self.store = RepositoryStore(self.root / 'state', PROJECT / 'addonhub/catalog', self.fetch)
+        self.store = RepositoryStore(self.root / 'state', PROJECT / 'src/metin2_studio/addons/catalog', self.fetch)
 
     def tearDown(self):
         self.temp.cleanup()

@@ -3,10 +3,9 @@ import shutil
 import sys
 import unittest
 
-sys.path[:0] = [str(Path(__file__).resolve().parents[1])]
-import test_studio
-from server import DEFAULT_ROOT, ACTIVE_CHANGESET
-from quest_fields import analyse, plan
+import tests.test_studio as test_studio
+from metin2_studio.server import DEFAULT_ROOT, ACTIVE_CHANGESET
+from metin2_studio.quest_fields import analyse, plan
 
 
 class QuestFieldsTests(unittest.TestCase):

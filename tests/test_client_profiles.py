@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from addonhub import client_adapter
+from metin2_studio.addons import client_adapter
 
 
 class RecordedClientProfilesTests(unittest.TestCase):

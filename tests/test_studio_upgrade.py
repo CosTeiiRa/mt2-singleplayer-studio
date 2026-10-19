@@ -7,12 +7,11 @@ import time
 import unittest
 from unittest.mock import patch, Mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import test_studio
-from server import ACTIVE_CHANGESET, digest
-from studio_features import combined_drops, drop_index, table_plan, table_view, bulk_drop_plan, search
-from economy import analyse, options
-from test_economy import observations, CATALOG
+import tests.test_studio as test_studio
+from metin2_studio.server import ACTIVE_CHANGESET, digest
+from metin2_studio.studio_features import combined_drops, drop_index, table_plan, table_view, bulk_drop_plan, search
+from metin2_studio.economy import analyse, options
+from tests.test_economy import observations, CATALOG
 
 
 class UpgradeTests(unittest.TestCase):
@@ -50,7 +49,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertLess(code.index('pc.remove_item'), code.index('pc.give_item2'))
 
     def test_quest_library_round_trip_and_stale_edit(self):
-        from quest_templates import library
+        from metin2_studio.quest_templates import library
         body = self.quest(template='collection', requiredItem='30001', requiredCount=3)
         self.s.commit(self.s.quest_plan(body)['id'])
         row = next(row for row in library(self.s) if row['template'])
@@ -147,7 +146,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertNotEqual(before, self.s.build_fingerprints())
 
     def test_merged_files_matching_an_older_build_stay_pending_until_verified_apply(self):
-        from workspace import Workspace
+        from metin2_studio.workspace import Workspace
         paths = [self.s.game / 'Dockerfile', self.s.game / '.dockerignore']
         originals = {path: path.read_bytes() for path in paths}
         custom = {path: raw + b'\n# Saved Studio integration\n' for path, raw in originals.items()}
@@ -190,7 +189,7 @@ class UpgradeTests(unittest.TestCase):
         process = Mock(stdout=iter(['qc succeeded\n']))
         process.wait.return_value = 0
         self.s.job = {'status': 'running', 'lines': [], 'files': self.s.build_fingerprints(), 'id': 'validation-test'}
-        with patch('server.subprocess.Popen', return_value=process) as run:
+        with patch('metin2_studio.server.subprocess.Popen', return_value=process) as run:
             self.s.run_apply(True)
         self.assertEqual(self.s.job['status'], 'validated')
         self.assertEqual(run.call_count, 1)
@@ -201,7 +200,7 @@ class UpgradeTests(unittest.TestCase):
         process = Mock(stdout=iter(['native build passed\n']))
         process.wait.return_value = 0
         self.s.job = {'status': 'running', 'lines': [], 'files': self.s.build_fingerprints(), 'id': 'native-test'}
-        with patch('server.subprocess.Popen', return_value=process) as run, patch.object(self.s, 'runtime_health', return_value={'gameHealthy': True}), patch('runtime_checks.verify_quest_access', return_value={'readable': True, 'detail': 'Quest state files readable: 230'}):
+        with patch('metin2_studio.server.subprocess.Popen', return_value=process) as run, patch.object(self.s, 'runtime_health', return_value={'gameHealthy': True}), patch('metin2_studio.runtime_checks.verify_quest_access', return_value={'readable': True, 'detail': 'Quest state files readable: 230'}):
             self.s.run_apply()
         self.assertEqual(self.s.job['status'], 'succeeded')
         self.assertIn('Metin2-Launcher.ps1', ' '.join(run.call_args.args[0]))
@@ -220,11 +219,11 @@ class UpgradeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'pending custom merge'):
             self.s.plan('Unrelated new edit in same file', {path: b'value 70\n'}, 'Review')
         self.s.workspace.set_preference('nativeUpdatePending', {'ready': True})
-        with patch.object(self.s, 'docker_status', return_value={'available': True}), patch('server.threading.Thread'), patch.object(self.s.native_crafting, 'preflight', side_effect=AssertionError('A native custom review must not gate the game update')):
+        with patch.object(self.s, 'docker_status', return_value={'available': True}), patch('metin2_studio.server.threading.Thread'), patch.object(self.s.native_crafting, 'preflight', side_effect=AssertionError('A native custom review must not gate the game update')):
             self.s.apply()
         process = Mock(stdout=iter(['native build passed\n']))
         process.wait.return_value = 0
-        with patch('server.subprocess.Popen', return_value=process) as run, patch.object(self.s, 'runtime_health', return_value={'gameHealthy': True}), patch('runtime_checks.verify_quest_access', return_value={'readable': True, 'detail': 'Readable'}), patch('runtime_checks.subprocess.run', side_effect=AssertionError('Deferred drops are not deployed custom overrides')), patch.object(self.s.native_crafting, 'config', return_value={'recipes': {'1': 'saved custom recipe'}}), patch.object(self.s.native_crafting, 'apply', side_effect=AssertionError('Do not reapply native overrides during the game update')):
+        with patch('metin2_studio.server.subprocess.Popen', return_value=process) as run, patch.object(self.s, 'runtime_health', return_value={'gameHealthy': True}), patch('metin2_studio.runtime_checks.verify_quest_access', return_value={'readable': True, 'detail': 'Readable'}), patch('metin2_studio.runtime_checks.subprocess.run', side_effect=AssertionError('Deferred drops are not deployed custom overrides')), patch.object(self.s.native_crafting, 'config', return_value={'recipes': {'1': 'saved custom recipe'}}), patch.object(self.s.native_crafting, 'apply', side_effect=AssertionError('Do not reapply native overrides during the game update')):
             self.s.run_apply()
         self.assertEqual(self.s.job['status'], 'succeeded')
         self.assertEqual(self.s.job['runtime']['checkedFields'], 0)
@@ -239,7 +238,7 @@ class UpgradeTests(unittest.TestCase):
         process = Mock(stdout=iter(['native build passed\n']))
         process.wait.return_value = 0
         self.s.job = {'status': 'running', 'lines': [], 'files': self.s.build_fingerprints(), 'id': 'quest-access-test'}
-        with patch('server.subprocess.Popen', return_value=process), patch.object(self.s, 'runtime_health', return_value={'gameHealthy': True}), patch('runtime_checks.verify_quest_access', return_value={'readable': False, 'issue': 'Quest files are not readable by the game account.'}):
+        with patch('metin2_studio.server.subprocess.Popen', return_value=process), patch.object(self.s, 'runtime_health', return_value={'gameHealthy': True}), patch('metin2_studio.runtime_checks.verify_quest_access', return_value={'readable': False, 'issue': 'Quest files are not readable by the game account.'}):
             self.s.run_apply()
         self.assertEqual(self.s.job['status'], 'unverified')
         self.assertFalse(self.s.job['runtime']['questAccess']['readable'])
@@ -266,7 +265,7 @@ class UpgradeTests(unittest.TestCase):
         saved = tools.schedule({'enabled': True,'minutes': 30,'retention': 90,'filters': {'stage': 'late'}})
         self.assertEqual(saved['filters']['stage'], 'late')
         raw = observations()
-        with patch.object(self.s.economy, 'collect', return_value=raw), patch('economy.configured_sources', return_value=[]):
+        with patch.object(self.s.economy, 'collect', return_value=raw), patch('metin2_studio.economy.configured_sources', return_value=[]):
             raw['at'] = time.time()
             result = tools.experiment({'title':'Scroll trial','hypothesis':'Demand rises','items':['25041'],'filters':{'days':1}})
             with self.assertRaises(ValueError):
@@ -298,7 +297,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(self.s.workspace.scan()['affectedFiles'], 0)
 
     def test_runtime_drop_check_detects_override_of_only_custom_fields(self):
-        from runtime_checks import compare_groups
+        from metin2_studio.runtime_checks import compare_groups
         group = self.s.group('mob-base', '8001 drop')
         file = self.s.locale / 'mob_drop_item.txt'
         original = file.read_bytes()

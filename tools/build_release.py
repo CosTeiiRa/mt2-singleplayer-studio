@@ -23,12 +23,12 @@ def build(root=ROOT, output=None):
     version = (root / 'VERSION').read_text('utf-8').strip()
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}', version):
         raise ValueError('Invalid release version.')
-    manifest = root / 'release-files.txt'
+    manifest = root / 'config/release-files.txt'
     names = manifest.read_text('utf-8').splitlines() if manifest.is_file() else subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode('utf-8').split('\0')
     if len(names) != len(set(names)):
         raise ValueError('Duplicate source release paths.')
     files = [name for name in names if name and release_path(name) and not name.startswith('.github/')]
-    for required in ('VERSION', 'README.md', 'server.py', 'installation.py', 'Install Studio.bat', 'Setup-Studio.ps1', 'Launch-Studio.ps1', 'web/index.html'):
+    for required in ('VERSION', 'README.md', 'studio.py', 'src/metin2_studio/server.py', 'src/metin2_studio/installation.py', 'Install Studio.bat', 'scripts/windows/Setup-Studio.ps1', 'scripts/windows/Launch-Studio.ps1', 'web/index.html'):
         if required not in files:
             raise ValueError('Release requires tracked file: ' + required)
     destination = Path(output or root / 'dist')

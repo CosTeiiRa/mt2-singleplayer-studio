@@ -92,13 +92,13 @@ reviewed client-data operation, separate from server Apply and code-package upda
 
 ## Implementation and verification
 
-Original add-on code lives in `addonhub/catalog/community.pocket-wiki/`. The
-structured exporter is `addonhub/knowledge.py`; API v2 services are
-`addonhub/runtime/m2hub_client.py`. Game integration wraps `GameWindow.Open` after
+Original add-on code lives in `src/metin2_studio/addons/catalog/community.pocket-wiki/`. The
+structured exporter is `src/metin2_studio/addons/knowledge.py`; API v2 services are
+`src/metin2_studio/addons/runtime/m2hub_client.py`. Game integration wraps `GameWindow.Open` after
 its original call, `Close` before teardown and `OnKeyDown` with input guards.
 Atlas API-v1 callbacks keep their existing behaviour.
 
-Run `python -m unittest discover -s tests -p test_pocket_wiki.py -v` for correctness,
+Run `python -m unittest discover -s tests -t . -p test_pocket_wiki.py -v` for correctness,
 lifecycle, preferences, playable-copy guards and reviewed-refresh tests. Full
 regression tests and `tools/check_project.py` also apply.
 

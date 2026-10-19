@@ -11,14 +11,14 @@ import urllib.error
 import urllib.request
 from unittest.mock import patch
 
-from addonhub.integration import AddonService
-from addonhub.artifacts import build_artifact
-from addonhub.jobs import HISTORY_LIMIT, JobCancelled
-from addonhub.hubcore.manager import _atomic_json
-from addonhub.repositories import RepositoryStore
-from addonhub.transport import HTTPStatusError, PublicHTTPSFetcher
-from github_fixture import ADDON_ID, API, URL, GitHubFixture
-from server import Handler, Studio
+from metin2_studio.addons.integration import AddonService
+from metin2_studio.addons.artifacts import build_artifact
+from metin2_studio.addons.jobs import HISTORY_LIMIT, JobCancelled
+from metin2_studio.addons.hubcore.manager import _atomic_json
+from metin2_studio.addons.repositories import RepositoryStore
+from metin2_studio.addons.transport import HTTPStatusError, PublicHTTPSFetcher
+from tests.github_fixture import ADDON_ID, API, URL, GitHubFixture
+from metin2_studio.server import Handler, Studio
 
 PROJECT = Path(__file__).resolve().parents[1]
 A = 'a' * 40
@@ -249,7 +249,7 @@ class RepositoryJobTests(unittest.TestCase):
             observations.append((received, total))
             if received:
                 raise JobCancelled()
-        with patch('addonhub.transport.public_addresses', return_value=['8.8.8.8']), patch('addonhub.transport.socket.create_connection'), patch('addonhub.transport.ssl.create_default_context'), patch('addonhub.transport.http.client.HTTPSConnection') as connection:
+        with patch('metin2_studio.addons.transport.public_addresses', return_value=['8.8.8.8']), patch('metin2_studio.addons.transport.socket.create_connection'), patch('metin2_studio.addons.transport.ssl.create_default_context'), patch('metin2_studio.addons.transport.http.client.HTTPSConnection') as connection:
             connection.return_value.getresponse.return_value = Response()
             with self.assertRaises(JobCancelled):
                 PublicHTTPSFetcher()('https://example.test/fixture.zip', 10, progress=progress)

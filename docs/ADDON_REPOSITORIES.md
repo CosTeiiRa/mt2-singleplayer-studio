@@ -2,7 +2,7 @@
 
 Studio alpha-1.7.0 can subscribe to public GitHub source repositories and creator-hosted HTTPS catalogs. No official community catalog is hosted or subscribed by default. You do not need an account, and Studio does not publish anything on your behalf.
 
-Start with the [Add-on README](../addonhub/README.md) for creation/import instructions. GitHub repositories and catalog URLs share Discover, download reviews, the immutable package cache and the existing sandbox installer.
+Start with the [Add-on README](ADDONS.md) for creation/import instructions. GitHub repositories and catalog URLs share Discover, download reviews, the immutable package cache and the existing sandbox installer.
 
 ## Player workflow
 
@@ -42,7 +42,7 @@ No GitHub credentials are stored or sent. API rate/refusal errors explain that t
 
 ## GitHub collections
 
-Follow the [collection creation tutorial](../addonhub/README.md#publish-a-collection-from-one-repository). Root `addons.json` has schema version 1, a display `name`, a `publisher`, and an `addons` list of `{ "id": "yourname.atlas", "path": "addons/atlas" }` entries. It is bounded to 256 KiB and 1–20 unique ids. Folders must be confined relative paths, distinct without case collisions or parent/child overlap. Each folder contains an ordinary `addon.json` and `payload/`; its manifest id must match the declaration. Discovery rejects a root containing both `addon.json` and `addons.json`.
+Follow the [collection creation tutorial](ADDONS.md#publish-a-collection-from-one-repository). Root `addons.json` has schema version 1, a display `name`, a `publisher`, and an `addons` list of `{ "id": "yourname.atlas", "path": "addons/atlas" }` entries. It is bounded to 256 KiB and 1–20 unique ids. Folders must be confined relative paths, distinct without case collisions or parent/child overlap. Each folder contains an ordinary `addon.json` and `payload/`; its manifest id must match the declaration. Discovery rejects a root containing both `addon.json` and `addons.json`.
 
 Adding the repository lists each member separately without selecting/downloading any member. Each has independent versions, changelogs, selected packages, installation, settings and enabled state. The repository channel is shared. Requirements/conflicts use the normal add-on ids and installation checks; Studio never automatically downloads dependencies or siblings. Members without a qualifying release remain unselectable in Stable/Prerelease; explicitly choose Development for those snapshots.
 
@@ -64,7 +64,7 @@ To iterate locally, rebuild into a new ZIP filename and import it again. Even a 
 
 ## Catalog JSON format
 
-Use `python tools/addon.py catalog` to generate an index from actual release archives, rather than entering checksums manually. The editor schema is `addonhub/schemas/repository.schema.json`; the Python validator additionally enforces SemVer, uniqueness, transport and size rules.
+Use `python tools/addon.py catalog` to generate an index from actual release archives, rather than entering checksums manually. The editor schema is `src/metin2_studio/addons/schemas/repository.schema.json`; the Python validator additionally enforces SemVer, uniqueness, transport and size rules.
 
 ```json
 {

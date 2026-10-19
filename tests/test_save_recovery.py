@@ -9,9 +9,9 @@ import urllib.request
 import urllib.error
 from unittest.mock import patch, Mock
 
-from server import Studio, Handler
-from workspace import Workspace
-from save_recovery import SaveRecovery
+from metin2_studio.server import Studio, Handler
+from metin2_studio.workspace import Workspace
+from metin2_studio.save_recovery import SaveRecovery
 
 
 def fixture(root, state):
@@ -151,13 +151,13 @@ class SaveRecoveryTests(unittest.TestCase):
         self.assertEqual([p.read_bytes() for p in self.paths], self.before)
 
     def test_committed_save_with_unfinished_receipt_finalizes_without_file_writes(self):
-        from save_recovery import manifest_write
+        from metin2_studio.save_recovery import manifest_write
         plan = self.plan()
         def interrupted_receipt(path, receipt):
             if receipt['status'] == 'saved':
                 raise KeyboardInterrupt()
             return manifest_write(path, receipt)
-        with patch('save_recovery.manifest_write', side_effect=interrupted_receipt):
+        with patch('metin2_studio.save_recovery.manifest_write', side_effect=interrupted_receipt):
             with self.assertRaises(KeyboardInterrupt):
                 self.studio.commit(plan['id'])
         self.paths[1].write_bytes(b'# subsequent game update\n')
@@ -202,10 +202,10 @@ class SaveRecoveryTests(unittest.TestCase):
     def test_interrupted_retry_requires_acknowledgement_and_waits_for_old_process(self):
         self.studio.workspace.deployment('unfinished', 'running', {'kind': 'apply', 'files': {}, 'process': {'pid': 123, 'identity': 'test'}})
         self.studio = fixture(self.root, self.state)
-        with patch('operation_process.previous_build_running', return_value=True):
+        with patch('metin2_studio.operation_process.previous_build_running', return_value=True):
             with self.assertRaisesRegex(ValueError, 'still running'):
                 self.studio.apply(acknowledge_interrupted='unfinished')
-        with patch('operation_process.previous_build_running', return_value=False):
+        with patch('metin2_studio.operation_process.previous_build_running', return_value=False):
             with self.assertRaisesRegex(ValueError, 'acknowledge'):
                 self.studio.apply()
         self.assertEqual(self.studio.workspace.summary()['interruptedDeployment']['id'], 'unfinished')
@@ -248,7 +248,7 @@ class SaveRecoveryTests(unittest.TestCase):
         process = Mock(pid=123, stdout=iter(['build line\n']))
         process.wait.return_value = 0
         self.studio.job = {'status': 'running', 'kind': 'validation', 'id': 'process-failure', 'files': {}, 'lines': []}
-        with patch.object(self.studio, 'build_fingerprints', return_value={}), patch('server.subprocess.Popen', return_value=process), patch('operation_process.process_identity', side_effect=ValueError('Cannot identify test process')):
+        with patch.object(self.studio, 'build_fingerprints', return_value={}), patch('metin2_studio.server.subprocess.Popen', return_value=process), patch('metin2_studio.operation_process.process_identity', side_effect=ValueError('Cannot identify test process')):
             self.studio.run_apply(True)
         process.communicate.assert_called_once()
         process.wait.assert_called_once()
@@ -306,7 +306,7 @@ class SaveRecoveryTests(unittest.TestCase):
         process.communicate.side_effect = OSError('Fixture broken output pipe')
         process.wait.return_value = 0
         self.studio.job = {'status': 'running', 'kind': 'validation', 'id': 'pipe-failure', 'files': {}, 'lines': []}
-        with patch.object(self.studio, 'build_fingerprints', return_value={}), patch('server.subprocess.Popen', return_value=process), patch('operation_process.process_identity', side_effect=ValueError('Fixture tracking error')):
+        with patch.object(self.studio, 'build_fingerprints', return_value={}), patch('metin2_studio.server.subprocess.Popen', return_value=process), patch('metin2_studio.operation_process.process_identity', side_effect=ValueError('Fixture tracking error')):
             self.studio.run_apply(True)
         process.wait.assert_called_once()
         self.assertEqual(self.studio.job['status'], 'failed')

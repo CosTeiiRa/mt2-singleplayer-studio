@@ -5,8 +5,8 @@ from pathlib import Path
 from urllib.parse import unquote
 import zipfile
 
-from addonhub.hubcore.packages import sha256
-from addonhub.transport import HTTPStatusError
+from metin2_studio.addons.hubcore.packages import sha256
+from metin2_studio.addons.transport import HTTPStatusError
 from tools.addon import scaffold
 
 URL = 'https://github.com/fixture-creator/atlas-addon'

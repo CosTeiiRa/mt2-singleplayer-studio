@@ -6,16 +6,16 @@ import tempfile
 import unittest
 import zipfile
 
-from addonhub.artifacts import build_artifact
-from addonhub.collections import create_collection, load_collection, validate_collection
-from addonhub.github_source import GitHubSource, identity
-from addonhub.hubcore.manager import Manager
-from addonhub.repositories import RepositoryStore
-from addonhub.transport import HTTPStatusError
-from addonhub.updates import update_notices
-from collection_fixture import FIRST, SECOND, CollectionFixture, specs
-from github_fixture import API, URL
-from test_addon_manager import FakeBackend
+from metin2_studio.addons.artifacts import build_artifact
+from metin2_studio.addons.collections import create_collection, load_collection, validate_collection
+from metin2_studio.addons.github_source import GitHubSource, identity
+from metin2_studio.addons.hubcore.manager import Manager
+from metin2_studio.addons.repositories import RepositoryStore
+from metin2_studio.addons.transport import HTTPStatusError
+from metin2_studio.addons.updates import update_notices
+from tests.collection_fixture import FIRST, SECOND, CollectionFixture, specs
+from tests.github_fixture import API, URL
+from tests.test_addon_manager import FakeBackend
 
 PROJECT = Path(__file__).resolve().parents[1]
 A, B, C = 'a'*40, 'b'*40, 'c'*40
@@ -31,7 +31,7 @@ class CollectionTests(unittest.TestCase):
         self.source = self.fetch.snapshot(A, specs())
         self.fetch.publish(FIRST, '1.0.0', A)
         self.fetch.publish(SECOND, '2.0.0', A)
-        self.store = RepositoryStore(self.root / 'state', PROJECT / 'addonhub/catalog', self.fetch)
+        self.store = RepositoryStore(self.root / 'state', PROJECT / 'src/metin2_studio/addons/catalog', self.fetch)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -199,7 +199,7 @@ class CollectionTests(unittest.TestCase):
         self.assertNotIn(FIRST, self.store.packages()[0])
 
     def test_single_repository_can_become_a_collection_without_reusing_observed_versions(self):
-        from github_fixture import GitHubFixture
+        from tests.github_fixture import GitHubFixture
         single = GitHubFixture(self.root / 'single-creator')
         single.add('1.0.0', A, addon_id=FIRST)
         self.store.fetch = single

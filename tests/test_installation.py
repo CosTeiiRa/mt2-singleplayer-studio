@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from installation import REQUIRED, bind_state, default_root, load_settings, port_number, resolve_settings, save_settings, server_root, world_state
+from metin2_studio.installation import REQUIRED, bind_state, default_root, load_settings, port_number, resolve_settings, save_settings, server_root, world_state
 
 
 class InstallationTests(unittest.TestCase):

@@ -14,7 +14,7 @@ import sys
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path[:0] = [str(ROOT), str(ROOT / 'src')]
 
 HARNESS = r'''# -*- coding: utf-8 -*-
 import os, json, traceback, time
@@ -168,10 +168,10 @@ def main():
     parser.add_argument('--prepared', type=Path, help='Reuse a previously created owned playable copy for this check.')
     parser.add_argument('--run', action='store_true')
     args = parser.parse_args()
-    from installation import default_root
-    from server import Studio
-    from addonhub.client_pack import EterPack
-    from addonhub.client_adapter import create_playable_copy
+    from metin2_studio.installation import default_root
+    from metin2_studio.server import Studio
+    from metin2_studio.addons.client_pack import EterPack
+    from metin2_studio.addons.client_adapter import create_playable_copy
     root = args.server_root or default_root()
     state = ROOT / '.test-tmp' / ('pocket-native-' + uuid.uuid4().hex[:10])
     if args.prepared:

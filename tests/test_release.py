@@ -1,5 +1,13 @@
 import unittest
-from tools.build_release import release_path
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import zipfile
+
+from tools.build_release import build, release_path
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReleaseBoundaryTests(unittest.TestCase):
@@ -14,6 +22,39 @@ class ReleaseBoundaryTests(unittest.TestCase):
                 self.assertFalse(release_path(path))
 
     def test_normal_application_and_operator_files_are_packaged(self):
-        for path in ('server.py','VERSION','README.md','Install Studio.bat','web/app.js','tests/test_installation.py','docs/USER_GUIDE.md'):
+        for path in ('studio.py','src/metin2_studio/server.py','VERSION','README.md','Install Studio.bat','scripts/windows/Setup-Studio.ps1','web/app.js','tests/test_installation.py','docs/USER_GUIDE.md'):
             with self.subTest(path=path):
                 self.assertTrue(release_path(path))
+
+
+class PortableLayoutTests(unittest.TestCase):
+    def setUp(self):
+        scratch = ROOT / '.test-tmp'
+        scratch.mkdir(exist_ok=True)
+        self.temp = tempfile.TemporaryDirectory(dir=scratch)
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+
+    def run_cli(self, path, *arguments):
+        result = subprocess.run([sys.executable, str(path), *map(str, arguments)], cwd=self.base,
+                                capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_source_entry_points_work_outside_the_project_directory(self):
+        self.assertIn('--root', self.run_cli(ROOT / 'studio.py', 'serve', '--help'))
+        self.assertIn('--server-root', self.run_cli(ROOT / 'studio.py', 'setup', '--help'))
+
+    def test_extracted_release_finds_the_application_and_bundled_addons(self):
+        archive = build(ROOT, self.base / 'dist')
+        with zipfile.ZipFile(archive) as bundle:
+            bundle.extractall(self.base / 'extracted')
+        project = self.base / 'extracted' / archive.stem
+        self.assertIn('--root', self.run_cli(project / 'studio.py', '--help'))
+        self.assertIn('--server-root', self.run_cli(project / 'studio.py', 'setup', '--help'))
+        packages = sorted((project / 'src/metin2_studio/addons/catalog').iterdir())
+        self.assertEqual(len(packages), 4)
+        output = self.run_cli(project / 'tools/validate_addon.py', *packages)
+        self.assertEqual(output.count('VALID community.'), 4)
+        self.assertTrue((project / 'scripts/windows/Launch-Studio.ps1').is_file())
+        self.assertFalse((project / 'data').exists())

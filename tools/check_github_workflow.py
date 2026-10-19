@@ -16,11 +16,10 @@ import urllib.request
 import uuid
 
 PROJECT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT))
-sys.path.insert(0, str(PROJECT / 'tests'))
-from github_fixture import ADDON_ID, API, URL, GitHubFixture
-from server import Handler, Studio
-from addonhub.transport import HTTPStatusError
+sys.path[:0] = [str(PROJECT), str(PROJECT / 'src')]
+from tests.github_fixture import ADDON_ID, API, URL, GitHubFixture
+from metin2_studio.server import Handler, Studio
+from metin2_studio.addons.transport import HTTPStatusError
 
 A, B = 'a' * 40, 'b' * 40
 

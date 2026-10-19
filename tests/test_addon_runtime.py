@@ -6,13 +6,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from tools.addon import scaffold
-from addonhub.hubcore.packages import load_package
+from metin2_studio.addons.hubcore.packages import load_package
 
 PROJECT = Path(__file__).resolve().parents[1]
 
 
 def runtime():
-    spec = importlib.util.spec_from_file_location('test_hub_runtime', PROJECT / 'addonhub' / 'runtime' / 'm2hub_runtime.py')
+    spec = importlib.util.spec_from_file_location('test_hub_runtime', PROJECT / 'src/metin2_studio/addons' / 'runtime' / 'm2hub_runtime.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

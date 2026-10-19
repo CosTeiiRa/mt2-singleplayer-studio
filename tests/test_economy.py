@@ -6,8 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from economy import Economy, analyse, options, price_change, configured_sources
+from metin2_studio.economy import Economy, analyse, options, price_change, configured_sources
 
 
 NOW = 2000000000
@@ -135,9 +134,9 @@ class EconomyMathTests(unittest.TestCase):
 
 class EconomyStorageTests(unittest.TestCase):
     def test_offline_report_keeps_saved_figures_separate_and_scope_matched(self):
-        with patch.object(self.economy, 'collect', return_value=observations()), patch('economy.configured_sources', return_value=[]):
+        with patch.object(self.economy, 'collect', return_value=observations()), patch('metin2_studio.economy.configured_sources', return_value=[]):
             self.economy.capture({})
-        with patch.object(self.economy, 'collect', side_effect=ValueError('World stopped')), patch('economy.configured_sources', return_value=[]):
+        with patch.object(self.economy, 'collect', side_effect=ValueError('World stopped')), patch('metin2_studio.economy.configured_sources', return_value=[]):
             offline=self.economy.report({})
             self.assertFalse(offline['connected'])
             self.assertIsNone(offline['metrics']['wallet'])
@@ -150,7 +149,7 @@ class EconomyStorageTests(unittest.TestCase):
 
     def test_stopped_docker_has_actionable_sanitized_error(self):
         failed=SimpleNamespace(returncode=1,stdout='',stderr='secret failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine')
-        with patch('economy.subprocess.run',return_value=failed):
+        with patch('metin2_studio.economy.subprocess.run',return_value=failed):
             with self.assertRaisesRegex(ValueError,'Open Docker Desktop') as error:self.economy.query(['SELECT 1;'])
         self.assertNotIn('secret',str(error.exception))
 
@@ -167,7 +166,7 @@ class EconomyStorageTests(unittest.TestCase):
 
     def test_capture_persists_aggregates_and_stock_loss_without_player_ids(self):
         raw = observations()
-        with patch.object(self.economy, 'collect', return_value=raw), patch('economy.configured_sources', return_value=[]):
+        with patch.object(self.economy, 'collect', return_value=raw), patch('metin2_studio.economy.configured_sources', return_value=[]):
             self.economy.capture({})
             with self.economy.connect() as conn:
                 payload = json.loads(conn.execute('SELECT payload FROM snapshots').fetchone()[0])
@@ -196,14 +195,14 @@ class EconomyStorageTests(unittest.TestCase):
 
     def test_database_command_uses_read_only_transaction_and_hides_errors(self):
         good = SimpleNamespace(returncode=0, stdout='{"set":"test","row":[1]}\n')
-        with patch('economy.subprocess.run', return_value=good) as run:
+        with patch('metin2_studio.economy.subprocess.run', return_value=good) as run:
             self.assertEqual(self.economy.query(['SELECT 1;']), {'test': [[1]]})
             sql = run.call_args.kwargs['input']
             self.assertIn('SET TRANSACTION READ ONLY', sql)
             self.assertIn('WITH CONSISTENT SNAPSHOT', sql)
             self.assertTrue(sql.endswith('ROLLBACK;'))
             self.assertNotIn('password', sql.lower())
-        with patch('economy.subprocess.run', return_value=SimpleNamespace(returncode=1, stdout='', stderr='secret credentials')):
+        with patch('metin2_studio.economy.subprocess.run', return_value=SimpleNamespace(returncode=1, stdout='', stderr='secret credentials')):
             with self.assertRaisesRegex(ValueError, 'read-only database') as error:
                 self.economy.query(['SELECT 1;'])
             self.assertNotIn('secret', str(error.exception))
@@ -216,9 +215,9 @@ class EconomyStorageTests(unittest.TestCase):
             self.assertEqual(query.call_count, 1)
 
     def test_offline_report_keeps_saved_history_and_never_replaces_live_gaps_with_zero(self):
-        with patch.object(self.economy, 'collect', return_value=observations()), patch('economy.configured_sources', return_value=[]):
+        with patch.object(self.economy, 'collect', return_value=observations()), patch('metin2_studio.economy.configured_sources', return_value=[]):
             self.economy.capture({})
-        with patch.object(self.economy, 'collect', side_effect=ValueError('World stopped')), patch('economy.configured_sources', return_value=[]):
+        with patch.object(self.economy, 'collect', side_effect=ValueError('World stopped')), patch('metin2_studio.economy.configured_sources', return_value=[]):
             report = self.economy.report({})
         self.assertFalse(report['connected'])
         self.assertEqual(report['error'], 'World stopped')
@@ -236,7 +235,7 @@ class EconomyStorageTests(unittest.TestCase):
         payload = {'metrics': {'wallet': 999999999, 'stock': 100}, 'items': []}
         with self.economy.connect() as conn:
             conn.execute('INSERT INTO snapshots(at,scope,payload) VALUES (?,?,?)', (NOW-3600, json.dumps(old_scope, sort_keys=True), json.dumps(payload)))
-        with patch.object(self.economy, 'collect', return_value=observations()), patch('economy.configured_sources', return_value=[]):
+        with patch.object(self.economy, 'collect', return_value=observations()), patch('metin2_studio.economy.configured_sources', return_value=[]):
             clean = self.economy.report({})
             self.assertEqual(clean['history'], [])
             self.assertIsNone(clean['baseline'])

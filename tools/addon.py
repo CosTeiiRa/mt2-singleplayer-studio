@@ -6,13 +6,13 @@ import sys
 from urllib.parse import quote, urljoin
 
 PROJECT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT))
-from addonhub.artifacts import build_artifact, inspect_artifact
-from addonhub.collections import create_collection, load_collection
-from addonhub.hubcore.packages import ID_RE, load_package, sha256, validate_manifest
-from addonhub.repositories import validate_index
-from addonhub.transport import https_url
-from addonhub.versions import Version
+sys.path[:0] = [str(PROJECT), str(PROJECT / 'src')]
+from metin2_studio.addons.artifacts import build_artifact, inspect_artifact
+from metin2_studio.addons.collections import create_collection, load_collection
+from metin2_studio.addons.hubcore.packages import ID_RE, load_package, sha256, validate_manifest
+from metin2_studio.addons.repositories import validate_index
+from metin2_studio.addons.transport import https_url
+from metin2_studio.addons.versions import Version
 
 
 def scaffold(addon_id, name, author, destination, version='0.1.0', license_name='UNLICENSED'):

@@ -27,15 +27,15 @@ jobs:
           package-manager-cache: false
       - run: python tools/check_project.py
       - run: >-
-          python -m pip install --only-binary=:all: -r requirements-addons.txt --target .vendor
+          python -m pip install --only-binary=:all: -r config/requirements-addons.txt --target .vendor
         if: matrix.python != '3.10'
-      - run: python -m unittest discover -s tests -v
+      - run: python -m unittest discover -s tests -t . -v
       - run: node --test tests/apply_status.test.js tests/history.test.js tests/catalog.test.js tests/icons.test.js tests/navigation.test.js tests/quest_help.test.js tests/update_priority.test.js tests/addons.test.mjs tests/addons_view.test.mjs tests/addon_jobs.test.mjs
       - name: Validate Windows launchers
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          Get-ChildItem -Filter *.ps1 | ForEach-Object {
+          Get-ChildItem -Path scripts/windows -Filter *.ps1 | ForEach-Object {
             $parseErrors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$parseErrors)
             if ($parseErrors) { throw ($parseErrors | Out-String) }

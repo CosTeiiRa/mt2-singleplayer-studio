@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from addonhub.hubcore.manager import Manager
+from metin2_studio.addons.hubcore.manager import Manager
 
 
 def encode(files):

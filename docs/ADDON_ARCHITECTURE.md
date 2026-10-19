@@ -68,9 +68,9 @@ copies assets without starting a client. See
 
 The service boundaries below are shared by normal clients and optional testing targets.
 
-`server.py` remains the only HTTP entry point. Existing server endpoints and web scripts continue to serve the server workspace. `/api/addons/*` delegates to `addonhub.integration.AddonService`; the same Studio session token, localhost Host/Origin checks and CSP protect both modules. Add-on JSON mutations are limited to 64 KB. The authenticated local-package import endpoint separately accepts a bounded raw ZIP of at most 66 MiB; it rejects incomplete uploads before selecting a package.
+`src/metin2_studio/server.py` remains the only HTTP entry point. Existing server endpoints and web scripts continue to serve the server workspace. `/api/addons/*` delegates to `metin2_studio.addons.integration.AddonService`; the same Studio session token, localhost Host/Origin checks and CSP protect both modules. Add-on JSON mutations are limited to 64 KB. The authenticated local-package import endpoint separately accepts a bounded raw ZIP of at most 66 MiB; it rejects incomplete uploads before selecting a package.
 
-`Studio.addons` initializes lazily. Its manager is `addonhub.hubcore.manager.Manager`, using `addonhub.client_adapter.ClientAdapter` and original package examples in `addonhub/catalog`. Installed pack keys and game material are read locally and are never distributed. Optional wheel imports stay inside the add-on package; base Studio startup does not require them.
+`Studio.addons` initializes lazily. Its manager is `metin2_studio.addons.hubcore.manager.Manager`, using `metin2_studio.addons.client_adapter.ClientAdapter` and original package examples in `src/metin2_studio/addons/catalog`. Installed pack keys and game material are read locally and are never distributed. Optional wheel imports stay inside the add-on package; base Studio startup does not require them.
 
 The selected server fixes the world. Its normal sibling client is writable when its executable matches a recorded integration profile and the hash captured at connection. The exact client must be closed at review/apply; the server can stay running. Optional testing targets require valid world-owned markers. Another world's target is rejected. A state-folder lock prevents competing merged Studio instances using that state; separate state folders do not coordinate external tools editing the same game.
 
@@ -80,7 +80,7 @@ Server state remains in its existing schema. Add-on state lives beneath `state/a
 
 World atlas data always comes from the selected server's saved configuration. Region paths use portable forward slashes so they match Studio file IDs. Mob/group resolution supplies the drop target. Client runtime data is generated through the original reviewed pack composition, and changes after review invalidate apply. A later saved map edit needs a new reviewed add-on configuration/install operation to refresh generated client data; no automatic live injection occurs.
 
-The recorded executable profile remains evidence of native startup/import/widget checks on the unchanged runtime. It is not interactive gameplay certification. Original Hub code licensing is retained in `addonhub/LICENSE`; dependency notices are in `addonhub/THIRD_PARTY.md`.
+The recorded executable profile remains evidence of native startup/import/widget checks on the unchanged runtime. It is not interactive gameplay certification. Original Hub code licensing is retained in `src/metin2_studio/addons/LICENSE`; dependency notices are in `docs/THIRD_PARTY.md`.
 
 `RepositoryStore` supplies the manager's composed catalog from bundled packages and the explicitly selected verified release cache. Metadata checks and archive downloads are user-requested mutations; GET routes/startup do not fetch remotely. `transport.py` pins validated public DNS addresses and verifies the original TLS hostname on every hop. `artifacts.py` validates bounded archive members, strict JSON, declared contents and checksums without importing payload code. `versions.py` supplies SemVer precedence and a limited explicit comparator grammar.
 

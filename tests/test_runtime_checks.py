@@ -8,8 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from runtime_checks import verify, verify_quest_access
+from metin2_studio.runtime_checks import verify, verify_quest_access
 
 
 class QuestAccessTests(unittest.TestCase):
@@ -21,7 +20,7 @@ class QuestAccessTests(unittest.TestCase):
 
     def test_permission_failure_prevents_success_even_without_custom_drops(self):
         run = SimpleNamespace(returncode=1, stdout='', stderr='Permission denied')
-        with patch('runtime_checks.subprocess.run', return_value=run) as command:
+        with patch('metin2_studio.runtime_checks.subprocess.run', return_value=run) as command:
             result = verify(self.studio)
         self.assertFalse(result['questAccess']['readable'])
         self.assertIn('not readable', result['issues'][0])
@@ -30,14 +29,14 @@ class QuestAccessTests(unittest.TestCase):
 
     def test_success_reports_the_number_actually_read(self):
         run = SimpleNamespace(returncode=0, stdout='Quest state files readable: 230\n')
-        with patch('runtime_checks.subprocess.run', return_value=run):
+        with patch('metin2_studio.runtime_checks.subprocess.run', return_value=run):
             result = verify(self.studio)
         self.assertEqual(result['issues'], [])
         self.assertTrue(result['questAccess']['readable'])
         self.assertIn('230', result['questAccess']['detail'])
 
     def test_unavailable_probe_is_not_reported_as_verified(self):
-        with patch('runtime_checks.subprocess.run', side_effect=subprocess.TimeoutExpired('docker', 30)):
+        with patch('metin2_studio.runtime_checks.subprocess.run', side_effect=subprocess.TimeoutExpired('docker', 30)):
             result = verify_quest_access(self.studio)
         self.assertFalse(result['readable'])
         self.assertIn('could not be verified', result['issue'])
@@ -57,7 +56,7 @@ class QuestAccessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=test_root) as directory:
             assert Path(directory).resolve().is_relative_to(test_root.resolve())
             _, expected = self.custom_quest(directory)
-            with patch('runtime_checks.subprocess.run', return_value=SimpleNamespace(returncode=1, stdout='')) as command:
+            with patch('metin2_studio.runtime_checks.subprocess.run', return_value=SimpleNamespace(returncode=1, stdout='')) as command:
                 result = verify_quest_access(self.studio)
             self.assertFalse(result['readable'])
             self.assertIn('custom quest', result['issue'])
@@ -71,7 +70,7 @@ class QuestAccessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=test_root) as directory:
             assert Path(directory).resolve().is_relative_to(test_root.resolve())
             self.custom_quest(directory)
-            with patch('runtime_checks.subprocess.run', return_value=SimpleNamespace(returncode=0, stdout='Quest files verified')):
+            with patch('metin2_studio.runtime_checks.subprocess.run', return_value=SimpleNamespace(returncode=0, stdout='Quest files verified')):
                 result = verify_quest_access(self.studio)
             self.assertTrue(result['readable'])
             self.assertEqual(result['customQuests'], 1)
@@ -82,7 +81,7 @@ class QuestAccessTests(unittest.TestCase):
             assert Path(directory).resolve().is_relative_to(test_root.resolve())
             self.custom_quest(directory)
             self.studio.workspace.deferred_paths = lambda: {'linux-port/docker/game/Dockerfile'}
-            with patch('runtime_checks.subprocess.run', return_value=SimpleNamespace(returncode=0, stdout='Quest files readable')) as command:
+            with patch('metin2_studio.runtime_checks.subprocess.run', return_value=SimpleNamespace(returncode=0, stdout='Quest files readable')) as command:
                 result = verify_quest_access(self.studio)
             self.assertTrue(result['readable'])
             self.assertEqual(result['customQuests'], 0)

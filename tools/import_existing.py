@@ -14,8 +14,9 @@ import sys
 import uuid
 
 PROJECT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT))
-from installation import atomic_json, resolve_settings, save_settings, world_state
+sys.path[:0] = [str(PROJECT), str(PROJECT / 'src')]
+from metin2_studio.installation import atomic_json, resolve_settings, save_settings, world_state
+from metin2_studio.filesystem import retry_windows_lock
 
 
 def import_existing(server_root, studio_data, hub_data=None, port=8780, destination=None, settings_path=None):
@@ -88,7 +89,7 @@ def import_existing(server_root, studio_data, hub_data=None, port=8780, destinat
     # Both resolved paths are siblings in the explicitly selected state parent.
     if stage.parent != destination.parent or not stage.name.startswith(destination.name + '-import-'):
         raise ValueError('Invalid migration staging path.')
-    stage.rename(destination)
+    retry_windows_lock(stage.rename, destination)
     save_settings(selected, settings_path)
     report = {'copied': copied, 'legacy_addon_events': len(legacy), 'source_studio_data': str(source),
               'destination': str(destination), 'source_retained': True}

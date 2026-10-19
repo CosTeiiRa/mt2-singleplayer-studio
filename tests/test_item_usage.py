@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 import unittest
 
-from item_usage import drop_route, drop_summary, item_usage, item_drop_summary
+from metin2_studio.item_usage import drop_route, drop_summary, item_usage, item_drop_summary
 
 
 def node(ident, entries, source='chest-base'):

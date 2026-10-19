@@ -13,11 +13,11 @@ from urllib.parse import quote
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 
-from addonhub import client_pack as codec
-from addonhub.integration import AddonService
-from local_lock import InstanceLock
-from server import Handler, Studio
-from addonhub.artifacts import build_artifact
+from metin2_studio.addons import client_pack as codec
+from metin2_studio.addons.integration import AddonService
+from metin2_studio.local_lock import InstanceLock
+from metin2_studio.server import Handler, Studio
+from metin2_studio.addons.artifacts import build_artifact
 from tools.addon import scaffold
 
 
@@ -90,8 +90,8 @@ class AddonIntegrationTests(unittest.TestCase):
 
     def supported_client(self):
         (self.client / 'metin2client.exe').write_bytes(b'fixture runtime')
-        self.enterContext(patch('addonhub.client_adapter.recorded_profile', return_value={'id': 'fixture-runtime'}))
-        running = self.enterContext(patch('addonhub.client_adapter.running_client', return_value=False))
+        self.enterContext(patch('metin2_studio.addons.client_adapter.recorded_profile', return_value={'id': 'fixture-runtime'}))
+        running = self.enterContext(patch('metin2_studio.addons.client_adapter.running_client', return_value=False))
         self.service.post('connect', {'path': str(self.client)})
         return running
 
@@ -141,7 +141,7 @@ class AddonIntegrationTests(unittest.TestCase):
         self.apply('community.boss-atlas')
         self.apply('community.boss-atlas', 'configure', settings={'show_metins': True})
         # The game updater supplies a fresh root pair with an upstream UI change.
-        from addonhub.client_adapter import ClientAdapter
+        from metin2_studio.addons.client_adapter import ClientAdapter
         config = json.loads((self.client / 'pack/root.json').read_text('utf-8'))
         original = codec.EterPack(self.original['root.index'], self.original['root.data'], config)
         fresh = original.files()
@@ -163,10 +163,10 @@ class AddonIntegrationTests(unittest.TestCase):
             self.assertEqual((self.client / 'pack' / name).read_bytes(), raw)
 
     def test_running_client_probe_matches_only_the_exact_executable_path(self):
-        from addonhub.client_adapter import running_client
+        from metin2_studio.addons.client_adapter import running_client
         from subprocess import CompletedProcess
         expected = self.client / 'metin2client.exe'
-        with patch('addonhub.client_adapter.os', SimpleNamespace(name='nt')), patch('addonhub.client_adapter.subprocess.run') as run:
+        with patch('metin2_studio.addons.client_adapter.os', SimpleNamespace(name='nt')), patch('metin2_studio.addons.client_adapter.subprocess.run') as run:
             run.return_value = CompletedProcess([], 0, json.dumps([{'pid': 10, 'path': str(expected)}]), '')
             self.assertTrue(running_client(expected))
             run.return_value.stdout = json.dumps([{'pid': 10, 'path': str(self.base / 'other/metin2client.exe')}])
@@ -177,11 +177,11 @@ class AddonIntegrationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Cannot check'):
                 running_client(expected)
             run.return_value.stdout = json.dumps([{'pid': 10, 'path': None}])
-            with patch('addonhub.client_adapter._process_image', return_value=str(expected)):
+            with patch('metin2_studio.addons.client_adapter._process_image', return_value=str(expected)):
                 self.assertTrue(running_client(expected))
-            with patch('addonhub.client_adapter._process_image', return_value=str(self.base / 'other/metin2client.exe')):
+            with patch('metin2_studio.addons.client_adapter._process_image', return_value=str(self.base / 'other/metin2client.exe')):
                 self.assertFalse(running_client(expected))
-            with patch('addonhub.client_adapter._process_image', side_effect=OSError('Access denied')):
+            with patch('metin2_studio.addons.client_adapter._process_image', side_effect=OSError('Access denied')):
                 with self.assertRaisesRegex(ValueError, 'Cannot check'):
                     running_client(expected)
 
@@ -344,7 +344,7 @@ class AddonIntegrationTests(unittest.TestCase):
             Handler.studio = old
 
     def test_github_http_install_update_restart_and_exact_removal(self):
-        from github_fixture import GitHubFixture
+        from tests.github_fixture import GitHubFixture
         from tools.check_github_workflow import A, rehearse
         fixture = GitHubFixture(self.base / 'github-creator')
         fixture.add('1.0.0', A)
@@ -354,7 +354,7 @@ class AddonIntegrationTests(unittest.TestCase):
         self.assertTrue(result['exact_pack_restoration'])
 
     def test_collection_http_independent_lifecycle_and_exact_removal(self):
-        from collection_fixture import CollectionFixture, FIRST, SECOND, specs
+        from tests.collection_fixture import CollectionFixture, FIRST, SECOND, specs
         from tools.check_collection_workflow import A, rehearse
         fixture = CollectionFixture(self.base / 'collection-creator')
         fixture.snapshot(A, specs())

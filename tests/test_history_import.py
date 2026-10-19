@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from contextlib import closing
 
-from installation import REQUIRED
+from metin2_studio.installation import REQUIRED
 from tools.import_existing import import_existing
 
 

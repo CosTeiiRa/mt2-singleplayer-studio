@@ -3,11 +3,10 @@ from pathlib import Path
 import sys
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import test_studio
-from crafting_access import opens_cube, npc_routes
-from quest_templates import library
-from server import ACTIVE_CHANGESET, digest
+import tests.test_studio as test_studio
+from metin2_studio.crafting_access import opens_cube, npc_routes
+from metin2_studio.quest_templates import library
+from metin2_studio.server import ACTIVE_CHANGESET, digest
 
 
 class ManagementTests(unittest.TestCase):

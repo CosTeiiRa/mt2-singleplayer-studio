@@ -5,8 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from item_icons import item_list_aliases, client_icon_aliases, icon_path
+from metin2_studio.item_icons import item_list_aliases, client_icon_aliases, icon_path
 
 TEST_RUNS=Path(__file__).resolve().parents[1]/'data/test-runs'
 TEST_RUNS.mkdir(parents=True,exist_ok=True)
@@ -44,12 +43,12 @@ class ItemIconTests(unittest.TestCase):
             fingerprint=[[str(p.resolve()),p.stat().st_size,p.stat().st_mtime_ns] for p in inputs]
             cache=state/'item-icon-aliases.json'
             cache.write_text(json.dumps({'version':1,'fingerprint':fingerprint,'aliases':{'30353':'pork.png','35000':'absent.png'}}))
-            with patch('item_icons.importlib.util.spec_from_file_location') as load:
+            with patch('metin2_studio.item_icons.importlib.util.spec_from_file_location') as load:
                 self.assertEqual(client_icon_aliases(root,state),{'30353':'Pork.png'})
                 load.assert_not_called()
             # A changed client pack must invalidate the derived cache.
             (pack/'gamedata.data').write_bytes(b'changed')
-            with patch('item_icons.importlib.util.spec_from_file_location',side_effect=ValueError('unsupported')) as load:
+            with patch('metin2_studio.item_icons.importlib.util.spec_from_file_location',side_effect=ValueError('unsupported')) as load:
                 self.assertEqual(client_icon_aliases(root,state),{})
                 load.assert_called_once()
 

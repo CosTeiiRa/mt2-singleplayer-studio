@@ -8,6 +8,12 @@ for sensitive reports.
 
 ## Development scope
 
+Follow the [project layout](README.md#project-layout): Python application code
+belongs in `src/metin2_studio/`, frontend files in `web/`, and Windows helpers in
+`scripts/windows/`. Use package imports under `metin2_studio`; keep private state
+in the ignored `data/` folder. Add distributable files to
+`config/release-files.txt` so a fresh portable ZIP includes them.
+
 Studio is optional tooling beside the game. Game updates take priority; retain
 custom intent for later user review rather than restoring old customisations over
 an update. Server Save, server Apply and client add-on Apply have separate review,
@@ -27,7 +33,7 @@ validation and limits when submitting a change.
 ## Licensing and dependencies
 
 Original Studio code and documentation use the root [MIT license](LICENSE).
-Retain existing notices, including [Add-on Hub's notice](addonhub/LICENSE).
+Retain existing notices, including [Add-on Hub's notice](src/metin2_studio/addons/LICENSE).
 Game code, assets, trademarks and separately licensed third-party dependencies
 are not relicensed by Studio. Add only material you have permission to contribute;
 record new dependency licenses and keep game assets out of distributable fixtures.

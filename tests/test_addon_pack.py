@@ -3,7 +3,7 @@ import struct
 import unittest
 import zlib
 
-from addonhub import client_pack as codec
+from metin2_studio.addons import client_pack as codec
 
 
 @unittest.skipIf(codec.lzokay is None, 'Install optional add-on dependencies to exercise client pack checks.')

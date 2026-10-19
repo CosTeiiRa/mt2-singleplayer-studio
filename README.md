@@ -89,7 +89,7 @@ Nothing is reapplied automatically; see [game updates](#updating-the-game-or-stu
 
 ## Create and import add-ons
 
-Start with the [Add-on README](addonhub/README.md): it covers the standard folder layout, creating your first add-on, editing/building it, importing it, updates, settings and removal. The [creator reference](docs/ADDON_CREATOR_GUIDE.md) describes the runtime API and manifest fields in more detail.
+Start with the [Add-on README](docs/ADDONS.md): it covers the standard folder layout, creating your first add-on, editing/building it, importing it, updates, settings and removal. The [creator reference](docs/ADDON_CREATOR_GUIDE.md) describes the runtime API and manifest fields in more detail.
 
 ### Developer package requirements
 
@@ -120,7 +120,7 @@ my-addon/
 Use unique module and asset names. Packages cannot replace game/framework files
 or an entire root pack. Paths must be relative, use `/`, and avoid traversal,
 symbolic links and case collisions. Limits are 16 MiB per payload file, 64 MiB of
-payload, 2,048 declared files and a 256 KiB manifest. The [manifest schema](addonhub/schemas/addon.schema.json)
+payload, 2,048 declared files and a 256 KiB manifest. The [manifest schema](src/metin2_studio/addons/schemas/addon.schema.json)
 helps editors; the creator CLI/package loader performs the authoritative checks.
 
 Compatibility declarations describe coverage. An unlisted version/profile or
@@ -179,7 +179,7 @@ def register(context):
 
 Capabilities describe integration needs; they do not sandbox Python permissions.
 See the [API v2 reference](docs/ADDON_API_V2.md) for the full contract and launcher
-APIs, and [Pocket Wiki's entry module](addonhub/catalog/community.pocket-wiki/payload/pocket_wiki.py)
+APIs, and [Pocket Wiki's entry module](src/metin2_studio/addons/catalog/community.pocket-wiki/payload/pocket_wiki.py)
 for a complete window, launcher button and registration example.
 
 ### Build, import and publish
@@ -203,11 +203,11 @@ python tools/addon.py pack creator/example --output creator/releases/yourname.ex
 python tools/addon.py inspect creator/releases/yourname.example-0.1.0.m2addon.zip
 ```
 
-This produces an original working scaffold and its package. Before adding your own behavior, follow the [editing and checksum instructions](addonhub/README.md#edit-and-build). The generator chooses a unique module name; keep it consistent with the manifest. Creator tools need no optional codec wheels; rebuilding client packs needs **Install Add-on Support.bat** and a restart of Studio.
+This produces an original working scaffold and its package. Before adding your own behavior, follow the [editing and checksum instructions](docs/ADDONS.md#edit-and-build). The generator chooses a unique module name; keep it consistent with the manifest. Creator tools need no optional codec wheels; rebuilding client packs needs **Install Add-on Support.bat** and a restart of Studio.
 
 **Install from GitHub:** open **Repositories**, add the public repository URL, then choose a release in Discover. Review its pinned commit and README, download/validate its declared files, and review/apply a separate installation plan. Use the explicit **Development branch** channel for unreleased snapshots. Creators keep the same manifest/payload layout and publish matching SemVer GitHub Releases; separate ZIP uploads and catalog files are optional. See the [repository guide](docs/ADDON_REPOSITORIES.md).
 
-**Several add-ons in one repository:** add a root `addons.json` listing each add-on's id and folder. Studio shows separate Discover entries, each with its own version, changelog, installation, settings and enable/disable controls. Downloading one does not select or install its siblings. Creators publish releases with tags such as `yourname.atlas/v1.0.0`; single-add-on repositories keep their existing `v1.0.0` tags. Follow the [collection layout and creator commands](addonhub/README.md#publish-a-collection-from-one-repository).
+**Several add-ons in one repository:** add a root `addons.json` listing each add-on's id and folder. Studio shows separate Discover entries, each with its own version, changelog, installation, settings and enable/disable controls. Downloading one does not select or install its siblings. Creators publish releases with tags such as `yourname.atlas/v1.0.0`; single-add-on repositories keep their existing `v1.0.0` tags. Follow the [collection layout and creator commands](docs/ADDONS.md#publish-a-collection-from-one-repository).
 
 ## Manual add-on updates
 
@@ -225,6 +225,32 @@ Studio never automatically downloads or installs add-on updates. **Installed add
 Read the known release notes, then choose **Review download** if you want the new package. After downloading, choose **Review installation changes** and explicitly apply its plan. **Not now** leaves installed code and settings unchanged. Notifications remain until the selected change is applied. Local imports also show their selected package's notes before installation review.
 
 GitHub Release bodies supply release changelogs; manifest `release_notes` supplies development/local package notes. Missing notes are shown honestly. The repository guide describes channel/source matching, offline results and history limits. Checks, downloads and installation remain separate choices.
+
+## Project layout
+
+```text
+studio.py                  Portable Python entry point (serve / setup)
+Start Studio.bat           Start the dashboard
+Install Studio.bat         Connect an existing game installation
+Stop Studio.bat            Stop Studio
+Install Add-on Support.bat Install optional client pack dependencies
+src/metin2_studio/         Python application
+  addons/                 Add-on manager, client runtime and bundled examples
+web/                      Dashboard HTML, CSS and JavaScript
+scripts/windows/          PowerShell launch, setup and maintenance helpers
+config/                   Release allowlist and pinned optional dependencies
+tests/                    Automated tests and disposable fixture builders
+tools/                    Developer, creator and packaging commands
+docs/                     User, creator and architecture guides
+data/                     Private local settings, history and backups (ignored)
+dist/                     Generated portable ZIPs and checksums (ignored)
+```
+
+Work on the application in `src/metin2_studio/` and on the dashboard in `web/`.
+Run commands from the project root. Use `python studio.py serve` for the service
+and `python studio.py setup --check` to inspect setup. The Windows buttons and
+desktop shortcut use the same entry point. The source tree and portable ZIP use
+the same layout; private state stays in `data/` when updating.
 
 ## Architecture overview
 
@@ -422,17 +448,17 @@ Your first launch uses the current game files as its starting point. It does not
 Run these commands from the extracted Studio folder:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup-Studio.ps1 -ServerRoot "D:\Games\Metin2 Singleplayer\Serwer" -NoShortcut -NonInteractive
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Launch-Studio.ps1 -NoBrowser -NonInteractive
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts/windows/Setup-Studio.ps1 -ServerRoot "D:\Games\Metin2 Singleplayer\Serwer" -NoShortcut -NonInteractive
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts/windows/Launch-Studio.ps1 -NoBrowser -NonInteractive
 ```
 
-Choose another local port by adding **`-Port 8766` to Setup-Studio.ps1**; then use `http://127.0.0.1:8766`. Setup remembers the port. To check configuration without changing any files:
+Choose another local port by adding **`-Port 8766` to scripts/windows/Setup-Studio.ps1**; then use `http://127.0.0.1:8766`. Setup remembers the port. To check configuration without changing any files:
 
 ```powershell
-python setup_studio.py --check
+python studio.py setup --check
 ```
 
-For a terminal-only session, you can run `python server.py --root "D:\Games\Metin2 Singleplayer\Serwer" --port 8766`. Stop it with Ctrl+C. The advanced `--state` option selects an existing Studio data folder; do not share one folder between different worlds. `METIN2_STUDIO_SERVER_ROOT` is also supported for developer/integration-test sessions. Explicit CLI arguments take precedence.
+For a terminal-only session, you can run `python studio.py serve --root "D:\Games\Metin2 Singleplayer\Serwer" --port 8766`. Stop it with Ctrl+C. The advanced `--state` option selects an existing Studio data folder; do not share one folder between different worlds. `METIN2_STUDIO_SERVER_ROOT` is also supported for developer/integration-test sessions. Explicit CLI arguments take precedence.
 
 ## Your first edit
 
@@ -512,7 +538,7 @@ Larger economic histories would benefit from indexed history queries and more co
 - Backups can include the game's original `.env`, so treat local data as private. `data/`, databases, logs, credentials and built ZIPs are excluded from Git. The release builder also excludes them.
 - Studio listens only on `127.0.0.1`. It is a local owner tool; do not expose it through a public bind, proxy or port forwarding.
 
-If migrating from an older Studio installation, retain its data folder and configure the same game with `Setup-Studio.ps1 -ServerRoot "...\Serwer" -StateDir "...\old-studio\data" -NoShortcut -NonInteractive`. This preserves the old history instead of beginning a separate one.
+If migrating from an older Studio installation, retain its data folder and configure the same game with `scripts/windows/Setup-Studio.ps1 -ServerRoot "...\Serwer" -StateDir "...\old-studio\data" -NoShortcut -NonInteractive`. This preserves the old history instead of beginning a separate one.
 
 ## Updating the game or Studio
 
@@ -539,7 +565,12 @@ playable copy is not required. A version outside the publisher's declared list
 alone means **Compatibility unverified**, not proven incompatibility. Refresh
 Pocket Wiki reference data after game content changes.
 
-**Studio update:** stop Studio, extract the new release over the same Studio folder while preserving `data/`, then start it again. If installing into a new folder, copy your private `data/` folder across before setup/start. Git users can pull a newer version while keeping the ignored data. Updating Studio does not apply game configurations automatically. If moved, run **Create-DesktopShortcut.ps1** to create a shortcut to the new location.
+**Studio update:** stop Studio, extract the new release over the same Studio folder while preserving `data/`, then start it again. If installing into a new folder, copy your private `data/` folder across before setup/start. Git users can pull a newer version while keeping the ignored data. Updating Studio does not apply game configurations automatically. If moved, run **scripts/windows/Create-DesktopShortcut.ps1** to create a shortcut to the new location.
+
+When upgrading from the older flat source layout, use **Start Studio.bat** and
+refresh the desktop shortcut with **scripts/windows/Create-DesktopShortcut.ps1**.
+The application now starts through `studio.py`; existing settings and world data
+remain in `data/` and require no migration.
 
 ## Troubleshooting
 
@@ -548,9 +579,9 @@ Pocket Wiki reference data after game content changes.
 | Python not found / Store alias opens | Install Python from python.org with its launcher/PATH option, reopen the terminal and rerun Install Studio.bat. Both `py -3` and `python` are supported. |
 | Missing `files/items.json`, SQL dump or Cube files | Select the server's **Serwer** folder, not the game client. Setup lists missing files. Arbitrary Metin2 distributions are unsupported. |
 | Docker/economy/native crafting unavailable | Start Docker Desktop and the world using the existing launcher, wait for healthy services, then Refresh. No new Docker stack is installed by Studio. |
-| Port already in use / wrong world opens | Close that Studio instance, or configure another port with `Setup-Studio.ps1 -ServerRoot "...\Serwer" -Port 8766`. The launcher checks the world/data identity before reusing an instance. |
+| Port already in use / wrong world opens | Close that Studio instance, or configure another port with `scripts/windows/Setup-Studio.ps1 -ServerRoot "...\Serwer" -Port 8766`. The launcher checks the world/data identity before reusing an instance. |
 | Data belongs to another server | Choose the correct game folder or a new data folder. Do not overwrite another world's binding/history. |
-| Studio fails to start | Read `studio.err.log` in the data folder printed by setup. Run `python setup_studio.py --check` to verify the remembered paths. |
+| Studio fails to start | Read `studio.err.log` in the data folder printed by setup. Run `python studio.py setup --check` to verify the remembered paths. |
 | An update conflicts with my edit | Review Update protection or **Crafting → Review crafting conflicts**, select the desired values, save and Apply separately. |
 | Cannot apply a client add-on | Close the selected game client and review again. Check Add-on settings for missing pack support or an unsupported integration; the server may stay running. |
 | A game update replaced my add-ons | Use **Review reapply** to review them on the new game baseline. Adapt unsupported integrations when support is available; the game update takes priority. |
@@ -564,7 +595,7 @@ dependencies installed by **Install Add-on Support.bat**. Creator packaging tool
 do not need those codec dependencies.
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -t . -v
 node --test tests/apply_status.test.js tests/history.test.js tests/catalog.test.js tests/icons.test.js tests/navigation.test.js tests/quest_help.test.js tests/update_priority.test.js tests/addons.test.mjs tests/addons_view.test.mjs tests/addon_jobs.test.mjs
 python tools/check_project.py
 ```
@@ -576,7 +607,7 @@ The source CI workflow (`.github/workflows/ci.yml`, excluded from portable ZIPs)
 ## License and project boundaries
 
 Original Studio code and documentation use the [MIT license](LICENSE). The
-existing [Add-on Hub notice](addonhub/LICENSE) and third-party dependency licenses
+existing [Add-on Hub notice](src/metin2_studio/addons/LICENSE) and third-party dependency licenses
 remain applicable. This does not license or grant redistribution rights for
 Metin2 or Metin2 Singleplayer code, assets, executables or trademarks. Studio is
 unofficial and requires an independently obtained working game installation.

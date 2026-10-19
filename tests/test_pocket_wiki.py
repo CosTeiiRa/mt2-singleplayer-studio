@@ -9,13 +9,13 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from addonhub.knowledge import build_index, encoded, sql_rows
-from addonhub.hubcore.packages import load_package
-from addonhub import client_pack as codec
+from metin2_studio.addons.knowledge import build_index, encoded, sql_rows
+from metin2_studio.addons.hubcore.packages import load_package
+from metin2_studio.addons import client_pack as codec
 
 ROOT = Path(__file__).resolve().parents[1]
 (ROOT / '.test-tmp').mkdir(exist_ok=True)
-PAYLOAD = ROOT / 'addonhub/catalog/community.pocket-wiki/payload'
+PAYLOAD = ROOT / 'src/metin2_studio/addons/catalog/community.pocket-wiki/payload'
 
 
 def module(name, path):
@@ -107,7 +107,7 @@ class KnowledgeTests(unittest.TestCase):
             proto = {'item_vnum': 11, 'count': 2, 'price': 12, 'chance': 80, 'recipe': '20,4',
                      'req_progress': 0, 'req_level': 5, 'recipe_vnum': 0}
             studio.native_crafting = SimpleNamespace(live=lambda fresh: {'rows': {'1': {'proto': proto, 'windows': {'101': 1}}}})
-            with patch('crafting_access.discover_native', return_value=[{'id': '20001', 'window': '101'}]):
+            with patch('metin2_studio.crafting_access.discover_native', return_value=[{'id': '20001', 'window': '101'}]):
                 data = build_index(studio)
             self.assertEqual(data['recipes']['native:1']['cost'], 12)
             self.assertEqual(data['recipes']['cube:cube:0']['materials'][0]['count'], 3)
@@ -117,7 +117,7 @@ class KnowledgeTests(unittest.TestCase):
 
 class RuntimeV2Tests(unittest.TestCase):
     def test_window_lifecycle_shortcuts_keep_original_game_behaviour(self):
-        client = module('client_v2_fixture', ROOT / 'addonhub/runtime/m2hub_client.py')
+        client = module('client_v2_fixture', ROOT / 'src/metin2_studio/addons/runtime/m2hub_client.py')
         events = []
         host = SimpleNamespace(_emit=lambda event, game: events.append(event), _log=events.append)
         class Game:
@@ -142,7 +142,7 @@ class RuntimeV2Tests(unittest.TestCase):
         self.assertIsNone(handle.window)
 
     def test_preferences_recover_previous_generation_and_are_world_scoped(self):
-        client = module('client_state_fixture', ROOT / 'addonhub/runtime/m2hub_client.py')
+        client = module('client_state_fixture', ROOT / 'src/metin2_studio/addons/runtime/m2hub_client.py')
         with tempfile.TemporaryDirectory(dir=ROOT / '.test-tmp') as temporary, patch.dict('os.environ', {'LOCALAPPDATA': temporary}), \
                 patch.dict(sys.modules, {'m2hub_config': SimpleNamespace(STATE_NAMESPACE='a' * 32)}):
             client.save_state('fixture.wiki', {'page': 1})
@@ -156,13 +156,13 @@ class RuntimeV2Tests(unittest.TestCase):
 @unittest.skipIf(codec.lzokay is None, 'Optional pack codec required')
 class PocketIntegrationTests(unittest.TestCase):
     def test_playable_copy_is_separate_world_bound_and_blocks_changed_executable(self):
-        from test_addon_integration import make_world
-        from addonhub.client_adapter import create_playable_copy, ClientAdapter
+        from tests.test_addon_integration import make_world
+        from metin2_studio.addons.client_adapter import create_playable_copy, ClientAdapter
         with tempfile.TemporaryDirectory(dir=ROOT / '.test-tmp') as temporary:
             studio, source = make_world(Path(temporary))
             (source / 'metin2client.exe').write_bytes(b'original executable fixture')
             state = studio.state / 'addons'
-            with patch('addonhub.client_adapter.recorded_profile', return_value={'id': 'fixture-profile'}):
+            with patch('metin2_studio.addons.client_adapter.recorded_profile', return_value={'id': 'fixture-profile'}):
                 target = create_playable_copy(source, state)
                 backend = ClientAdapter(target, state)
                 self.assertEqual(backend.server_root, studio.root)
@@ -175,7 +175,7 @@ class PocketIntegrationTests(unittest.TestCase):
             self.assertEqual((source / 'metin2client.exe').read_bytes(), b'original executable fixture')
 
     def test_install_refresh_stale_review_disable_and_exact_remove(self):
-        from test_addon_integration import make_world
+        from tests.test_addon_integration import make_world
         with tempfile.TemporaryDirectory(dir=ROOT / '.test-tmp') as temporary:
             studio, source = make_world(Path(temporary))
             pack = codec.EterPack.open(source / 'pack')
@@ -187,7 +187,7 @@ class PocketIntegrationTests(unittest.TestCase):
             original = (index, data)
             current = reference()
             current['meta'].pop('generated_at')
-            with patch('addonhub.knowledge.build_index', side_effect=lambda studio: copy.deepcopy(current)):
+            with patch('metin2_studio.addons.knowledge.build_index', side_effect=lambda studio: copy.deepcopy(current)):
                 service = studio.addons
                 target = Path(service.post('sandbox', {})['path'])
                 def apply(ident, action='install'):

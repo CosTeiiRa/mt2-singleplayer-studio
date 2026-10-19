@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from addonhub.map_data import WorldData
+from metin2_studio.addons.map_data import WorldData
 
 PROJECT = Path(__file__).resolve().parents[1]
 

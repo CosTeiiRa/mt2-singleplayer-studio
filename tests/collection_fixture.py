@@ -5,10 +5,10 @@ from pathlib import Path
 from urllib.parse import unquote
 import zipfile
 
-from addonhub.collections import create_collection
-from addonhub.hubcore.packages import sha256
-from addonhub.transport import HTTPStatusError
-from github_fixture import API, URL, GitHubFixture
+from metin2_studio.addons.collections import create_collection
+from metin2_studio.addons.hubcore.packages import sha256
+from metin2_studio.addons.transport import HTTPStatusError
+from tests.github_fixture import API, URL, GitHubFixture
 from tools.addon import scaffold
 
 FIRST, SECOND = 'fixture.collection-atlas', 'fixture.collection-legend'

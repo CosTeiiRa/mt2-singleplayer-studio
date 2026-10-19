@@ -5,11 +5,10 @@ import sys
 import unittest
 from unittest.mock import patch, Mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import test_studio
-from server import ACTIVE_CHANGESET
-from crafting_access import native_calls, discover_native
-from native_crafting import EMPTY, COLS, NativeCrafting, snapshot, operations, transition, fingerprint, transaction_sql
+import tests.test_studio as test_studio
+from metin2_studio.server import ACTIVE_CHANGESET
+from metin2_studio.crafting_access import native_calls, discover_native
+from metin2_studio.native_crafting import EMPTY, COLS, NativeCrafting, snapshot, operations, transition, fingerprint, transaction_sql
 
 
 def row(ident=1, chance=80, windows=None):
@@ -122,8 +121,8 @@ class NativeEditorTests(unittest.TestCase):
         self.assertIn('Blacksmith', recipe['sharedWith'])
 
     def test_item_explorer_uses_current_native_recipes_and_saved_overrides(self):
-        from item_usage import item_usage
-        from server import sql_rows
+        from metin2_studio.item_usage import item_usage
+        from metin2_studio.server import sql_rows
         recipe = self.recipe()
         recipe['rewards'][0]['item'] = '71084'
         self.s.commit(self.s.recipe_plan(recipe)['id'])
@@ -271,7 +270,7 @@ class NativeEditorTests(unittest.TestCase):
             raise ValueError('A customised recipe changed externally.')
         migration = Mock(returncode=0, stdout='{"ExitCode":0,"State":"exited"}')
         self.s.job = {'status':'running','lines':[],'files':self.s.build_fingerprints(),'id':'native-order-test'}
-        with patch('server.subprocess.Popen',side_effect=process), patch('server.subprocess.run',return_value=migration), patch.object(self.s.native_crafting,'apply',side_effect=rejected):
+        with patch('metin2_studio.server.subprocess.Popen',side_effect=process), patch('metin2_studio.server.subprocess.run',return_value=migration), patch.object(self.s.native_crafting,'apply',side_effect=rejected):
             self.s.run_apply()
         self.assertEqual(self.s.job['status'],'failed')
         self.assertEqual(commands[-1],['native-transaction'])
@@ -280,7 +279,7 @@ class NativeEditorTests(unittest.TestCase):
 
     def test_invalid_native_configuration_does_not_leave_background_apply_running(self):
         self.s.job = {'status':'running','lines':[],'files':self.s.build_fingerprints(),'id':'bad-config-test'}
-        with patch.object(self.s.native_crafting,'config',side_effect=ValueError('Configuration changed externally.')), patch('server.subprocess.Popen') as run:
+        with patch.object(self.s.native_crafting,'config',side_effect=ValueError('Configuration changed externally.')), patch('metin2_studio.server.subprocess.Popen') as run:
             self.s.run_apply()
         self.assertEqual(self.s.job['status'],'failed')
         run.assert_not_called()

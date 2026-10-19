@@ -2,11 +2,10 @@ from pathlib import Path
 import sys
 import unittest
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-import test_studio
-import test_quest_fields
-from quest_description import describe
-from server import ACTIVE_CHANGESET
+import tests.test_studio as test_studio
+import tests.test_quest_fields as test_quest_fields
+from metin2_studio.quest_description import describe
+from metin2_studio.server import ACTIVE_CHANGESET
 
 
 class QuestDescriptionTests(unittest.TestCase):

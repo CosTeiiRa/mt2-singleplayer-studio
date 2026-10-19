@@ -9,14 +9,14 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from addonhub.artifacts import archive_members, build_artifact, extract_artifact, inspect_artifact
-from addonhub.hubcore.manager import Manager
-from addonhub.hubcore.packages import load_package, parse_json, sha256, validate_manifest
-from addonhub.repositories import RepositoryStore, validate_index
-from addonhub.transport import PublicHTTPSFetcher, https_url, public_addresses
-from addonhub.versions import Version, satisfies
+from metin2_studio.addons.artifacts import archive_members, build_artifact, extract_artifact, inspect_artifact
+from metin2_studio.addons.hubcore.manager import Manager
+from metin2_studio.addons.hubcore.packages import load_package, parse_json, sha256, validate_manifest
+from metin2_studio.addons.repositories import RepositoryStore, validate_index
+from metin2_studio.addons.transport import PublicHTTPSFetcher, https_url, public_addresses
+from metin2_studio.addons.versions import Version, satisfies
 from tools.addon import scaffold, catalog
-from test_addon_manager import FakeBackend
+from tests.test_addon_manager import FakeBackend
 
 PROJECT = Path(__file__).resolve().parents[1]
 INDEX_URL = 'https://catalog.example.test/addons.json'
@@ -78,7 +78,7 @@ class RepositoryTests(unittest.TestCase):
         self.fetch = FetchFixture()
         self.fetch.content[INDEX_URL] = json.dumps(self.index).encode()
         self.fetch.content[ARTIFACT_URL] = self.raw
-        self.store = RepositoryStore(self.root / 'state', PROJECT / 'addonhub/catalog', self.fetch)
+        self.store = RepositoryStore(self.root / 'state', PROJECT / 'src/metin2_studio/addons/catalog', self.fetch)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -143,9 +143,9 @@ class RepositoryTests(unittest.TestCase):
             changed.writestr('ADDON.JSON', b'{}')
         with self.assertRaises(ValueError):
             archive_members(buffer.getvalue())
-        with patch('addonhub.artifacts.MAX_ARCHIVE_BYTES', 10), self.assertRaises(ValueError):
+        with patch('metin2_studio.addons.artifacts.MAX_ARCHIVE_BYTES', 10), self.assertRaises(ValueError):
             archive_members(self.raw)
-        with patch('addonhub.artifacts.MAX_FILE_BYTES', 8), self.assertRaises(ValueError):
+        with patch('metin2_studio.addons.artifacts.MAX_FILE_BYTES', 8), self.assertRaises(ValueError):
             archive_members(self.raw)
 
     def test_archive_payload_tampering_is_rejected(self):
@@ -473,7 +473,7 @@ class TransportTests(unittest.TestCase):
     def test_dns_private_and_mixed_answers_are_rejected(self):
         for addresses in [['127.0.0.1'], ['10.0.0.1'], ['169.254.169.254'], ['::1'], ['8.8.8.8', '192.168.1.1']]:
             rows = [(socket.AF_INET, socket.SOCK_STREAM, 0, '', (ip, 443)) for ip in addresses]
-            with patch('addonhub.transport.socket.getaddrinfo', return_value=rows), self.assertRaises(ValueError):
+            with patch('metin2_studio.addons.transport.socket.getaddrinfo', return_value=rows), self.assertRaises(ValueError):
                 public_addresses('example.test')
 
     def test_transport_pins_address_and_retains_tls_hostname(self):
@@ -483,7 +483,7 @@ class TransportTests(unittest.TestCase):
             def getheader(self, name, default=None): return {'Content-Length': '14'}.get(name, default)
             def read(self, count): return self.content.read(count)
         response = Response()
-        with patch('addonhub.transport.public_addresses', return_value=['8.8.8.8']), patch('addonhub.transport.socket.create_connection') as connect, patch('addonhub.transport.ssl.create_default_context') as context, patch('addonhub.transport.http.client.HTTPSConnection') as connection:
+        with patch('metin2_studio.addons.transport.public_addresses', return_value=['8.8.8.8']), patch('metin2_studio.addons.transport.socket.create_connection') as connect, patch('metin2_studio.addons.transport.ssl.create_default_context') as context, patch('metin2_studio.addons.transport.http.client.HTTPSConnection') as connection:
             connection.return_value.getresponse.return_value = response
             self.assertEqual(PublicHTTPSFetcher()('https://example.test/a', 100), b'public fixture')
             connect.assert_called_once_with(('8.8.8.8', 443), timeout=15)
@@ -493,7 +493,7 @@ class TransportTests(unittest.TestCase):
         class Response:
             status = 302
             def getheader(self, name, default=None): return 'http://127.0.0.1/private'
-        with patch('addonhub.transport.public_addresses', return_value=['8.8.8.8']), patch('addonhub.transport.socket.create_connection'), patch('addonhub.transport.ssl.create_default_context'), patch('addonhub.transport.http.client.HTTPSConnection') as connection:
+        with patch('metin2_studio.addons.transport.public_addresses', return_value=['8.8.8.8']), patch('metin2_studio.addons.transport.socket.create_connection'), patch('metin2_studio.addons.transport.ssl.create_default_context'), patch('metin2_studio.addons.transport.http.client.HTTPSConnection') as connection:
             connection.return_value.getresponse.return_value = Response()
             with self.assertRaises(ValueError):
                 PublicHTTPSFetcher()('https://example.test/a', 100)
@@ -507,7 +507,7 @@ class TransportTests(unittest.TestCase):
             def read(self, count): return self.body.read(count)
         for headers, body in [({'Content-Encoding': 'gzip'}, b'zip'), ({'Content-Length': '999'}, b'x'),
                               ({'Content-Length': '3'}, b'x'), ({}, b'x' * 11)]:
-            with self.subTest(headers=headers), patch('addonhub.transport.public_addresses', return_value=['8.8.8.8']), patch('addonhub.transport.socket.create_connection'), patch('addonhub.transport.ssl.create_default_context'), patch('addonhub.transport.http.client.HTTPSConnection') as connection:
+            with self.subTest(headers=headers), patch('metin2_studio.addons.transport.public_addresses', return_value=['8.8.8.8']), patch('metin2_studio.addons.transport.socket.create_connection'), patch('metin2_studio.addons.transport.ssl.create_default_context'), patch('metin2_studio.addons.transport.http.client.HTTPSConnection') as connection:
                 connection.return_value.getresponse.return_value = Response(headers, body)
                 with self.assertRaises(ValueError):
                     PublicHTTPSFetcher()('https://example.test/a', 10)

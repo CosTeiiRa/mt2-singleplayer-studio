@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from addonhub.hubcore.packages import PackageError, discover_packages, load_package, logical_path, validate_manifest
+from metin2_studio.addons.hubcore.packages import PackageError, discover_packages, load_package, logical_path, validate_manifest
 
 
 def manifest(content=b"VALUE = 1\n"):

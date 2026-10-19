@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from addonhub import client_pack as codec
+from metin2_studio.addons import client_pack as codec
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,7 +22,7 @@ def module(name, path):
 
 class LauncherApiTests(unittest.TestCase):
     def setUp(self):
-        self.client = module('menu_client', 'addonhub/runtime/m2hub_client.py')
+        self.client = module('menu_client', 'src/metin2_studio/addons/runtime/m2hub_client.py')
         self.events = []
         self.records = [dict(id=ident, name=name, enabled=enabled, capabilities=caps) for ident, name, enabled, caps in
                         [('menu', 'Add-on Menu', True, []), ('wiki', 'Pocket Wiki', True, []),
@@ -80,7 +80,7 @@ class LauncherApiTests(unittest.TestCase):
         self.assertTrue(any('factory failure' in event for event in self.events))
 
     def test_api_v1_stays_guarded_and_api_v2_delegates_launcher_operations(self):
-        host = module('menu_host', 'addonhub/runtime/m2hub_runtime.py')
+        host = module('menu_host', 'src/metin2_studio/addons/runtime/m2hub_runtime.py')
         with patch.dict(sys.modules, {'m2hub_client': self.client}):
             with self.assertRaisesRegex(ValueError, 'API v2'):
                 host.Context('legacy', {}).addons()
@@ -114,7 +114,7 @@ class MenuWidgetTests(unittest.TestCase):
     def setUp(self):
         self.enterContext(patch.dict(sys.modules, {'ui': SimpleNamespace(Bar=Widget, TextLine=Widget, BoardWithTitleBar=Widget),
                           'wndMgr': SimpleNamespace(GetScreenWidth=lambda: 640, GetScreenHeight=lambda: 480)}))
-        self.payload = module('menu_widgets', 'addonhub/catalog/community.addon-menu/payload/addon_menu.py')
+        self.payload = module('menu_widgets', 'src/metin2_studio/addons/catalog/community.addon-menu/payload/addon_menu.py')
         self.rows = [dict(id=ident, name=name, status='Enabled', enabled=True,
                          actions=[dict(id='window:' + ident, label='Window', shortcut='NONE', available=True)])
                      for ident, name in [('other', 'A first-sorting add-on'), ('menu', 'Add-on Menu')] + [('extra%d' % i, 'Extra %d' % i) for i in range(8)]]
@@ -175,7 +175,7 @@ class MenuWidgetTests(unittest.TestCase):
 @unittest.skipIf(codec.lzokay is None, 'Optional pack codec required')
 class MenuIntegrationTests(unittest.TestCase):
     def test_menu_is_first_and_installs_disables_removes_as_an_ordinary_addon(self):
-        from test_addon_integration import make_world
+        from tests.test_addon_integration import make_world
         with tempfile.TemporaryDirectory(dir=ROOT / '.test-tmp') as temporary:
             studio, client = make_world(Path(temporary))
             pack = codec.EterPack.open(client / 'pack')

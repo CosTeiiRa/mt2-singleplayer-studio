@@ -28,7 +28,7 @@ records clean-install, packaging, dependency and live-Studio restart boundaries.
 ### Client 2.0.114 evidence — 18 October 2026
 
 The current recorded profile is
-[`addonhub/profiles/tieru-2.0.114.json`](../addonhub/profiles/tieru-2.0.114.json),
+[`src/metin2_studio/addons/profiles/tieru-2.0.114.json`](../src/metin2_studio/addons/profiles/tieru-2.0.114.json),
 id **tieru-mt2009-client-2.0.114**, observed with server **2.2.110**. Its exact
 executable SHA-256 and observed source-pack fingerprints are recorded there.
 
@@ -76,9 +76,9 @@ Run from the project folder after installing optional pack support:
 
 ```powershell
 python tools/check_project.py
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -t . -v
 node --test tests/catalog.test.js tests/icons.test.js tests/navigation.test.js tests/quest_help.test.js tests/addons.test.mjs tests/addons_view.test.mjs tests/addon_jobs.test.mjs
-python tools/validate_addon.py addonhub/catalog/community.boss-atlas addonhub/catalog/community.map-legend
+python tools/validate_addon.py src/metin2_studio/addons/catalog/community.boss-atlas src/metin2_studio/addons/catalog/community.map-legend
 ```
 
 Existing installed-data integration suites run only when `METIN2_STUDIO_SERVER_ROOT` points to the supported existing server. They copy source files into disposable fixtures before mutation. The game assets are not bundled. Optional codec tests skip when its wheel is missing; installing support enables those checks. The symlink-escape test skips on Windows hosts that disallow unprivileged symlinks.
@@ -108,9 +108,9 @@ and excluded from releases.
 
 A real run passed the seven-operation lifecycle on the 1,341-entry source packs, with 29 configured maps, exact restoration and source preservation. This is HTTP/API verification, not a browser click-through. Node view tests use DOM boundary mocks; they are not visual browser evidence. Browser layout, keyboard interaction, narrow viewports and dialogs still need visual acceptance because no browser was connected.
 
-The profile in `addonhub/profiles/tieru-2.0.112.json` records the earlier native startup/import/widget smoke for the unchanged runtime/example source. No interactive play test or new native gameplay test is claimed by this merge. Real map alignment, map transitions and performance remain outstanding.
+The profile in `src/metin2_studio/addons/profiles/tieru-2.0.112.json` records the earlier native startup/import/widget smoke for the unchanged runtime/example source. No interactive play test or new native gameplay test is claimed by this merge. Real map alignment, map transitions and performance remain outstanding.
 
-The source builder uses `release-files.txt` and excludes private state, wheels, test copies, game packs, keys and executables. Inspect and validate a fresh extraction before sharing. No public release is created automatically.
+The source builder uses `config/release-files.txt` and excludes private state, wheels, test copies, game packs, keys and executables. Inspect and validate a fresh extraction before sharing. No public release is created automatically.
 
 ## Repository and creator verification
 

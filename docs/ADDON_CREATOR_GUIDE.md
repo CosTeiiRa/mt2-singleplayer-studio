@@ -6,7 +6,7 @@ API versions. The default scaffold remains an API-v1 atlas example.
 
 This is the schema-1 **alpha** package format for client APIs v1 and v2. The client interface is experimental and no public package-submission service exists. Normal supported game clients accept reviewed add-on changes with pack backups. For development, optional pack sandboxes and playable copies are under Advanced testing tools.
 
-For the step-by-step start, read the [Add-on README](../addonhub/README.md). This document is the detailed format/runtime reference. Public GitHub repository URLs, local ZIP imports and Studio-format HTTPS catalogs are available. All use the same manifest and payload format.
+For the step-by-step start, read the [Add-on README](ADDONS.md). This document is the detailed format/runtime reference. Public GitHub repository URLs, local ZIP imports and Studio-format HTTPS catalogs are available. All use the same manifest and payload format.
 
 ## Scaffold and release tools
 
@@ -22,17 +22,17 @@ python tools/addon.py catalog creator/releases/yourname.example-0.1.0.m2addon.zi
 
 The scaffold generates a unique namespaced module, an original event example, checksums, typed settings, API version and experimental client-version declaration. Its default license is `UNLICENSED`: deliberately choose a license and release notes before distribution. After editing payload bytes, update their hashes in `addon.json` before validation/packing. Outputs refuse overwriting existing artifacts, catalogs or scaffold directories; use a fresh destination for a new build.
 
-For single-add-on GitHub distribution, keep this layout at the repository root and publish a GitHub Release tagged with the manifest version (an optional lowercase `v` prefix is accepted). Users add the public repository URL directly; no catalog or uploaded ZIP is required. Bare tags alone do not enter the release channel. Default-branch snapshots are an explicit Development option. See the [GitHub workflow](../addonhub/README.md#install-from-github).
+For single-add-on GitHub distribution, keep this layout at the repository root and publish a GitHub Release tagged with the manifest version (an optional lowercase `v` prefix is accepted). Users add the public repository URL directly; no catalog or uploaded ZIP is required. Bare tags alone do not enter the release channel. Default-branch snapshots are an explicit Development option. See the [GitHub workflow](ADDONS.md#install-from-github).
 
 The optional catalog command accepts several versioned artifacts and generates URL/size/hash metadata from the actual ZIPs. The newest version supplies package display metadata. Use unique artifact filenames and preserve previously published bytes. No upload occurs. When hosting is selected, serve the exact ZIPs at the generated HTTPS URLs and the index at the subscribed URL. See [repository workflow and limits](ADDON_REPOSITORIES.md), [API v1 policy](ADDON_API_V1.md) and [community launch preparation](ADDON_COMMUNITY.md).
 
 ## Several add-ons in one GitHub repository
 
-Use root `addons.json` to list 1–20 independent package folders, each with its own manifest and declared payload. The [collection tutorial](../addonhub/README.md#publish-a-collection-from-one-repository) includes the complete tree, JSON and scaffold commands. Generate the declaration with `python tools/addon.py collection <root> --name "My add-ons" --publisher "Your name" --addon addons/atlas --addon addons/legend`, then run `python tools/addon.py validate-collection <root>`. Existing declarations are never overwritten. After edits, refresh payload hashes and revalidate the collection.
+Use root `addons.json` to list 1–20 independent package folders, each with its own manifest and declared payload. The [collection tutorial](ADDONS.md#publish-a-collection-from-one-repository) includes the complete tree, JSON and scaffold commands. Generate the declaration with `python tools/addon.py collection <root> --name "My add-ons" --publisher "Your name" --addon addons/atlas --addon addons/legend`, then run `python tools/addon.py validate-collection <root>`. Existing declarations are never overwritten. After edits, refresh payload hashes and revalidate the collection.
 
 Publish per-add-on GitHub Releases tagged `<full-addon-id>/v<version>`, matching that member's manifest version. The release body is that member's changelog. Members can share a commit and version number without sharing artifacts or installation state. A new Atlas release need not change Legend. Only downloaded members enter the local selection, and installing/enabling one leaves its siblings alone. Dependencies remain explicit and manual.
 
-Root `addon.json` and `addons.json` cannot coexist. Keep declarations at release commits; the current default branch lists discoverable ids while each pinned release supplies its folder path. Member READMEs fall back to the root README. Channel selection and the first 50 GitHub release records are shared across the repository. See the [collection schema](../addonhub/schemas/collection.schema.json) and [repository behavior](ADDON_REPOSITORIES.md#github-collections). Individual member folders can still be packed into ordinary `.m2addon.zip` artifacts with the existing CLI.
+Root `addon.json` and `addons.json` cannot coexist. Keep declarations at release commits; the current default branch lists discoverable ids while each pinned release supplies its folder path. Member READMEs fall back to the root README. Channel selection and the first 50 GitHub release records are shared across the repository. See the [collection schema](../src/metin2_studio/addons/schemas/collection.schema.json) and [repository behavior](ADDON_REPOSITORIES.md#github-collections). Individual member folders can still be packed into ordinary `.m2addon.zip` artifacts with the existing CLI.
 
 ## Try a built package in Studio
 
@@ -85,7 +85,7 @@ An example manifest:
 }
 ```
 
-The checksum placeholder intentionally fails validation. After creating this manual example in `creator/example`, refresh the payload hashes with the [README checksum block](../addonhub/README.md#edit-and-build), then validate:
+The checksum placeholder intentionally fails validation. After creating this manual example in `creator/example`, refresh the payload hashes with the [README checksum block](ADDONS.md#edit-and-build), then validate:
 
 ```powershell
 python tools/addon.py validate creator/example
@@ -93,9 +93,9 @@ python tools/addon.py validate creator/example
 
 The validator reads and hashes payload bytes; it does not execute them. A valid package is not proof of safe behavior or working in-game compatibility.
 
-The scaffold generates a unique filename rather than `example.py`. The [README checksum block](../addonhub/README.md#edit-and-build) refreshes every declared payload hash without assuming a particular filename.
+The scaffold generates a unique filename rather than `example.py`. The [README checksum block](ADDONS.md#edit-and-build) refreshes every declared payload hash without assuming a particular filename.
 
-`addonhub/schemas/addon.schema.json` can be used for editor assistance. The CLI/package loader is authoritative and checks additional path, file, checksum, and namespace rules not represented by the editor schema.
+`src/metin2_studio/addons/schemas/addon.schema.json` can be used for editor assistance. The CLI/package loader is authoritative and checks additional path, file, checksum, and namespace rules not represented by the editor schema.
 
 ## Compatibility declarations
 
@@ -180,7 +180,7 @@ An installed, enabled **Add-on Menu** exposes successfully registered windows
 automatically. The menu is optional; a launcher button can call the returned
 handle's `toggle()`. Supported shortcuts are `NONE`, `CTRL_U` and `F12`; duplicate
 add-on shortcuts are refused and game bindings/chat input take priority. See
-[Pocket Wiki's implementation](../addonhub/catalog/community.pocket-wiki/payload/pocket_wiki.py)
+[Pocket Wiki's implementation](../src/metin2_studio/addons/catalog/community.pocket-wiki/payload/pocket_wiki.py)
 for its full window lifecycle and launcher.
 
 ## Settings, dependencies, and compatibility
@@ -203,8 +203,8 @@ and widget-construction checks must stay distinct from interactive gameplay evid
 
 Declare exact client/server versions and native profile ids covered by your
 testing. This adapter's `profile_id` comes from an exact executable SHA-256 match
-in `addonhub/profiles/*.json`. The current client 2.0.114 record is
-[`tieru-2.0.114.json`](../addonhub/profiles/tieru-2.0.114.json), with profile id
+in `src/metin2_studio/addons/profiles/*.json`. The current client 2.0.114 record is
+[`tieru-2.0.114.json`](../src/metin2_studio/addons/profiles/tieru-2.0.114.json), with profile id
 `tieru-mt2009-client-2.0.114`; the older recorded profile is retained separately.
 An unknown executable has `profile_id: null` and needs validated adapter support
 before pack writes. Changing publisher version lists cannot provide that support.

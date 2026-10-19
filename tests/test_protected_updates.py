@@ -11,9 +11,8 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from protected_updates import ProtectedUpdates, package_members
-from workspace import Workspace
+from metin2_studio.protected_updates import ProtectedUpdates, package_members
+from metin2_studio.workspace import Workspace
 
 
 def package(files):
@@ -118,7 +117,7 @@ class ProtectedUpdateTests(unittest.TestCase):
             result = Path(args[args.index('-ResultPath') + 1])
             result.write_text(json.dumps({'Backup': 'fixture-native-backup'}))
             return SimpleNamespace(returncode=0)
-        with patch('protected_updates.subprocess.run', side_effect=native_fixture), patch.object(self.studio, 'write', side_effect=AssertionError('Studio must not rewrite game files after the updater')):
+        with patch('metin2_studio.protected_updates.subprocess.run', side_effect=native_fixture), patch.object(self.studio, 'write', side_effect=AssertionError('Studio must not rewrite game files after the updater')):
             self.updates._install(report['package'], saved, changes, rebased)
         self.assertEqual(self.updates.job['status'], 'succeeded')
         self.assertEqual(path.read_bytes(), incoming)
@@ -155,7 +154,7 @@ class ProtectedUpdateTests(unittest.TestCase):
         def native_fixture(args, **kwargs):
             Path(args[args.index('-ResultPath') + 1]).write_text(json.dumps({'Backup': 'fixture'}))
             return SimpleNamespace(returncode=0)
-        with patch('protected_updates.subprocess.run', side_effect=native_fixture):
+        with patch('metin2_studio.protected_updates.subprocess.run', side_effect=native_fixture):
             self.updates._install(report['package'], saved, changes, rebased)
         self.assertEqual(self.studio.workspace.deferred_paths(), {'supplied.txt'})
         later = self.studio.workspace.scan()
@@ -180,7 +179,7 @@ class ProtectedUpdateTests(unittest.TestCase):
                 path.write_bytes(incoming)
                 Path(args[args.index('-ResultPath') + 1]).write_text(json.dumps({'Backup': 'fixture'}))
                 return SimpleNamespace(returncode=0)
-            with patch('protected_updates.subprocess.run', side_effect=native_fixture):
+            with patch('metin2_studio.protected_updates.subprocess.run', side_effect=native_fixture):
                 self.updates._install(report['package'], saved, changes, rebased)
             self.assertEqual(path.read_bytes(), incoming)
             tracked = self.studio.workspace.tracked()[0]
