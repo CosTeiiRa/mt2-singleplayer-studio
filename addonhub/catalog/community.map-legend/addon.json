@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "id": "community.map-legend",
+  "name": "Atlas Legend",
+  "version": "0.1.0-alpha.1",
+  "description": "## What it does\n\nAdds a small reminder at the bottom of the game's atlas: Configured zones, not live.\n\n## How to use\n\n1. Install and enable Atlas Legend in Studio.\n2. Launch your normal game client and enter a character.\n3. Press M with chat closed, or click the atlas button on the minimap.\n4. Look at the bottom of the atlas for the legend. It appears automatically while the atlas is open.\n\n## Shortcuts\n\n- M: opens or closes the atlas using the supported client's existing game binding.\n- Atlas Legend adds no separate keyboard shortcut or standalone window.\n\n## Settings\n\nThere are no extra settings for this add-on. Enable, disable or remove it through Studio > Installed add-ons. Close the client before applying a change, then launch it again.\n\n## Good to know\n\nThis add-on displays a label; it does not add boss markers or track live spawns. It can run on its own or alongside Boss Atlas. Studio can be closed while you play.",
+  "author": "Add-on Hub contributors",
+  "category": "Interface",
+  "kind": "client-python",
+  "entry": "m2hub_addons.map_legend",
+  "requires": [],
+  "conflicts": [],
+  "capabilities": [
+    "atlas.overlay"
+  ],
+  "files": [
+    {
+      "source": "map_legend.py",
+      "target": "m2hub_addons/map_legend.py",
+      "sha256": "c463af21e7ff279a89e38229c4eed2d1702eaeafb446c2d6ae12b002d5758e19"
+    }
+  ],
+  "settings": {},
+  "settings_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "compatibility": {
+    "client_versions": [
+      "2.0.112"
+    ],
+    "experimental": true
+  },
+  "release_notes": "Initial local alpha. Pack integration and host-simulation tests; in-game play-test is still required.",
+  "license": "MIT"
+}

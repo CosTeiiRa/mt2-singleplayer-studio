@@ -348,11 +348,11 @@ class NativeCrafting:
             result.append({'field': 'NPC windows', 'before': ', '.join(before['windows']) or 'None', 'after': ', '.join(after['windows']) or 'None'})
         return result
 
-    def save_plan(self, config, title):
+    def save_plan(self, config, title, metadata=None):
         validate_document(config)
         raw = (json.dumps(config, indent=2, ensure_ascii=False) + '\n').encode() if config['recipes'] or config.get('accepted') else None
         return self.studio.plan(title, {self.path: raw},
-            'Saves a Studio crafting configuration and backup. Apply checks only customised database fields, applies them in a guarded transaction while the game is stopped, then restarts. Existing NPC menus and player progress are retained. Shared recipes affect all listed windows.')
+            'Saves a Studio crafting configuration and backup. Apply checks only customised database fields, applies them in a guarded transaction while the game is stopped, then restarts. Existing NPC menus and player progress are retained. Shared recipes affect all listed windows.', metadata=metadata)
 
     def resolve(self, body):
         live, config, _, conflicts = self.view(True)
@@ -381,7 +381,7 @@ class NativeCrafting:
                 accepted[key] = observed
                 set_value(record['before'], key, observed)
                 set_value(record['after'], key, observed if choices[ident + ':' + key] == 'server' else conflict['studio'])
-        return self.save_plan(config, 'Resolve customised native crafting changes')
+        return self.save_plan(config, 'Resolve customised native crafting changes', metadata={'historyCategory': 'reconciliation'})
 
     def review(self):
         live, config, _, conflicts = self.view(True)

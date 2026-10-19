@@ -1,4 +1,4 @@
-"""Stage official packages and review custom differences before native installation."""
+"""Stage official packages; archive custom differences and give the game priority."""
 import hashlib
 import json
 from pathlib import PurePosixPath
@@ -119,9 +119,8 @@ class ProtectedUpdates:
                         raise ValueError('A customised configuration became too large for a safe merge.')
                     incoming[record['path']] = archive.read(item)
         report = self.studio.workspace.scan(incoming, kind='package', package=ident)
-        self.studio.workspace.reports[report['id']]['tracking'] = [(row['path'], hashlib.sha256((row['original'] or b'') + b'\0' + (row['custom'] or b'') + b'\0' + (row['expected'] or b'')).hexdigest()) for row in self.studio.workspace.tracked()]
         report['package'] = meta
-        report['notice'] = 'Only your affected custom entries need choices. The native updater installs the other package files normally. Installation does not start a build; Apply to server is a separate step.'
+        report['notice'] = 'Install the game update first. Original and custom values are archived and retained in a pending merge review. Choose how to merge them afterwards in Studio. Build/Apply remains separate.'
         return report
 
     def check(self):
@@ -174,9 +173,9 @@ class ProtectedUpdates:
             meta = self.metadata(report['package'])
             if not meta['verified']:
                 raise ValueError('Installation requires the expected SHA-256 from the release manifest. Import again with that checksum.')
-            if self.job['status'] == 'running' or self.studio.job['status'] == 'running':
+            if self.job['status'] == 'running' or self.studio.server_busy():
                 raise ValueError('Wait for the current update or apply operation.')
-            tracking = [(row['path'], hashlib.sha256((row['original'] or b'') + b'\0' + (row['custom'] or b'') + b'\0' + (row['expected'] or b'')).hexdigest()) for row in self.studio.workspace.tracked()]
+            tracking = self.studio.workspace.signature()
             if tracking != report.get('tracking'):
                 raise ValueError('Your custom changes changed since package review. Preview the package again.')
             # Re-hash immediately before dispatch; the native updater verifies it again.
@@ -193,6 +192,21 @@ class ProtectedUpdates:
         package = self.folder / (meta['id'] + '.zip')
         result_file = self.folder / (meta['id'] + '.installed.json')
         try:
+            # Preserve displaced work outside the game before the native updater
+            # runs. Restoration is a separate, deliberate edit after compatibility
+            # has been reviewed; package installation never writes custom values.
+            backup_id = 'update-custom-' + secrets.token_hex(8)
+            backup = self.studio.state / 'updates' / backup_id
+            backup.mkdir(parents=True)
+            archived = []
+            for index, row in enumerate(report['files']):
+                record = row['record']
+                for suffix, raw in (('original', record['original']), ('custom', record['custom']), ('before-update', row['current'])):
+                    if raw is not None:
+                        (backup / (str(index) + '.' + suffix)).write_bytes(raw)
+                archived.append({'path': record['path'], 'index': index, 'version': record['version']})
+            archive_meta = {'package': meta, 'policy': 'game-first', 'files': archived}
+            (backup / 'manifest.json').write_text(json.dumps(archive_meta, indent=2), 'utf-8')
             args = ['powershell.exe', '-NoProfile', '-NonInteractive', '-File', str(self.studio.app / 'Install-ReviewedUpdate.ps1'), '-ServerRoot', str(self.studio.root), '-PackagePath', str(package), '-ExpectedHash', meta['sha256'], '-PackageVersion', meta['version'], '-PackageKind', meta['kind'], '-ResultPath', str(result_file)]
             result = subprocess.run(args, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=900, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             if result.returncode or not result_file.is_file():
@@ -201,35 +215,25 @@ class ProtectedUpdates:
             if not isinstance(native, dict):
                 raise ValueError('Native installation returned an unsupported receipt. Review installed-file recovery before applying.')
             self.studio.workspace.set_preference('nativeUpdatePending', {'package': meta, 'nativeBackup': native.get('Backup'), 'ready': False})
-            # The native updater copied the package, so guard every affected file
-            # against the exact staged bytes before restoring selected custom values.
+            archive_meta['nativeBackup'] = native.get('Backup')
+            (backup / 'manifest.json').write_text(json.dumps(archive_meta, indent=2), 'utf-8')
+            # Verify the native result and update Studio's tracking only. Do not
+            # rewrite any game file after the game's own updater has installed it.
             with self.studio.lock:
                 for row in report['files']:
                     path = self.studio.safe(self.studio.root / row['record']['path'])
                     observed = path.read_bytes() if path.exists() else None
                     if observed != row['incoming']:
-                        raise ValueError('An affected file differs from the reviewed package. Custom restore paused; Apply is blocked.')
+                        raise ValueError('An affected file differs from the reviewed package. Studio reconciliation paused; inspect the native updater result. No Studio edits were restored.')
                 custom_files = []
                 for row in report['files']:
                     rel = row['record']['path']
                     path = self.studio.safe(self.studio.root / rel)
-                    selected = rebased[rel][2]
-                    custom_files.append((path, row['incoming'], selected))
-                # Keep a separate, recoverable record of custom restoration.
-                backup_id = 'update-custom-' + secrets.token_hex(8)
-                backup = self.studio.state / 'updates' / backup_id
-                backup.mkdir(parents=True)
-                for index, (path, old, new) in enumerate(custom_files):
-                    if old is not None:
-                        (backup / (str(index) + '.upstream')).write_bytes(old)
-                    if new is not None:
-                        (backup / (str(index) + '.custom')).write_bytes(new)
-                (backup / 'manifest.json').write_text(json.dumps({'package': meta, 'nativeBackup': native.get('Backup'), 'paths': [path.relative_to(self.studio.root).as_posix() for path, _, _ in custom_files]}), 'utf-8')
-                for path, _, new in custom_files:
-                    self.studio.write(path, new)
-                self.studio.workspace.record_commit(custom_files, 'Reconciled update ' + meta['version'], backup_id, {'reconciled': rebased})
-                self.studio.workspace.set_preference('nativeUpdatePending', {'package': meta, 'nativeBackup': native.get('Backup'), 'ready': True})
-            self.job = {'status': 'succeeded', 'message': 'Package files installed and reviewed custom values restored. Reload Studio, then Apply to server when ready.', 'package': meta, 'requiresReload': True}
+                    custom_files.append((path, row['current'], row['incoming']))
+                deferred = {row['record']['path']: (row['record']['original'], row['record']['custom'], row['incoming'], row['record']['version']) for row in report['files']}
+                self.studio.workspace.record_commit(custom_files, 'Installed game update ' + meta['version'] + '; custom merge deferred', backup_id, {'deferred': deferred})
+                self.studio.workspace.set_preference('nativeUpdatePending', {'package': meta, 'nativeBackup': native.get('Backup'), 'customBackup': backup_id, 'ready': True})
+            self.job = {'status': 'succeeded', 'message': 'Game package installed. Original and custom values are preserved for a later merge review. Reload Studio; you can Apply the game update now or review custom merges first.', 'package': meta, 'requiresReload': True}
             self.studio.job = {'status': 'files-ready', 'lines': [self.job['message']]}
         except Exception as error:
             self.job = {'status': 'failed', 'message': str(error)}

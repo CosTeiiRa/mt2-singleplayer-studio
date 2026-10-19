@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "api_version": 2,
+  "id": "community.pocket-wiki",
+  "name": "Pocket Wiki",
+  "version": "0.1.0-alpha.1",
+  "description": "## What it does\n\nSearch crafts, upgrade chains, material sources and uses inside the game. Bookmark pages, calculate attempt costs and pin recipes while playing.\n\n## How to use\n\n1. Install and enable Pocket Wiki in Studio. Installing Boss Atlas does not install Pocket Wiki.\n2. Launch your normal game client and enter a character.\n3. Click Pocket Wiki near the top-left of the game screen, or press Ctrl+U with chat closed.\n4. Search by item name or ID, select a result, then browse its crafts, upgrades, sources and uses. Use Bookmark or Pin to keep useful information nearby.\n\n## Shortcuts\n\n- Ctrl+U: show or hide Pocket Wiki by default.\n- F12: optional alternative, selected in the add-on settings.\n- NONE: disables the keyboard shortcut; keep Show button enabled to open the wiki by clicking it.\n- Existing game bindings and focused chat/input take priority over add-on shortcuts.\n\n## Settings\n\nOpen Studio > Installed add-ons > Pocket Wiki > Details. Shortcut chooses Ctrl+U, F12 or NONE. Show button controls the Pocket Wiki button. Close the client, review and apply the settings, then launch it again. The server can stay running.\n\n## Good to know\n\nStudio can be closed while you play. Reference information is a local snapshot, not live server telemetry; use Review reference-data refresh after content changes. Bookmarks, history and window preferences are kept locally.",
+  "author": "Add-on Hub contributors",
+  "category": "Reference",
+  "kind": "client-python",
+  "entry": "m2hub_addons.pocket_wiki",
+  "requires": [],
+  "conflicts": [],
+  "capabilities": [
+    "ui.window",
+    "knowledge.read",
+    "preferences.local"
+  ],
+  "files": [
+    {
+      "source": "pocket_wiki.py",
+      "target": "m2hub_addons/pocket_wiki.py",
+      "sha256": "4099ae0225f6067f1de59eb9f9ab40865fdd99defd60e62fb3d7b82bef52cf72"
+    },
+    {
+      "source": "pocket_model.py",
+      "target": "m2hub_addons/pocket_model.py",
+      "sha256": "91c9cfef76281e26b21e6fe2f07d8e492ffd181fdc4c3a6a365a120a728730dd"
+    }
+  ],
+  "settings": {
+    "show_button": true,
+    "shortcut": "CTRL_U"
+  },
+  "settings_schema": {
+    "type": "object",
+    "properties": {
+      "show_button": {
+        "type": "boolean",
+        "default": true
+      },
+      "shortcut": {
+        "type": "string",
+        "enum": [
+          "CTRL_U",
+          "F12",
+          "NONE"
+        ],
+        "default": "CTRL_U"
+      }
+    }
+  },
+  "compatibility": {
+    "client_versions": [
+      "2.0.112"
+    ],
+    "experimental": true
+  },
+  "release_notes": "First bundled Pocket Wiki: crafting, explicit upgrade links, sources/uses, native wiki links, bookmarks, history, pinned cards and reviewed local reference snapshots. Read coverage labels; interactive acceptance is recorded separately.",
+  "license": "MIT"
+}

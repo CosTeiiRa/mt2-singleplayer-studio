@@ -181,3 +181,10 @@
 
 .history-entry>div{min-width:0}.history-entry>button{flex:none}.history-restore-note{overflow-wrap:anywhere}@media(max-width:700px){.history-entry{flex-wrap:wrap}.history-entry>div{flex-basis:80%}.history-entry>button{margin-left:auto}}
 .craft-npc-list{max-height:50vh;overflow:auto;margin-top:16px}.craft-npc-list .file-entry{width:100%;text-align:left}.craft-npc-list [hidden]{display:none}.craft-requirements summary{cursor:pointer;margin:12px 0}.craft-conflict{border-bottom:1px solid var(--line);padding:12px 0}.craft-conflict p{overflow-wrap:anywhere}.recipe-conflict-banner{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}.top-actions #apply-button:disabled{opacity:.65;cursor:default}
+
+.history-tabs{flex-wrap:wrap;margin:0 0 14px}.history-tabs+.subtext{margin-bottom:18px}
+.history-filter{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px}.history-filter label{margin:0}.history-filter select{width:auto;max-width:100%;min-width:200px}.history-filter>span{font-size:11px}.history-entry .history-types{font-size:11px;color:var(--gold)}
+.studio-recovery{margin:14px 28px 0}.studio-recovery .button{margin:0 7px}.studio-recovery[hidden]{display:none}
+#apply-interrupted-check[hidden]{display:none}#apply-interrupted-check input{width:auto;margin-right:8px}
+
+.apply-current strong{display:block;font-size:15px;margin-bottom:8px}.apply-current p{margin:0}.apply-current-pending{border-left:3px solid var(--gold)}.apply-current-clean{border-left:3px solid #78b99a}.apply-previous{margin-top:22px;border-top:1px solid var(--line);padding-top:16px}.apply-previous summary{cursor:pointer;color:var(--muted);font-size:12px}.apply-previous p,#apply-operation-result{font-size:12px;line-height:1.8}

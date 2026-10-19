@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "api_version": 2,
+  "id": "community.addon-menu",
+  "name": "Add-on Menu",
+  "version": "0.1.0-alpha.2",
+  "description": "## What it does\n\nAdds one Add-ons button inside the game. Lists your installed add-ons and lets you open their windows or atlas overlays without remembering shortcuts. Add-on Menu appears first in its own list.\n\n## How to use\n\n1. Install and enable Add-on Menu in Studio.\n2. Launch your normal game client and enter a character.\n3. Click Add-ons near the top-left of the game screen, above the Pocket Wiki button.\n4. Choose an add-on and click Open. Boss Atlas and Atlas Legend use Open atlas. Use Previous and Next if there are more entries.\n\n## Shortcuts\n\nNo keyboard shortcut is required: click Add-ons. Your existing add-on shortcuts continue to work. Escape or the close button closes the menu.\n\n## Settings\n\nThere are no extra settings. Enable, disable or remove this add-on through Studio > Installed add-ons. Close the client before applying changes, then launch it again.\n\n## Good to know\n\nDisabled add-ons are listed but cannot be opened until enabled in Studio. Add-ons with no window run automatically; failed add-ons are marked unavailable. Studio can be closed while playing. Removing Add-on Menu leaves the other add-ons installed and their existing opening controls available.",
+  "author": "Add-on Hub contributors",
+  "category": "Interface",
+  "kind": "client-python",
+  "entry": "m2hub_addons.addon_menu",
+  "requires": [],
+  "conflicts": [],
+  "capabilities": [
+    "ui.window",
+    "addons.read",
+    "addons.open"
+  ],
+  "files": [
+    {
+      "source": "addon_menu.py",
+      "target": "m2hub_addons/addon_menu.py",
+      "sha256": "995c6be57817239ccbab27a49975c596172e2b224f4615e39f6988912e037ac0"
+    }
+  ],
+  "settings": {},
+  "settings_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "compatibility": {
+    "client_versions": [
+      "2.0.112",
+      "2.0.113"
+    ],
+    "experimental": true
+  },
+  "release_notes": "First Add-on Menu: one in-game launcher, installed add-on list, window and atlas actions, disabled/unavailable states and paging. Native UI smoke checks are separate from interactive gameplay.",
+  "license": "MIT"
+}

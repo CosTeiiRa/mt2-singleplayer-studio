@@ -6,18 +6,18 @@ if (-not (Test-Path -LiteralPath $DesktopPath -PathType Container)) { throw 'Des
 $studioPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $studioArguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $studioLauncher + '"'
 $studioShell = New-Object -ComObject WScript.Shell
-$studioLinkPath = Join-Path $DesktopPath 'Metin2 Server Studio.lnk'
+$studioLinkPath = Join-Path $DesktopPath 'Metin2 Studio.lnk'
 if (Test-Path -LiteralPath $studioLinkPath) {
     $existingStudioLink = $studioShell.CreateShortcut($studioLinkPath)
     if ($existingStudioLink.Arguments -ne $studioArguments) {
-        $studioLinkPath = Join-Path $DesktopPath ('Metin2 Server Studio ' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.lnk')
+        $studioLinkPath = Join-Path $DesktopPath ('Metin2 Studio ' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.lnk')
     }
 }
 $studioShortcut = $studioShell.CreateShortcut($studioLinkPath)
 $studioShortcut.TargetPath = $studioPowerShell
 $studioShortcut.Arguments = $studioArguments
 $studioShortcut.WorkingDirectory = $PSScriptRoot
-$studioShortcut.Description = 'Start Metin2 Server Studio and open the dashboard. Does not restart the game.'
+$studioShortcut.Description = 'Start Metin2 Studio and open the dashboard. Does not restart the game.'
 $studioShortcut.WindowStyle = 7
 $studioIcon = Join-Path $PSScriptRoot 'data\studio.ico'
 $studioShortcut.IconLocation = if (Test-Path -LiteralPath $studioIcon) { $studioIcon + ',0' } else { $studioPowerShell + ',0' }

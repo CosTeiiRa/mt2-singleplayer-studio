@@ -100,7 +100,7 @@ class ProtectedUpdateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'requires a protected'):
             self.updates.stage(io.BytesIO(raw), len(raw))
 
-    def test_native_install_receipt_restores_reviewed_value_and_keeps_other_update(self):
+    def test_native_install_keeps_game_values_and_archives_custom_work(self):
         path = self.root / 'drops.txt'
         base, custom, incoming = b'scroll 50\nother 1\n', b'scroll 100\nother 1\n', b'scroll 80\nother 2\n'
         path.write_bytes(custom)
@@ -110,17 +110,94 @@ class ProtectedUpdateTests(unittest.TestCase):
         choice = report['files'][0]['choices'][0]
         saved, changes, rebased = self.studio.workspace.reconciliation({'id': report['id'], 'decisions': {choice['id']: 'keep'}})
         def native_fixture(args, **kwargs):
+            archives = list((self.state / 'updates').glob('*/0.custom'))
+            self.assertEqual(len(archives), 1)
+            self.assertEqual(archives[0].read_bytes(), custom)
             path.write_bytes(incoming)
             (self.root / 'new-file.txt').write_bytes(b'new')
             result = Path(args[args.index('-ResultPath') + 1])
             result.write_text(json.dumps({'Backup': 'fixture-native-backup'}))
             return SimpleNamespace(returncode=0)
-        with patch('protected_updates.subprocess.run', side_effect=native_fixture):
+        with patch('protected_updates.subprocess.run', side_effect=native_fixture), patch.object(self.studio, 'write', side_effect=AssertionError('Studio must not rewrite game files after the updater')):
             self.updates._install(report['package'], saved, changes, rebased)
         self.assertEqual(self.updates.job['status'], 'succeeded')
-        self.assertEqual(path.read_bytes(), b'scroll 100\nother 2\n')
+        self.assertEqual(path.read_bytes(), incoming)
         self.assertEqual((self.root / 'new-file.txt').read_bytes(), b'new')
         self.assertTrue(self.studio.workspace.preference('nativeUpdatePending')['ready'])
         tracked = self.studio.workspace.tracked()[0]
-        self.assertEqual(tracked['original'], incoming)
-        self.assertEqual(self.studio.workspace.scan()['affectedFiles'], 0)
+        self.assertEqual((tracked['original'], tracked['custom'], tracked['expected']), (base, custom, incoming))
+        self.assertEqual(self.studio.workspace.scan(include_deferred=False)['affectedFiles'], 0)
+        # The update can be built immediately; custom work remains reviewable.
+        self.studio.workspace = Workspace(self.studio)
+        later = self.studio.workspace.scan()
+        self.assertEqual(later['affectedFiles'], 1)
+        self.assertTrue(later['files'][0]['deferred'])
+        choice = later['files'][0]['choices'][0]
+        _, restore, _ = self.studio.workspace.reconciliation({'id': later['id'], 'decisions': {choice['id']: 'keep'}})
+        self.assertEqual(restore[path], b'scroll 100\nother 2\n')
+        self.assertEqual(path.read_bytes(), incoming)
+        archived = json.loads(next((self.state / 'updates').glob('*/manifest.json')).read_text('utf-8'))
+        self.assertEqual(archived['policy'], 'game-first')
+        self.assertEqual(archived['nativeBackup'], 'fixture-native-backup')
+
+    def test_package_preserves_review_when_game_adopts_custom_and_leaves_absent_files_alone(self):
+        supplied, absent = self.root / 'supplied.txt', self.root / 'absent.txt'
+        for path in (supplied, absent):
+            path.write_bytes(b'value 100\n')
+            self.studio.workspace.record_commit([(path, b'value 50\n', path.read_bytes())], 'Custom', 'backup')
+        # Even when upstream adopts our old value, retain the pending review
+        # until the user explicitly accepts the new game baseline.
+        raw = package({'supplied.txt': supplied.read_bytes()})
+        report = self.updates.stage(io.BytesIO(raw), len(raw), hashlib.sha256(raw).hexdigest())
+        self.assertEqual(report['priority'], 'game')
+        self.assertEqual([row['path'] for row in report['files']], ['supplied.txt'])
+        saved, changes, rebased = self.studio.workspace.reconciliation({'id': report['id']})
+        def native_fixture(args, **kwargs):
+            Path(args[args.index('-ResultPath') + 1]).write_text(json.dumps({'Backup': 'fixture'}))
+            return SimpleNamespace(returncode=0)
+        with patch('protected_updates.subprocess.run', side_effect=native_fixture):
+            self.updates._install(report['package'], saved, changes, rebased)
+        self.assertEqual(self.studio.workspace.deferred_paths(), {'supplied.txt'})
+        later = self.studio.workspace.scan()
+        self.assertEqual(later['files'][0]['choices'], [])
+        _, changes, rebased = self.studio.workspace.reconciliation({'id': later['id']})
+        self.assertEqual(changes, {})
+        self.studio.workspace.record_commit([], 'Accept new game baseline', 'archived', {'reconciled': rebased})
+        self.assertEqual([row['path'] for row in self.studio.workspace.tracked()], ['absent.txt'])
+        self.assertEqual(absent.read_bytes(), b'value 100\n')
+
+    def test_second_update_preserves_original_custom_work_for_later_merge(self):
+        path = self.root / 'drops.txt'
+        base, custom = b'item 50\nother 1\n', b'item 100\nother 1\n'
+        path.write_bytes(custom)
+        self.studio.workspace.record_commit([(path, base, custom)], 'Custom', 'backup')
+        for value in (80, 90):
+            incoming = ('item %s\nother 9\n' % value).encode()
+            raw = package({'drops.txt': incoming})
+            report = self.updates.stage(io.BytesIO(raw), len(raw), hashlib.sha256(raw).hexdigest())
+            saved, changes, rebased = self.studio.workspace.reconciliation({'id': report['id']})
+            def native_fixture(args, **kwargs):
+                path.write_bytes(incoming)
+                Path(args[args.index('-ResultPath') + 1]).write_text(json.dumps({'Backup': 'fixture'}))
+                return SimpleNamespace(returncode=0)
+            with patch('protected_updates.subprocess.run', side_effect=native_fixture):
+                self.updates._install(report['package'], saved, changes, rebased)
+            self.assertEqual(path.read_bytes(), incoming)
+            tracked = self.studio.workspace.tracked()[0]
+            self.assertEqual((tracked['original'], tracked['custom'], tracked['expected']), (base, custom, incoming))
+        later = self.studio.workspace.scan()
+        choice = later['files'][0]['choices'][0]
+        _, changes, _ = self.studio.workspace.reconciliation({'id': later['id'], 'decisions': {choice['id']: 'keep'}})
+        self.assertEqual(changes[path], b'item 100\nother 9\n')
+
+    def test_no_custom_choice_is_required_and_stale_install_is_rejected(self):
+        path = self.root / 'drops.txt'
+        path.write_bytes(b'item 100\n')
+        self.studio.workspace.record_commit([(path, b'item 50\n', path.read_bytes())], 'Custom', 'backup')
+        raw = package({'drops.txt': b'item 80\n'})
+        report = self.updates.stage(io.BytesIO(raw), len(raw), hashlib.sha256(raw).hexdigest())
+        _, changes, _ = self.studio.workspace.reconciliation({'id': report['id']})
+        self.assertEqual(changes[path], b'item 80\n')
+        path.write_bytes(b'item 75\n')
+        with self.assertRaisesRegex(ValueError, 'changed since this review'):
+            self.updates.install({'id': report['id']})

@@ -61,7 +61,7 @@ class QuestSupportTests(unittest.TestCase):
         self.assertTrue(any(row['path'].endswith('studio_restore_test.quest') for row in files))
         self.assertFalse((self.s.game / 'custom-quests/studio_restore_test.quest').exists())
 
-    def test_update_recovery_preserves_custom_hook_and_unrelated_upstream_changes(self):
+    def test_explicit_later_merge_can_restore_custom_hook_and_keep_game_changes(self):
         dockerfile = self.s.game / 'Dockerfile'
         original = dockerfile.read_bytes()
         self.s.commit(self.s.quest_plan(self.body())['id'])

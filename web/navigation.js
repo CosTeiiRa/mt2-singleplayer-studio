@@ -67,7 +67,7 @@ function syncSidebar(){
     if(active){button.setAttribute('aria-current','page');const group=button.closest('details');if(group)group.open=true}else button.removeAttribute('aria-current');
   });
   const configured=['drops','quests','crafting','settings','files'].includes(S.page);
-  $('#crumb-context').textContent=configured?'Game configuration':'Workspace';
+  $('#crumb-context').textContent=configured?'Game configuration':['addons','installed','addonsettings','repositories'].includes(S.page)?'Add-ons':'Workspace';
   const section=configSections(S.page).find(s=>s.id===S.section);
   $('#crumb').textContent=titles[S.page]+(section?' / '+section.label:S.section==='all'?' / All':'');
 }

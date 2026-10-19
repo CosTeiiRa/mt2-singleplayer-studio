@@ -26,8 +26,10 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - run: python tools/check_project.py
+      - run: python -m pip install --only-binary=:all: -r requirements-addons.txt --target .vendor
+        if: matrix.python != '3.10'
       - run: python -m unittest discover -s tests -v
-      - run: node --test tests/catalog.test.js tests/icons.test.js tests/navigation.test.js tests/quest_help.test.js
+      - run: node --test tests/apply_status.test.js tests/history.test.js tests/catalog.test.js tests/icons.test.js tests/navigation.test.js tests/quest_help.test.js tests/update_priority.test.js tests/addons.test.mjs tests/addons_view.test.mjs tests/addon_jobs.test.mjs
       - name: Validate Windows launchers
         if: runner.os == 'Windows'
         shell: powershell

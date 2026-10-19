@@ -76,7 +76,7 @@ class StudioTests(unittest.TestCase):
         self.s.plans.clear()
         self.s.job = {'status': 'idle', 'lines': []}
         with self.s.workspace.connect() as conn:
-            for table in ('tracked', 'drafts', 'staged', 'changesets', 'deployments', 'activity'):
+            for table in ('tracked', 'deferred_merges', 'drafts', 'staged', 'changesets', 'deployments', 'activity'):
                 conn.execute('DELETE FROM ' + table)
         for p in (self.s.game / 'custom-quests').glob('*'):
             p.unlink()

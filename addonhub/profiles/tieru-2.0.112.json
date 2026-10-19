@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "tieru-mt2009-client-2.0.112",
+  "client_version": "2.0.112",
+  "server_version_observed": "2.2.108",
+  "executable_sha256": "0f2e1deea943c28ef9246c89b736c15aed72380834c29393dca8d3a74afb7662",
+  "validation": {
+    "actual_pack_roundtrip": true,
+    "two_addon_coexistence": true,
+    "exact_uninstall_restoration": true,
+    "native_startup_and_import": true,
+    "native_widget_construction": true,
+    "interactive_gameplay": false,
+    "boss_presence_telemetry": false,
+    "three_addon_coexistence": true,
+    "native_api_v2_windows": true,
+    "native_reference_navigation": true,
+    "native_wiki_deep_link": true,
+    "shipped_game_lifecycle_import": true
+  },
+  "limits": [
+    "Native smoke harness supplies synthetic atlas dimensions and map names.",
+    "No character login, server connection, or interactive gameplay was performed.",
+    "Normal-client pack changes require a reviewed plan and a closed client.",
+    "API-v2 native window/lifecycle checks use an isolated startup harness, not a logged-in character."
+  ]
+}

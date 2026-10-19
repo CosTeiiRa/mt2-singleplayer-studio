@@ -18,7 +18,8 @@ function Test-StudioReady {
     }
     $sameRoot = ([IO.Path]::GetFullPath([string]$studioResponse.root) -ieq [IO.Path]::GetFullPath([string]$studioSettings.serverRoot))
     $sameState = $studioResponse.stateDir -and ([IO.Path]::GetFullPath([string]$studioResponse.stateDir) -ieq [IO.Path]::GetFullPath($studioData))
-    if ($studioResponse.application -ne 'metin2-server-studio' -or -not $sameRoot -or -not $sameState) {
+    $sameProject = $studioResponse.projectRoot -and ([IO.Path]::GetFullPath([string]$studioResponse.projectRoot) -ieq [IO.Path]::GetFullPath($PSScriptRoot))
+    if ($studioResponse.application -ne 'metin2-server-studio' -or -not $sameRoot -or -not $sameState -or -not $sameProject) {
         throw ('Port ' + $studioSettings.port + ' already belongs to another Studio/world. Close that instance or choose another port in Setup-Studio.ps1 -Port 8766.')
     }
     return $true

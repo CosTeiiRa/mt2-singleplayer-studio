@@ -4,11 +4,48 @@ const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = n => Number(n).toLocaleString('en-GB');
 const S = {page:'overview', data:null, group:null, dropKind:'metin', dropSearch:'', selected:null, dirty:false, settings:null, files:null, file:null, fileSearch:'', fileCategory:'all', plan:null, picker:null, quest:{id:'studio_stone_hunter',title:'The Stone Hunter',intro:'Metin stones threaten the village. Will you help us?',npc:'9001',target:'8001',reward:'71084',kills:10,level:5,quantity:1,yang:10000,exp:5000}};
-const titles = {overview:'Overview',economy:'Economy',drops:'Drop editor',quests:'Quests',crafting:'Crafting recipes',settings:'World settings',files:'Config files',history:'Change history',changes:'Drafts & changes',updates:'Update protection'};
-async function api(path, body){
-  const headers=body===undefined?{}:{'Content-Type':'application/json','X-Studio-Token':S.data.token};
+const titles = {overview:'Overview',economy:'Economy',drops:'Drop editor',quests:'Quests',crafting:'Crafting recipes',settings:'World settings',files:'Config files',history:'Change history',changes:'Drafts & changes',updates:'Update protection',addons:'Discover add-ons',installed:'Installed add-ons',atlas:'World atlas',addonsettings:'Add-on settings',activity:'Activity',repositories:'Repositories'};
+let addonModule;
+async function loadAddonTools(page,current){
+  addonModule=await import('/addons.mjs');
+  if(!current())return;
+  await addonModule.mount({page,root:$('#content'),api,toast,current,openDrops:openAtlasDrops,openMapSource:openAtlasSource,
+    importPackage:file=>api('/api/addons/packages/import',file,{'Content-Type':'application/zip','X-Addon-Filename':encodeURIComponent(file.name)})});
+}
+async function openAtlasDrops(id){
+  if(!/^\d+$/.test(String(id))||!leaveOkay())return;
+  const fresh=await api('/api/bootstrap');S.data.groups=fresh.groups;
+  const group=fresh.groups.find(row=>row.id===String(id)&&row.source.startsWith('mob'));
+  S.dropKind=group?.category??(S.mobMap[id]?.category==='metin'?'metin':'boss');
+  S.dropSearch=group?'':String(id);S.openDropTarget=group;
+  await navigate('drops');
+}
+async function openAtlasSource(path){
+  if(!leaveOkay())return;
+  await navigate('files/maps');
+  if(S.page!=='files')return;
+  S.file=await api('/api/file?id='+encodeURIComponent(path));
+  renderFileDetail();renderFileList();
+}
+async function renderAddonOverview(){
+  const navigation=S.navigation,root=$('#content');
+  const section=document.createElement('section');section.className='panel work-catalog';section.id='addon-overview';
+  section.innerHTML='<h2>Client add-ons &amp; world atlas</h2><p>Reading this world’s add-on target…</p>';root.append(section);
+  try{
+    const [stateResult,updatesResult]=await Promise.allSettled([api('/api/addons/state'),api('/api/addons/updates')]);
+    if(stateResult.status==='rejected')throw stateResult.reason;
+    const {state}=stateResult.value;
+    const updateCount=updatesResult.status==='fulfilled'?(updatesResult.value.updates??[]).length:0;
+    if(S.page!=='overview'||S.navigation!==navigation)return;
+    const profile=state.installation;
+    section.innerHTML=`<h2>Client add-ons &amp; world atlas</h2><p>${state.installed.length} installed in the selected ${profile?.kind==='sandbox'?'pack sandbox':profile?.kind==='test-client'?'playable test copy':profile?'game client':'world'}. Server changes and add-on installs have separate reviews. Updates are manual.</p><div class="work-actions">${updateCount?`<button class="button primary" data-go="installed">${updateCount} add-on ${updateCount===1?'update':'updates'} available · Read changelog</button>`:''}<button class="button" data-go="addons">Discover add-ons ↗</button><button class="button" data-go="atlas">World atlas ↗</button><button class="button" data-go="addonsettings">${profile?.kind==='sandbox'?'Manage sandbox':'Manage client'} ↗</button></div>`;
+    $$('[data-go]',section).forEach(button=>button.addEventListener('click',()=>navigate(button.dataset.go)));
+  }catch(error){if(S.page==='overview'&&S.navigation===navigation){section.innerHTML='<h2>Client add-ons &amp; world atlas</h2><p></p>';section.querySelector('p').textContent=error.message;}}
+}
+async function api(path, body, uploadHeaders){
+  const headers=body===undefined?{}:{...(uploadHeaders??{'Content-Type':'application/json'}),'X-Studio-Token':S.data.token};
   if(typeof WUI!=='undefined'&&WUI.activeSet)headers['X-Studio-Changeset']=WUI.activeSet;
-  const response = await fetch(path, body === undefined ? {headers} : {method:'POST',headers,body:JSON.stringify(body)});
+  const response = await fetch(path, body === undefined ? {headers} : {method:'POST',headers,body:uploadHeaders?body:JSON.stringify(body)});
   const data = await response.json();
   if(!response.ok) throw new Error(data.error || 'Request failed');
   return data;
@@ -163,6 +200,7 @@ async function navigate(route,{reload=false}={}){
   const {page,section,route:canonical}=StudioNavigation.parse(route);
   if(!S.data || !titles[page] || !leaveOkay()) return;
   const navigation=(S.navigation||0)+1;S.navigation=navigation;
+  addonModule?.unmount();
   await workspaceFlush();
   if(S.navigation!==navigation)return;
   const current=()=>S.navigation===navigation;
@@ -186,6 +224,7 @@ async function navigate(route,{reload=false}={}){
     if(page==='history'){const history=await api('/api/history');if(current())renderHistory(history)}
     if(page==='changes') await renderChanges();
     if(page==='updates') await renderUpdates();
+    if(['addons','installed','atlas','addonsettings','activity','repositories'].includes(page))await loadAddonTools(page,current);
   });
 }
 function renderOverview(){
@@ -382,32 +421,79 @@ function renderFileDetail(){
   workspaceRestore();
 }
 function renderHistory(history){
-  $('#content').innerHTML=head('A WAY BACK','Change history','Review and undo a saved change. Every rollback gets its own backup.')+
-  `<div class="notice info"><strong>How rollback works</strong><p>1. Choose Review rollback. 2. Inspect the before/after diff and click Revert saved changes. 3. Use Apply to server to load the reverted files.</p><p>This restores the listed files to their contents before that save. Newer edits in the same files must be reverted first. Character progress and items are retained.</p></div><div class="panel"><div class="panel-header"><h3>Saved changes</h3><span>${history.length} recorded</span></div>${history.length?history.map((h,i)=>`<div class="history-entry"><span>↶</span><div><h3>${esc(h.title)}</h3><p>${h.files.length} ${h.files.length===1?'file':'files'} · ${new Date(h.time).toLocaleString()} · ${esc(h.status)}</p><small>${esc(h.files.map(f=>f.path.split('/').pop()).join(', '))}</small><p class="history-restore-note">${esc(h.restoreReason)}</p></div><button class="button small" data-restore="${i}" ${h.canRestore?'':'disabled'}>Review rollback</button></div>`).join(''):'<div class="empty">No saved changes yet. Backups appear here after saving an edit.</div>'}</div>`;
-  $$('[data-restore]').forEach(n=>n.addEventListener('click',()=>preview('/api/preview/restore',{id:history[Number(n.dataset.restore)].id})));
+  const labels={gameplay:'Gameplay changes',reconciliation:'Update reconciliations',all:'All changes'};
+  const types={all:'All types',quests:'Quests',crafting:'Crafting',drops:'Drops',settings:'World settings',maps:'Maps & spawns',shops:'Shops',fishing:'Fishing',alchemy:'Alchemy',items:'Items',skills:'Skills',events:'Events',files:'Other server files'};
+  const selected=labels[S.historyCategory]?S.historyCategory:'gameplay';
+  const type=types[S.historyType]?S.historyType:'all';
+  const category=row=>row.category==='reconciliation'?'reconciliation':'gameplay';
+  const areas=row=>row.areas?.length?row.areas:['files'];
+  const inCategory=history.filter(row=>selected==='all'||category(row)===selected);
+  const inType=history.filter(row=>type==='all'||areas(row).includes(type));
+  const counts={gameplay:inType.filter(row=>category(row)==='gameplay').length,reconciliation:inType.filter(row=>category(row)==='reconciliation').length,all:inType.length};
+  const rows=inCategory.filter(row=>type==='all'||areas(row).includes(type));
+  const description=selected==='reconciliation'?'Merges and conflict resolutions after game updates.':selected==='gameplay'?'Recipe, drop, quest, EXP and other gameplay edits.':'Gameplay edits and update reconciliations in one timeline.';
+  $('#content').innerHTML=head('A WAY BACK','Change history','Gameplay edits and game-update reconciliations have separate views.')+
+  `<div class="work-actions history-tabs" role="tablist" aria-label="History category">${Object.entries(labels).map(([key,label])=>`<button class="button ${selected===key?'primary':''}" type="button" role="tab" aria-selected="${selected===key}" data-history-category="${key}">${label} (${counts[key]})</button>`).join('')}</div><p class="subtext">${description}</p>`+
+  `<div class="history-filter"><label for="history-type">Change type</label><select id="history-type">${Object.entries(types).map(([key,label])=>`<option value="${key}" ${key===type?'selected':''}>${esc(label)} (${key==='all'?inCategory.length:inCategory.filter(row=>areas(row).includes(key)).length})</option>`).join('')}</select><span class="muted">A save can include several types. Rollback restores the entire save.</span></div>`+
+  `<div class="notice info"><strong>How rollback works</strong><p>1. Choose Review rollback. 2. Inspect the before/after diff and click Revert saved changes. 3. Use Apply to server to load the reverted files.</p><p>This restores the listed files to their contents before that save. Newer edits in the same files must be reverted first, including edits in the other category. Use All changes and All types to find related records. Character progress and items are retained.</p></div><div class="panel"><div class="panel-header"><h3>${labels[selected]}${type==='all'?'':` · ${esc(types[type])}`}</h3><span>${rows.length} of ${inCategory.length} recorded</span></div>${rows.length?rows.map(h=>`<div class="history-entry"><span>↶</span><div><h3>${esc(h.title)}</h3><p>${h.files.length} ${h.files.length===1?'file':'files'} · ${new Date(h.time).toLocaleString()} · ${esc(h.status)} · ${labels[category(h)]}</p><p class="history-types">${esc(areas(h).map(area=>types[area]||types.files).join(' · '))}</p><small>${esc(h.files.map(f=>f.path.replaceAll('\\','/').split('/').pop()).join(', '))}</small><p class="history-restore-note">${esc(h.restoreReason)}</p></div><button class="button small" data-restore="${esc(h.id)}" ${h.canRestore?'':'disabled'}>Review rollback</button></div>`).join(''):`<div class="empty">${type!=='all'?'No saved changes match this type in this category. Choose All types or All changes to widen the view.':selected==='reconciliation'?'No update reconciliations recorded yet.':selected==='gameplay'?'No gameplay changes recorded yet.':'No saved changes yet. Backups appear here after saving an edit.'}</div>`}</div>`;
+  $('#history-type').addEventListener('change',event=>{S.historyType=event.target.value;renderHistory(history)});
+  $$('[data-history-category]').forEach(button=>button.addEventListener('click',()=>{S.historyCategory=button.dataset.historyCategory;renderHistory(history)}));
+  $$('[data-restore]').forEach(button=>button.addEventListener('click',()=>preview('/api/preview/restore',{id:button.dataset.restore})));
 }
 async function preview(path,body){await attempt(async()=>{
   const plan=await api(path,body);S.plan=plan;
   $('#commit-button').textContent=plan.changeset?'Stage in change set':plan.confirmLabel||'Save changes';
   $('#review-title').textContent=plan.title;
   $('#review-body').innerHTML=`<p class="notice info">${esc(plan.hint)}</p>${plan.summary?.length?`<div class="table-wrap"><table><thead><tr><th>Configuration</th><th>Before</th><th>After</th></tr></thead><tbody>${plan.summary.map(row=>`<tr><th>${esc(row.field)}</th><td>${esc(row.before)}</td><td>${esc(row.after)}</td></tr>`).join('')}</tbody></table></div>`:''}${plan.files.map(f=>`<div class="diff-file"><strong>${esc(f.path)}</strong><pre class="code">${f.diff.split('\n').map(l=>`<span class="${l.startsWith('+')?'diff-added':l.startsWith('-')?'diff-removed':''}">${esc(l)}</span>`).join('\n')}</pre></div>`).join('')}`;
+  if(plan.keptGameFiles?.length)$('#review-body').insertAdjacentHTML('afterbegin',`<div class="notice info"><strong>Newer game files will be kept</strong>${plan.keptGameFiles.map(path=>`<p class="path">${esc(path)}</p>`).join('')}</div>`);
   $('#review').showModal();
 })}
 async function commit(){const button=$('#commit-button');button.disabled=true;try{
-  const result=await api('/api/commit',{id:S.plan.id});$('#review').close();await workspaceForget();dirty(false);if(result.publishedSet===WUI.activeSet){WUI.activeSet=null;localStorage.removeItem(wPrefix()+'active-set')}await workspaceRefresh();S.data.groups=(await api('/api/bootstrap')).groups;toast(result.staged?result.hint:'Saved with a backup. Use Apply to server to load the changes.');
+  const result=await api('/api/commit',{id:S.plan.id});$('#review').close();await workspaceForget();dirty(false);if(result.publishedSet===WUI.activeSet){WUI.activeSet=null;localStorage.removeItem(wPrefix()+'active-set')}await workspaceRefresh();S.data.groups=(await api('/api/bootstrap')).groups;toast(result.staged||result.recovered?result.hint:'Saved with a backup. Use Apply to server to load the changes.');
   if(S.page==='drops'){S.dropSearch='';renderDrops()}
   else if(S.page==='quests'){QuestUI.search='';QuestUI.origin='all';QuestUI.kind='all';QuestUI.limit=40;await renderQuestLibrary()}
   else navigate(S.route||S.page,{reload:true});
 }catch(e){toast(e.message,true)}finally{button.disabled=false}}
+function openApplyDialog(){
+  ApplyUI.jobId=null;ApplyUI.error='';ApplyUI.loading=true;ApplyUI.connectionFailed=false;
+  $('#apply-previous').open=false;
+  $('#apply-interrupted-ack').checked=false;
+  $('#apply-dialog').showModal();
+  refreshApplyControl();
+  updateStatus();
+}
+async function runServerOperation(validateOnly){
+  if(ApplyUI.starting||S.status?.job.status==='running')return;
+  ApplyUI.starting=validateOnly?'validation':'apply';ApplyUI.error='';ApplyUI.jobId=null;
+  refreshApplyControl();
+  try{
+    const interrupted=WUI.info?.interruptedDeployment;
+    const body=!validateOnly&&interrupted&&$('#apply-interrupted-ack').checked?{acknowledgeInterrupted:interrupted.id}:{};
+    const job=await api(validateOnly?'/api/validate':'/api/apply',body);
+    ApplyUI.jobId=job.id;
+    S.status={...S.status,job};
+  }catch(error){ApplyUI.error=error.message;toast(error.message,true);}
+  finally{ApplyUI.starting='';await updateStatus();}
+}
 let applyTimer;
 async function updateStatus(){
-  try{const data=await api('/api/status');S.status=data;const badge=$('#docker-badge');badge.textContent=data.job.status==='running'?'Applying changes…':data.health?.gameHealthy?'Game healthy':data.docker.available?'Game health unverified':'Docker stopped';badge.classList.toggle('good',!!data.health?.gameHealthy);badge.classList.toggle('neutral',!data.docker.available);
-    if($('#apply-dialog').open){$('#apply-explanation').textContent=data.job.status==='running'?'Build in progress. You can close this window; Studio will keep working.':!data.docker.available?'Start Docker Desktop and wait for Engine running. You can edit and save configurations while Docker is stopped.':data.job.status==='succeeded'?'Build completed and game health verified.':data.job.status==='validated'?'Build and compilation passed. The game was not restarted.':data.job.status==='unverified'?'Commands completed, but health or custom runtime values need verification. Inspect the log below.':data.job.status==='failed'?'The operation failed. Review the log below. Saved files and backups are retained.':'Docker is available. This applies saved files; preserved drafts are excluded.';$('#run-apply').disabled=!data.docker.available||data.job.status==='running';$('#run-validate').disabled=$('#run-apply').disabled;$('#apply-log').hidden=!data.job.lines.length;$('#apply-log').textContent=data.job.lines.join('\n');}
+  try{
+    const data=await api('/api/status');S.status=data;
+    const badge=$('#docker-badge');
+    badge.textContent=data.job.status==='running'?(data.job.kind==='validation'?'Validating build…':'Applying changes…'):data.health?.gameHealthy?'Game healthy':data.docker.available?'Game health unverified':'Docker stopped';
+    badge.classList.toggle('good',!!data.health?.gameHealthy);badge.classList.toggle('neutral',!data.docker.available);
     await workspaceRefresh();
-    if(data.job.status==='running'&& !applyTimer)applyTimer=setInterval(updateStatus,4000);
+    ApplyUI.loading=false;ApplyUI.connectionFailed=false;
+    refreshApplyControl();
+    if(data.job.status==='running'&&!applyTimer)applyTimer=setInterval(updateStatus,4000);
     if(data.job.status!=='running'&&applyTimer){clearInterval(applyTimer);applyTimer=null}
-  }catch(e){$('#docker-badge').textContent='Studio disconnected'}
+  }catch(error){
+    $('#docker-badge').textContent='Studio disconnected';
+    ApplyUI.loading=false;ApplyUI.connectionFailed=true;
+    refreshApplyControl();
+  }
 }
+
 document.addEventListener('DOMContentLoaded',async()=>{
   document.addEventListener('click',e=>{const button=e.target.closest('[data-inspect-item]');if(button){e.preventDefault();e.stopPropagation();showItemUsage(button.dataset.inspectItem)}});
   $('#explore-items').addEventListener('click',browseItems);
@@ -442,8 +528,9 @@ document.addEventListener('DOMContentLoaded',async()=>{
   $('#commit-button').addEventListener('click',commit);
   $('#discard-draft').addEventListener('click',()=>attempt(async()=>{await workspaceForget();dirty(false);navigate(S.route||S.page,{reload:true})}));
   $('#connection-info').addEventListener('click',()=>toast('Connected server folder:\n'+S.data.root));
-  $('#apply-button').addEventListener('click',()=>{$('#apply-dialog').showModal();$('#run-apply').disabled=true;$('#run-validate').disabled=true;updateStatus()});
-  $('#run-validate').addEventListener('click',()=>attempt(async()=>{$('#run-validate').disabled=true;await api('/api/validate',{});updateStatus()}));
-  $('#run-apply').addEventListener('click',()=>attempt(async()=>{$('#run-apply').disabled=true;await api('/api/apply',{});updateStatus()}));
-  try{S.data=await api('/api/bootstrap');S.itemMap=Object.fromEntries(S.data.items.map(e=>[e.id,e]));S.mobMap=Object.fromEntries(S.data.mobs.map(e=>[e.id,e]));await initWorkspace();initSidebarNavigation();if(WUI.activeSet)S.data.groups=(await api('/api/bootstrap')).groups;$('#version').textContent='Game '+S.data.version+' · Connected';$('#studio-version').textContent='METIN2 SERVER STUDIO '+(S.data.studioVersion||'');await navigate(location.hash.slice(1)||'overview');updateStatus();setInterval(()=>{if(!applyTimer)updateStatus()},30000)}catch(e){$('#content').innerHTML='<div class="empty">Studio could not read the installation.<p></p></div>';$('#content .empty p').textContent=e.message}
+  $('#apply-button').addEventListener('click',openApplyDialog);
+  $('#run-validate').addEventListener('click',()=>runServerOperation(true));
+  $('#run-apply').addEventListener('click',()=>runServerOperation(false));
+  $('#apply-interrupted-ack').addEventListener('change',refreshApplyControl);
+  try{S.data=await api('/api/bootstrap');S.itemMap=Object.fromEntries(S.data.items.map(e=>[e.id,e]));S.mobMap=Object.fromEntries(S.data.mobs.map(e=>[e.id,e]));await initWorkspace();initSidebarNavigation();if(WUI.activeSet)S.data.groups=(await api('/api/bootstrap')).groups;$('#version').textContent='Game '+S.data.version+' · Connected';$('#studio-version').textContent='METIN2 STUDIO '+(S.data.studioVersion||'');await navigate(location.hash.slice(1)||'overview');updateStatus();setInterval(()=>{if(!applyTimer)updateStatus()},30000)}catch(e){$('#content').innerHTML='<div class="empty">Studio could not read the installation.<p></p></div>';$('#content .empty p').textContent=e.message}
 });

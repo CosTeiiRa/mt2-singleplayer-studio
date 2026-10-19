@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "id": "community.boss-atlas",
+  "name": "Boss Atlas",
+  "version": "0.1.0-alpha.1",
+  "description": "## What it does\n\nShows configured boss and optional Metin spawn areas and names on the game's atlas.\n\n## How to use\n\n1. Install and enable Boss Atlas in Studio.\n2. Launch your normal game client and enter a character.\n3. Press M with chat closed, or click the atlas button on the minimap.\n4. The enabled overlays appear on the atlas for the current map. Boss areas are gold; Metin areas are blue when enabled.\n\n## Shortcuts\n\n- M: opens or closes the atlas using the supported client's existing game binding.\n- Boss Atlas adds no separate keyboard shortcut or standalone window.\n\n## Settings\n\n- Open Studio > Installed add-ons > Boss Atlas > Details.\n- Show areas: display the configured spawn zones.\n- Show labels: display boss and Metin names.\n- Show metins: include Metin zones; off by default.\n\nClose the client before reviewing and applying settings, then launch it again. The server can stay running.\n\n## Good to know\n\nThe overlays describe saved spawn configuration, not live boss positions or a respawn countdown. Maps without an available atlas or indexed spawn data may show no overlay. Studio can be closed while you play.",
+  "author": "Add-on Hub contributors",
+  "category": "Maps",
+  "kind": "client-python",
+  "entry": "m2hub_addons.boss_atlas",
+  "requires": [],
+  "conflicts": [],
+  "capabilities": [
+    "atlas.overlay",
+    "world.config.read"
+  ],
+  "files": [
+    {
+      "source": "boss_atlas.py",
+      "target": "m2hub_addons/boss_atlas.py",
+      "sha256": "c38a34029fef5060a672394ef6f7bb5643a2818885d093558004984feb0b626e"
+    }
+  ],
+  "settings": {
+    "show_areas": true,
+    "show_labels": true,
+    "show_metins": false
+  },
+  "settings_schema": {
+    "type": "object",
+    "properties": {
+      "show_areas": {
+        "type": "boolean",
+        "default": true
+      },
+      "show_labels": {
+        "type": "boolean",
+        "default": true
+      },
+      "show_metins": {
+        "type": "boolean",
+        "default": false
+      }
+    }
+  },
+  "compatibility": {
+    "client_versions": [
+      "2.0.112"
+    ],
+    "experimental": true
+  },
+  "release_notes": "Initial local alpha. Pack integration and host-simulation tests; in-game play-test is still required.",
+  "license": "MIT"
+}

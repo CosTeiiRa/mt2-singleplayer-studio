@@ -111,6 +111,27 @@ class ManagementTests(unittest.TestCase):
         self.s.commit(self.s.restore_plan(b['id'])['id'])
         self.assertTrue(next(row for row in self.s.history() if row['id'] == a['id'])['canRestore'])
 
+    def test_history_groups_keep_backups_and_cross_category_rollback_guards(self):
+        recipe = self.s.recipes()[0]
+        recipe['fields']['gold'] = '123'
+        first = self.s.commit(self.s.recipe_plan(recipe)['id'])
+        latest = self.s.recipes()[0]
+        latest['fields']['gold'] = '124'
+        plan = self.s.recipe_plan(latest)
+        self.s.plans[plan['id']]['metadata']['historyCategory'] = 'reconciliation'
+        second = self.s.commit(plan['id'])
+        rows = {row['id']: row for row in self.s.history()}
+        self.assertEqual(rows[first['id']]['category'], 'gameplay')
+        self.assertEqual(rows[second['id']]['category'], 'reconciliation')
+        self.assertEqual(rows[first['id']]['areas'], ['crafting'])
+        self.assertEqual(rows[second['id']]['areas'], ['crafting'])
+        self.assertFalse(rows[first['id']]['canRestore'])
+        restored = self.s.commit(self.s.restore_plan(second['id'])['id'])
+        rows = {row['id']: row for row in self.s.history()}
+        self.assertEqual(rows[restored['id']]['category'], 'reconciliation')
+        self.assertEqual(rows[restored['id']]['areas'], ['crafting'])
+        self.assertTrue(rows[first['id']]['canRestore'])
+
     def test_recipe_removal_can_be_staged_without_writing_game_files(self):
         recipe = self.s.recipes()[0]
         count = len(self.s.recipes())

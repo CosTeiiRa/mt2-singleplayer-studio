@@ -16,6 +16,59 @@ from merge_custom import Choice, Merge, choice_id, merge, minimal_numeric_edit, 
 SOURCE_VIEW = ContextVar('studio_source_view', default=None)
 
 
+def history_category(title, metadata=None):
+    metadata = metadata or {}
+    explicit = metadata.get('historyCategory', metadata.get('category'))
+    if explicit in ('gameplay', 'reconciliation'):
+        return explicit
+    if 'reconciled' in metadata or 'deferred' in metadata:
+        return 'reconciliation'
+    # Older backups predate explicit categories. Match system titles only;
+    # ordinary edits such as "Update world settings" remain gameplay changes.
+    while title.startswith('Revert: '):
+        title = title[8:]
+    return 'reconciliation' if title in (
+        'Reconcile custom changes after update',
+        'Merge custom changes onto the updated game',
+        'Resolve customised native crafting changes',
+    ) else 'gameplay'
+
+
+def history_areas(files):
+    """Classify every saved file, including legacy backups, without changing it."""
+    areas = set()
+    for file in files:
+        path = file['path'].replace('\\', '/').lower()
+        parts = path.split('/')
+        name = parts[-1]
+        if name == 'studio-crafting.json' or name.startswith('cube.') or name == 'crafting_data.lua':
+            area = 'crafting'
+        elif any(token in name for token in ('drop_item', 'special_item_group')):
+            area = 'drops'
+        elif name in ('.env', 'settings.lua'):
+            area = 'settings'
+        elif name == 'oxquiz.lua':
+            area = 'events'
+        elif name.startswith('shop_table'):
+            area = 'shops'
+        elif name.startswith('fishing.'):
+            area = 'fishing'
+        elif name.startswith('dragon_soul_table'):
+            area = 'alchemy'
+        elif name.startswith(('skill_power.', 'skill_proto.')):
+            area = 'skills'
+        elif name in ('blend.txt', 'item_proto.txt'):
+            area = 'items'
+        elif 'map' in parts or name in ('special_spawns.txt', 'group.txt', 'group_group.txt'):
+            area = 'maps'
+        elif name.endswith('.quest') or 'quest' in parts or 'custom-quests' in parts:
+            area = 'quests'
+        else:
+            area = 'files'
+        areas.add(area)
+    return sorted(areas or {'files'})
+
+
 def sha(raw):
     return hashlib.sha256(raw).hexdigest() if raw is not None else None
 
@@ -70,6 +123,7 @@ class Workspace:
             conn.executescript('''
               CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS tracked (path TEXT PRIMARY KEY, original BLOB, custom BLOB, expected BLOB, updated REAL NOT NULL, version TEXT NOT NULL);
+              CREATE TABLE IF NOT EXISTS deferred_merges (path TEXT PRIMARY KEY);
               CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL, payload TEXT NOT NULL, updated REAL NOT NULL);
               CREATE TABLE IF NOT EXISTS changesets (id TEXT PRIMARY KEY, name TEXT NOT NULL, note TEXT NOT NULL, status TEXT NOT NULL, created REAL NOT NULL, updated REAL NOT NULL);
               CREATE TABLE IF NOT EXISTS staged (changeset TEXT NOT NULL, path TEXT NOT NULL, original BLOB, content BLOB, title TEXT NOT NULL, PRIMARY KEY(changeset,path));
@@ -293,7 +347,7 @@ class Workspace:
         info = self.change_set(ident)
         if info['status'] != 'draft':
             raise ValueError('This change set has already been saved.')
-        if self.scan()['affectedFiles']:
+        if self.scan(include_deferred=False)['affectedFiles']:
             raise ValueError('Resolve affected saved customisations in Update protection before publishing staged work. Then review this set against the reconciled files.')
         with self.connect() as conn:
             rows = [dict(row) for row in conn.execute('SELECT * FROM staged WHERE changeset=?', (ident,))]
@@ -316,9 +370,10 @@ class Workspace:
                     raise ValueError('This file is already tracked. Review its existing customisation instead.')
                 conn.execute('INSERT INTO tracked VALUES (?,?,?,?,?,?)', (rel, original, custom, expected, time.time(), self.version()))
             reconciled = metadata.get('reconciled', {})
+            deferred = metadata.get('deferred', {})
             for path, old, new in files:
                 rel = path.relative_to(self.studio.root).as_posix()
-                if rel in reconciled:
+                if rel in reconciled or rel in deferred:
                     continue
                 row = conn.execute('SELECT * FROM tracked WHERE path=?', (rel,)).fetchone()
                 original = row['original'] if row else old
@@ -337,10 +392,15 @@ class Workspace:
                     conn.execute('INSERT OR REPLACE INTO tracked VALUES (?,?,?,?,?,?)', (rel, original, custom, new, time.time(), self.version()))
             for rel, values in reconciled.items():
                 original, custom, expected = values
+                conn.execute('DELETE FROM deferred_merges WHERE path=?', (rel,))
                 if original == custom:
                     conn.execute('DELETE FROM tracked WHERE path=?', (rel,))
                 else:
                     conn.execute('UPDATE tracked SET original=?,custom=?,expected=?,updated=?,version=? WHERE path=?', (original, custom, expected, time.time(), self.version(), rel))
+            for rel, values in deferred.items():
+                original, custom, expected, version = values
+                conn.execute('INSERT OR REPLACE INTO tracked VALUES (?,?,?,?,?,?)', (rel, original, custom, expected, time.time(), version))
+                conn.execute('INSERT OR IGNORE INTO deferred_merges VALUES (?)', (rel,))
             if metadata.get('publishSet'):
                 conn.execute("UPDATE changesets SET status='saved',updated=? WHERE id=?", (time.time(), metadata['publishSet']))
             self.event('saved', title, {'backup': ident, 'files': [path.relative_to(self.studio.root).as_posix() for path, _, _ in files]}, conn)
@@ -383,30 +443,40 @@ class Workspace:
         return plan
 
     def signature(self):
-        return [(row['path'], sha((row['original'] or b'') + b'\0' + (row['custom'] or b'') + b'\0' + (row['expected'] or b''))) for row in self.tracked()]
+        deferred = self.deferred_paths()
+        return [(row['path'], sha((row['original'] or b'') + b'\0' + (row['custom'] or b'') + b'\0' + (row['expected'] or b'')), row['path'] in deferred) for row in self.tracked()]
 
-    def tracked(self):
+    def deferred_paths(self):
         with self.connect() as conn:
-            return [dict(row) for row in conn.execute('SELECT * FROM tracked ORDER BY path')]
+            return {row['path'] for row in conn.execute('SELECT path FROM deferred_merges')}
+
+    def tracked(self, active_only=False):
+        with self.connect() as conn:
+            query = 'SELECT * FROM tracked' + (' WHERE path NOT IN (SELECT path FROM deferred_merges)' if active_only else '') + ' ORDER BY path'
+            return [dict(row) for row in conn.execute(query)]
 
     def compare(self, record, incoming):
         if record['path'] == 'linux-port/docker/.env':
             return EnvMerge(record['original'], record['custom'], incoming, self.studio.settings_schema, record['path'])
         return merge(record['original'], record['custom'], incoming, record['path'])
 
-    def scan(self, incoming_files=None, kind='installed', package=None, records=None):
+    def scan(self, incoming_files=None, kind='installed', package=None, records=None, include_deferred=True):
         rows, state, conflicts = [], [], 0
+        deferred = self.deferred_paths() if kind == 'installed' and include_deferred else set()
         for record in self.tracked() if records is None else records:
+            if kind == 'package' and record['path'] not in (incoming_files or {}):
+                continue  # A package cannot replace a file it does not contain.
             path = self.studio.safe(self.studio.root / record['path'])
             current = path.read_bytes() if path.exists() else None
             incoming = incoming_files.get(record['path'], current) if incoming_files is not None else current
-            if incoming == record['expected']:
+            if incoming == record['expected'] and kind != 'package' and record['path'] not in deferred:
                 continue
             combined = self.compare(record, incoming)
             if not combined.choices:
                 if kind == 'changeset':
                     state.append({'record': record, 'incoming': incoming, 'current': current, 'merge': combined})
-                continue  # No custom area was affected; unrelated changes need no approval.
+                if kind != 'package' and record['path'] not in deferred:
+                    continue  # No custom area was affected; unrelated changes need no approval.
             choices = []
             for piece in combined.choices:
                 def display(raw):
@@ -416,18 +486,21 @@ class Workspace:
                     context = self.compare(record, incoming).keys.get(piece.ident, b'').decode()
                 choices.append({'id': piece.ident, 'original': display(piece.base), 'custom': display(piece.custom), 'incoming': display(piece.incoming), 'conflict': piece.conflict, 'line': piece.line, 'context': context})
                 conflicts += int(piece.conflict)
-            rows.append({'path': record['path'], 'choices': choices, 'originalVersion': record['version']})
+            rows.append({'path': record['path'], 'choices': choices, 'originalVersion': record['version'], 'deferred': record['path'] in deferred})
             state.append({'record': record, 'incoming': incoming, 'current': current, 'merge': combined})
         ident = secrets.token_urlsafe(18)
         self.reports = {key: value for key, value in self.reports.items() if time.time()-value['at'] < 3600}
-        self.reports[ident] = {'at': time.time(), 'files': state, 'kind': kind, 'package': package}
-        return {'id': ident, 'kind': kind, 'at': time.time(), 'version': self.version(), 'trackedFiles': len(self.tracked()), 'affectedFiles': len(rows), 'conflicts': conflicts, 'files': rows,
-                'scope': 'Only entries changed through Studio are reviewed. Unrelated incoming changes are retained automatically. External launcher updates bypass pre-install review; use the protected package workflow to review before the next build.'}
+        self.reports[ident] = {'at': time.time(), 'files': state, 'kind': kind, 'package': package, 'tracking': self.signature()}
+        scope = 'Install the game update first. Original and custom values are preserved for a separate merge review afterwards; nothing is automatically restored over the update.' if kind == 'package' else 'The current game files are authoritative. Conflicts default to the game value. Review and save your merge to restore selected custom changes, or keep the game now and decide later.'
+        return {'id': ident, 'kind': kind, 'priority': 'game' if kind == 'package' else 'review' if kind == 'changeset' else 'merge', 'at': time.time(), 'version': self.version(), 'trackedFiles': len(self.tracked()), 'affectedFiles': len(rows), 'conflicts': conflicts, 'files': rows,
+                'scope': 'Review staged work against the current game files. Unrelated incoming changes are retained.' if kind == 'changeset' else scope}
 
     def reconciliation(self, values):
         report = self.reports.get(str(values.get('id', '')))
         if not report or time.time()-report['at'] >= 3600:
             raise ValueError('This update review expired. Scan again.')
+        if report.get('tracking') != self.signature():
+            raise ValueError('Customisation tracking changed since this review. Scan again.')
         decisions = values.get('decisions', {})
         known = {piece.ident for row in report['files'] for piece in row['merge'].choices}
         if not isinstance(decisions, dict) or set(decisions) - known or any(value not in ('keep', 'update') for value in decisions.values()):
@@ -439,8 +512,23 @@ class Workspace:
             current = path.read_bytes() if path.exists() else None
             if current != row['current']:
                 raise ValueError(record['path'] + ' changed since this review. Scan again.')
-            merged = row['merge'].resolve(decisions)
-            if record['path'].endswith('/.env'):
+            if report['kind'] == 'package':
+                # Package installation always uses the game; choices belong to
+                # the separate, durable review after the update is installed.
+                incoming = row['incoming']
+                rebased[record['path']] = (incoming, incoming, incoming)
+                if incoming != current:
+                    changes[path] = incoming
+                continue
+            selected = dict(decisions)
+            if report['kind'] == 'installed':
+                for piece in row['merge'].choices:
+                    if piece.conflict:
+                        selected.setdefault(piece.ident, 'update')
+            merged = row['merge'].resolve(selected)
+            if report['kind'] == 'installed':
+                original = row['incoming']
+            elif record['path'].endswith('/.env'):
                 reverse = EnvMerge(record['custom'], record['original'], row['incoming'], self.studio.settings_schema, 'reverse')
                 original = reverse.resolve({piece.ident: 'update' for piece in reverse.choices if piece.conflict})
             else:
@@ -458,15 +546,47 @@ class Workspace:
         if not rebased:
             raise ValueError('No custom changes need reconciliation.')
         guards = [(self.studio.root / row['record']['path'], row['current']) for row in report['files']]
-        return self.studio.plan('Reconcile custom changes after update', changes, 'Your selected custom entries are merged; unrelated update content is retained. Rebuild separately when ready.', from_disk=True, metadata={'reconciled': rebased, 'guards': guards, 'tracking': self.signature()})
+        return self.studio.plan('Merge custom changes onto the updated game', changes, 'Conflicts start with the game value. Saving writes only your reviewed merge; unrelated game changes remain intact. Changed files stay pending until Build/Apply deploys and verifies them.', from_disk=True, metadata={'reconciled': rebased, 'guards': guards, 'tracking': self.signature()})
+
+    def defer_plan(self, values):
+        report, _, _ = self.reconciliation({'id': values.get('id')})
+        if report['kind'] != 'installed' or not report['files']:
+            raise ValueError('Scan updated game files before deferring a merge.')
+        deferred = {row['record']['path']: (row['record']['original'], row['record']['custom'], row['current'], row['record']['version']) for row in report['files']}
+        guards = [(self.studio.root / row['record']['path'], row['current']) for row in report['files']]
+        return self.studio.plan('Keep game values and review custom changes later', {}, 'Game files are unchanged. Your original and custom values stay in a pending merge review; the game can be built and played before deciding.', from_disk=True, metadata={'deferred': deferred, 'guards': guards, 'tracking': self.signature()})
 
     def pending_saved_paths(self):
-        # A rollback can remove its custom-diff tracking (it equals the package
-        # original again) while the running image still holds the previous edit.
+        # Saves are deployment work, even if they restore bytes from an older
+        # build. The game launcher may have replaced that running image since.
+        # Validation, failed builds and unverified runtime checks never clear it.
         with self.connect() as conn:
             last = conn.execute("SELECT started FROM deployments WHERE status='succeeded' ORDER BY started DESC LIMIT 1").fetchone()
             rows = conn.execute("SELECT payload FROM activity WHERE kind='saved' AND at>?", (last['started'] if last else 0,)).fetchall()
         return {rel for row in rows for rel in json.loads(row['payload']).get('files', [])}
+
+    def interrupt_deployments(self):
+        latest = None
+        with self.connect() as conn:
+            rows = conn.execute("SELECT * FROM deployments WHERE status='running' ORDER BY started").fetchall()
+            for row in rows:
+                payload = json.loads(row['payload'])
+                payload['lines'] = list(payload.get('lines', [])) + ['Studio closed before this operation finished. Deployment is interrupted and unverified. Inspect the game launcher and running build commands before retrying Apply. Saved changes remain pending; nothing was restarted automatically.']
+                conn.execute("UPDATE deployments SET status='interrupted',finished=?,payload=? WHERE id=?", (time.time(), json.dumps(payload), row['id']))
+                self.event('deployment', 'Server operation interrupted', {'deployment': row['id']}, conn)
+                latest = {**payload, 'id': row['id'], 'status': 'interrupted', 'started': row['started']}
+            if latest is None:
+                row = conn.execute("SELECT * FROM deployments WHERE status='interrupted' ORDER BY started DESC LIMIT 1").fetchone()
+                if row and not conn.execute("SELECT 1 FROM deployments WHERE status='succeeded' AND started>?", (row['started'],)).fetchone():
+                    latest = {**json.loads(row['payload']), 'id': row['id'], 'status': 'interrupted', 'started': row['started']}
+        return latest
+
+    def interrupted_deployment(self):
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM deployments WHERE status='interrupted' ORDER BY started DESC LIMIT 1").fetchone()
+            if row and not conn.execute("SELECT 1 FROM deployments WHERE status='succeeded' AND started>?", (row['started'],)).fetchone():
+                return {**json.loads(row['payload']), 'id': row['id'], 'status': 'interrupted', 'started': row['started']}
+        return None
 
     def summary(self):
         tracked = self.tracked()
@@ -479,17 +599,27 @@ class Workspace:
             preferences['nativeUpdatePending'] = {'ready': True, 'external': True}
         deployed = json.loads(deployment['payload']).get('files', {}) if deployment else {}
         records = {row['path']: row for row in tracked}
-        for rel in sorted(set(records) | self.pending_saved_paths()):
+        saved = self.pending_saved_paths()
+        for rel in sorted(set(records) | saved):
             row = records.get(rel)
             path = self.studio.safe(self.studio.root / rel)
             current = path.read_bytes() if path.exists() else None
             fingerprint = self.studio.build_fingerprints().get(rel) if path == self.studio.compose / '.env' else sha(current)
-            if fingerprint != deployed.get(rel):
+            # Creating and removing a never-deployed file cancels that work.
+            # Every other saved file waits for a verified deployment, including
+            # a merge that happens to match an older deployment fingerprint.
+            if fingerprint != deployed.get(rel) or (rel in saved and fingerprint is not None):
                 pending.append({'path': rel, 'changedOutsideStudio': bool(row and current != row['expected'])})
-        return {'drafts': self.drafts(), 'changesets': self.change_sets(), 'tracked': [{'path': row['path'], 'version': row['version'], 'updated': row['updated']} for row in tracked],
+        recovery = self.studio.save_recovery.pending() if hasattr(self.studio, 'save_recovery') else []
+        for record in recovery:
+            for rel in record['changed']:
+                if not any(row['path'] == rel for row in pending):
+                    pending.append({'path': rel, 'changedOutsideStudio': False, 'recoveryRequired': True})
+        return {'drafts': self.drafts(), 'changesets': self.change_sets(), 'tracked': [{'path': row['path'], 'version': row['version'], 'updated': row['updated']} for row in tracked], 'pendingMerges': sorted(self.deferred_paths()),
                 'pending': pending, 'lastDeployment': {**dict(deployment), 'payload': json.loads(deployment['payload'])} if deployment else None,
                 'recent': [{**row, 'payload': json.loads(row['payload'])} for row in recent], 'preferences': preferences,
-                'deploymentKnown': bool(deployment), 'version': self.version()}
+                'deploymentKnown': bool(deployment), 'version': self.version(), 'saveRecovery': recovery,
+                'interruptedDeployment': self.interrupted_deployment()}
 
     def deployment(self, ident, status, payload):
         with self.connect() as conn:

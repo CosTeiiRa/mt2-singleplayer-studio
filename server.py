@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from contextlib import contextmanager
 from contextvars import ContextVar
 import difflib
 import hashlib
@@ -26,7 +27,7 @@ from item_icons import client_icon_aliases, icon_path
 from item_usage import item_usage, item_drop_summary
 from economy import Economy
 from economy_export import download as economy_download
-from workspace import Workspace
+from workspace import Workspace, history_category, history_areas
 from protected_updates import ProtectedUpdates
 from studio_features import drop_index, combined_drops, bulk_drop_plan, search as studio_search, table_view, table_plan
 from installation import APPLICATION, default_root, resolve_settings, bind_state, studio_version
@@ -103,11 +104,18 @@ class Studio:
         self.state.mkdir(parents=True, exist_ok=True)
         spec = importlib.util.spec_from_file_location("installed_drop_tables", self.root / "files/drop_tables.py")
         self.dt = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(self.dt)
+        # Read installed source without writing bytecode into the game folder.
+        drop_parser = (self.root / 'files/drop_tables.py').read_bytes()
+        exec(compile(drop_parser, str(self.root / 'files/drop_tables.py'), 'exec'), self.dt.__dict__)
+        self.drop_parser_sha = digest(drop_parser)
         self.token = secrets.token_urlsafe(32)
         self.plans = {}
         self.lock = threading.RLock()
         self.job = {"status": "idle", "lines": []}
+        self._operation_lock = threading.RLock()
+        self._active_mutations = 0
+        self._stopping = False
+        self._apply_thread = None
         self._health_cache = None
         self.items = {str(x["v"]): {"id": str(x["v"]), "name": x["n"], "category": x.get("c", "item"), "keywords": x.get("k", "")} for x in json.loads((self.root / "files/items.json").read_text("utf-8"))}
         names, item_names = {}, {}
@@ -145,10 +153,55 @@ class Studio:
         }
         self.settings_schema = self.discover_settings()
         self.workspace = Workspace(self)
+        from save_recovery import SaveRecovery
+        self.save_recovery = SaveRecovery(self)
+        interrupted = self.workspace.interrupt_deployments()
+        if interrupted:
+            self.job = interrupted
         self.economy = Economy(self)
         from native_crafting import NativeCrafting
         self.native_crafting = NativeCrafting(self)
         self.updates = ProtectedUpdates(self)
+        self._addons = None
+
+    @contextmanager
+    def mutation_request(self):
+        with self._operation_lock:
+            self.require_running()
+            self._active_mutations += 1
+        try:
+            yield
+        finally:
+            with self._operation_lock:
+                self._active_mutations -= 1
+
+    def require_running(self):
+        if self._stopping:
+            raise ValueError('Studio is stopping. Start Studio again before making changes.')
+
+    def server_busy(self):
+        worker = self._apply_thread
+        return self.job.get('status') == 'running' or worker is not None and worker.is_alive() is True
+
+    def public_job(self):
+        return {**self.job, 'status': 'running'} if self.server_busy() else self.job
+
+    def request_shutdown(self):
+        with self._operation_lock:
+            network = self._addons.jobs.latest() if self._addons is not None else None
+            if (self._active_mutations or self.server_busy()
+                    or self.updates.job.get('status') == 'running'
+                    or network and network.get('status') in ('queued', 'running')):
+                raise ValueError('Studio is busy saving, applying or updating. Wait for the operation to finish, or cancel its download and wait, before stopping Studio. The game has not been stopped by this request.')
+            self._stopping = True
+
+    @property
+    def addons(self):
+        with self.lock:
+            if self._addons is None:
+                from addonhub.integration import AddonService
+                self._addons = AddonService(self)
+            return self._addons
 
     def configuration_editable(self, path):
         return editable_path(self, path)
@@ -166,7 +219,7 @@ class Studio:
 
     def reload_catalog(self):
         with self.lock:
-            if self.job['status'] == 'running':
+            if self.server_busy():
                 raise ValueError('Wait for the current operation before reloading the catalog.')
             fresh = Studio(self.root, self.state)
             for key in ('dt', 'items', 'mobs', 'icons', 'settings_schema', 'sources'):
@@ -563,15 +616,21 @@ class Studio:
 
     def plan(self, title, changes, hint, redact=False, from_disk=False, metadata=None):
         with self.lock:
-            if self.job["status"] == "running":
+            self.require_running()
+            if not (metadata or {}).get('saveRecovery'):
+                self.save_recovery.require_clear()
+            if self.server_busy():
                 raise ValueError("Wait for the current server apply to finish before saving files.")
             files, views = [], []
             tracked = {row['path']: row for row in self.workspace.tracked()} if not from_disk else {}
+            deferred = self.workspace.deferred_paths() if not from_disk else set()
             for path, new in changes.items():
                 path = self.safe(path)
                 old = (path.read_bytes() if path.exists() else None) if from_disk else self.read(path)
                 if old == new:
                     continue
+                if path.relative_to(self.root).as_posix() in deferred:
+                    raise ValueError('Review this file\'s pending custom merge in Update protection before making another edit.')
                 check_change(self, path, old, new)
                 record = tracked.get(path.relative_to(self.root).as_posix())
                 if not ACTIVE_CHANGESET.get() and record and old != record['expected'] and self.workspace.compare(record, old).choices:
@@ -594,13 +653,20 @@ class Studio:
 
     def commit(self, key):
         with self.lock:
-            if self.job["status"] == "running":
+            self.require_running()
+            if self.server_busy():
                 raise ValueError("Wait for the server apply to finish.")
             p = self.plans.get(key)
             if not p or time.time() - p["time"] > 1800:
                 raise ValueError("Review expired. Preview the change again.")
+            if p.get('metadata', {}).get('saveRecovery'):
+                return self.save_recovery.commit(key, p)
+            self.save_recovery.require_clear()
             for path, old, new in p['files']:
                 check_change(self, path, old, new)
+                rel = path.relative_to(self.root).as_posix()
+                if rel in self.workspace.deferred_paths() and rel not in p.get('metadata', {}).get('reconciled', {}):
+                    raise ValueError('A custom merge is pending for ' + path.name + '. Review it in Update protection first.')
             for rel, original, custom, expected in p.get('metadata', {}).get('adopt', []):
                 check_change(self, self.root / rel, original, custom)
             for rel, (original, custom, expected) in p.get('metadata', {}).get('reconciled', {}).items():
@@ -623,15 +689,17 @@ class Studio:
             ident = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + secrets.token_hex(4)
             folder = self.state / "backups" / ident
             folder.mkdir(parents=True)
-            manifest = {"id": ident, "title": p["title"], "time": datetime.now(timezone.utc).isoformat(), "hint": p["hint"], "status": "saving", "files": []}
+            from save_recovery import durable_bytes, manifest_write
+            manifest = {"id": ident, "title": p["title"], "time": datetime.now(timezone.utc).isoformat(), "hint": p["hint"], "status": "saving", "files": [],
+                        "category": history_category(p['title'], p.get('metadata'))}
             for i, (path, old, new) in enumerate(p["files"]):
                 if old is not None:
-                    (folder / f"{i}.before").write_bytes(old)
+                    durable_bytes(folder / f"{i}.before", old)
                 if new is not None:
-                    (folder / f"{i}.after").write_bytes(new)
-                manifest["files"].append({"path": path.relative_to(self.root).as_posix(), "existed": old is not None, "after": digest(new) if new is not None else None})
+                    durable_bytes(folder / f"{i}.after", new)
+                manifest["files"].append({"path": path.relative_to(self.root).as_posix(), "existed": old is not None, "before": digest(old) if old is not None else None, "after": digest(new) if new is not None else None})
             mp = folder / "manifest.json"
-            mp.write_text(json.dumps(manifest, indent=2), "utf-8")
+            manifest_write(mp, manifest)
             done = []
             try:
                 for path, old, new in p["files"]:
@@ -639,13 +707,16 @@ class Studio:
                     done.append((path, old))
                 self.workspace.record_commit(p['files'], p['title'], ident, p.get('metadata'))
             except Exception:
-                for path, old in reversed(done):
-                    self.write(path, old)
-                manifest["status"] = "rolled-back"
-                mp.write_text(json.dumps(manifest, indent=2), "utf-8")
+                for path, old, new in reversed(p['files']):
+                    observed = path.read_bytes() if path.exists() else None
+                    if observed == new and observed != old:
+                        self.write(path, old)
+                unchanged = all((path.read_bytes() if path.exists() else None) == old for path, old, _ in p['files'])
+                manifest["status"] = "rolled-back" if unchanged else "saving"
+                manifest_write(mp, manifest)
                 raise
             manifest["status"] = "saved"
-            mp.write_text(json.dumps(manifest, indent=2), "utf-8")
+            manifest_write(mp, manifest)
             del self.plans[key]
             return {"id": ident, "title": p["title"], "hint": p["hint"], "publishedSet": p.get('metadata', {}).get('publishSet')}
 
@@ -657,15 +728,23 @@ class Studio:
         path.parent.mkdir(parents=True, exist_ok=True)
         temp = path.with_name(path.name + ".studio-" + secrets.token_hex(4))
         try:
-            temp.write_bytes(raw)
+            from save_recovery import durable_bytes
+            durable_bytes(temp, raw)
             os.replace(temp, path)
         finally:
             temp.unlink(missing_ok=True)
 
     def history(self):
         result = []
+        from save_recovery import read_receipt
         for p in sorted((self.state / "backups").glob("*/manifest.json"), reverse=True):
-            record = json.loads(p.read_text("utf-8"))
+            record = read_receipt(p)
+            record['category'] = history_category(record['title'], record)
+            record['areas'] = history_areas(record['files'])
+            if record.get('error'):
+                record.update(canRestore=False, restoreReason=record['error'])
+                result.append(record)
+                continue
             newer = []
             for file in record['files']:
                 path = self.safe(self.root / file['path'])
@@ -674,6 +753,10 @@ class Studio:
                     newer.append(file['path'])
             record['canRestore'] = record['status'] == 'saved' and not newer
             record['restoreReason'] = 'Newer edits exist in: ' + ', '.join(newer) + '. Revert the newest related change first.' if newer else 'Reverts the saved files to their exact contents before this change. Review the diff first; Apply loads the rollback.'
+            if record['status'] in ('saving', 'recovering'):
+                record['restoreReason'] = 'Interrupted save. Open Drafts & changes and Review recovery before saving or applying.'
+            elif record['status'] == 'rolled-back':
+                record['restoreReason'] = record.get('recovery', 'This save was rolled back; no completed save is available to revert.')
             result.append(record)
         return result[:100]
 
@@ -691,7 +774,7 @@ class Studio:
             if (digest(current) if current is not None else None) != f["after"]:
                 raise ValueError(f"{path.name} has newer edits. Restore the newest related change first.")
             changes[path] = (folder / f"{i}.before").read_bytes() if f["existed"] else None
-        plan = self.plan("Revert: " + record["title"], changes, "This restores every listed file to its contents before the selected change. Review the diff, then Revert saved changes. A new backup preserves the current files. Apply separately to load the rollback; character data and items are unaffected.", redact=any(p.name == ".env" for p in changes))
+        plan = self.plan("Revert: " + record["title"], changes, "This restores every listed file to its contents before the selected change. Review the diff, then Revert saved changes. A new backup preserves the current files. Apply separately to load the rollback; character data and items are unaffected.", redact=any(p.name == ".env" for p in changes), metadata={'historyCategory': history_category(record['title'], record)})
         plan['confirmLabel'] = 'Revert saved changes'
         return plan
 
@@ -742,34 +825,45 @@ class Studio:
             return {'ready': True, 'external': True}
         return {}
 
-    def apply(self, validate_only=False):
+    def apply(self, validate_only=False, acknowledge_interrupted=None):
         context = ACTIVE_CHANGESET.set(None)
         try:
-            return self._apply_saved(validate_only)
+            return self._apply_saved(validate_only, acknowledge_interrupted)
         finally:
             ACTIVE_CHANGESET.reset(context)
 
-    def _apply_saved(self, validate_only=False):
+    def _apply_saved(self, validate_only=False, acknowledge_interrupted=None):
         with self.lock:
-            if self.job["status"] == "running":
+            self.require_running()
+            self.save_recovery.require_clear()
+            previous = self.workspace.interrupted_deployment()
+            if previous:
+                from operation_process import previous_build_running
+                if previous_build_running(previous.get('process')):
+                    raise ValueError('The previous build command is still running. Wait for it to finish before validating or applying again.')
+                if not validate_only and acknowledge_interrupted != previous['id']:
+                    raise ValueError('Inspect the game launcher and previous build commands, then acknowledge the interrupted deployment in Apply before retrying.')
+            if self.server_busy():
                 raise ValueError("An apply is already running.")
-            if self.workspace.scan()['affectedFiles']:
+            if self.workspace.scan(include_deferred=False)['affectedFiles']:
                 raise ValueError('Review the affected custom changes in Update protection before applying.')
             pending = self.native_pending()
             if pending and not pending.get('ready'):
                 raise ValueError('Customisation recovery for the installed package is incomplete. Resolve Update protection before applying.')
             if not validate_only and not pending and not self.workspace.summary()['pending'] and not self.native_crafting.pending():
                 raise ValueError('There are no saved changes to apply. Drafts must be reviewed and saved first.')
-            if not validate_only:
+            if not validate_only and not pending:
                 self.native_crafting.preflight()
             if not self.docker_status()["available"]:
                 raise ValueError("Start Docker Desktop first, wait for Engine running, then apply again.")
             self.job = {"status": "running", "kind": 'validation' if validate_only else 'apply', "lines": ["Building and compiling without a game restart." if validate_only else "Building game files and compiling quests. The game will restart after a successful build."], "started": time.time(), 'id': secrets.token_hex(12), 'files': self.build_fingerprints()}
             self.workspace.deployment(self.job['id'], 'running', {'kind': self.job['kind'], 'files': self.job['files']})
-            threading.Thread(target=self.run_apply, args=(validate_only,), daemon=True).start()
+            self._apply_thread = threading.Thread(target=self.run_apply, args=(validate_only,), daemon=False)
+            self._apply_thread.start()
         return self.job
 
     def run_apply(self, validate_only=False):
+        job = self.job
         commands = [["docker", "compose", "build", "game"], ["docker", "compose", "up", "-d", "--wait", "--wait-timeout", "120", "mariadb"], ["docker", "compose", "stop", "game"], ["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", "playerbot-migrate"], ["docker", "compose", "wait", "playerbot-migrate"], ["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", "game"]]
         native_pending = {}
         try:
@@ -778,70 +872,83 @@ class Studio:
                 commands = [['powershell.exe', '-NoProfile', '-NonInteractive', '-File', str(self.root / 'Metin2-Launcher.ps1'), '-Action', 'Start', '-Yes']]
             if validate_only:
                 commands = commands[:1]
-            elif self.native_crafting.config()['recipes'] or self.native_crafting.applied()['recipes']:
+            elif not native_pending and (self.native_crafting.config()['recipes'] or self.native_crafting.applied()['recipes']):
                 native_step = ['studio', 'native-crafting']
-                if native_pending:
-                    commands += [['docker', 'compose', 'stop', 'game'], native_step,
-                                 ['docker', 'compose', 'up', '-d', '--no-deps', '--force-recreate', 'game']]
-                else:
-                    commands.insert(-1, native_step)
+                commands.insert(-1, native_step)
             for cmd in commands:
                 if cmd == ['studio', 'native-crafting']:
-                    if self.build_fingerprints() != self.job.get('files'):
+                    if self.build_fingerprints() != job.get('files'):
                         raise ValueError('Saved configuration changed during the build. Native crafting was not written; review and Apply again.')
                     changed = self.native_crafting.apply()
-                    self.job['lines'].append(f'{changed} native crafting definitions verified and applied in a guarded transaction.')
+                    job['lines'].append(f'{changed} native crafting definitions verified and applied in a guarded transaction.')
                     continue
-                self.job["lines"].append("> " + " ".join(cmd))
+                job["lines"].append("> " + " ".join(cmd))
                 p = subprocess.Popen(cmd, cwd=self.compose, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                for line in p.stdout:
-                    # Do not return credentials accidentally printed by third-party scripts.
-                    if re.search(r"password|secret|token", line, re.I):
-                        line = "[credential-related log line hidden]\n"
-                    self.job["lines"].append(line.rstrip())
-                    self.job["lines"] = self.job["lines"][-600:]
-                if p.wait() != 0:
+                try:
+                    if type(p.pid) is int:
+                        from operation_process import process_identity
+                        job['process'] = {'pid': p.pid, 'identity': process_identity(p.pid)}
+                        self.workspace.deployment(job['id'], 'running', {'kind': job.get('kind'), 'files': job.get('files', {}), 'lines': job['lines'], 'process': job['process']})
+                    for line in p.stdout:
+                        # Do not return credentials accidentally printed by third-party scripts.
+                        if re.search(r"password|secret|token", line, re.I):
+                            line = "[credential-related log line hidden]\n"
+                        job["lines"].append(line.rstrip())
+                        job["lines"] = job["lines"][-600:]
+                    exit_code = p.wait()
+                except BaseException:
+                    # Do not declare failure/release guards while the launched
+                    # command is still running, even if receipt writing fails.
+                    try:
+                        p.communicate()
+                    finally:
+                        p.wait()
+                    raise
+                if exit_code != 0:
                     raise ValueError("Command failed. Review the output. Saved source files and backups are retained.")
+                job.pop('process', None)
+                if job.get('id'):
+                    self.workspace.deployment(job['id'], 'running', {'kind': job.get('kind'), 'files': job.get('files', {}), 'lines': job['lines']})
                 if cmd[2:4] == ["wait", "playerbot-migrate"]:
                     check = subprocess.run(["docker", "compose", "ps", "-a", "--format", "json", "playerbot-migrate"], cwd=self.compose, capture_output=True, text=True, timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                     records = json.loads(check.stdout) if check.stdout.strip().startswith("[") else [json.loads(x) for x in check.stdout.splitlines() if x.strip()]
                     if check.returncode or not records or any(int(x.get("ExitCode", -1)) != 0 or x.get("State") != "exited" for x in records):
                         raise ValueError("Settings migration did not exit successfully. Game was left stopped; inspect it in the launcher before restarting.")
-            if self.build_fingerprints() != self.job.get('files'):
+            if self.build_fingerprints() != job.get('files'):
                 raise ValueError('A source file changed during the build. Its deployed configuration cannot be verified; review and build again.')
             if validate_only:
-                self.job['status'] = 'validated'
-                self.job['lines'].append('Build and quest compilation passed. No game restart or settings migration was performed.')
+                job['status'] = 'validated'
+                job['lines'].append('Build and quest compilation passed. No game restart or settings migration was performed.')
             else:
                 health = self.runtime_health(True)
                 deadline = time.time() + 60
                 while not health['gameHealthy'] and time.time() < deadline:
                     time.sleep(3)
                     health = self.runtime_health(True)
-                self.job['health'] = health
-                self.job['status'] = 'succeeded' if health['gameHealthy'] else 'unverified'
+                job['health'] = health
+                job['status'] = 'succeeded' if health['gameHealthy'] else 'unverified'
                 if health['gameHealthy']:
                     from runtime_checks import verify
                     runtime = verify(self)
-                    self.job['runtime'] = runtime
+                    job['runtime'] = runtime
                     if runtime['issues']:
-                        self.job['status'] = 'unverified'
-                        self.job['lines'].append('Runtime content verification needs attention:')
-                        self.job['lines'].extend(runtime['issues'][:80])
+                        job['status'] = 'unverified'
+                        job['lines'].append('Runtime content verification needs attention:')
+                        job['lines'].extend(runtime['issues'][:80])
                     elif runtime['checkedFields']:
-                        self.job['lines'].append(str(runtime['checkedFields']) + ' customised drop fields verified in runtime files.')
+                        job['lines'].append(str(runtime['checkedFields']) + ' customised drop fields verified in runtime files.')
                     if runtime['questAccess']['readable']:
-                        self.job['lines'].append(runtime['questAccess']['detail'])
+                        job['lines'].append(runtime['questAccess']['detail'])
 
-                self.job['lines'].append('Game health verified.' if health['gameHealthy'] else 'Commands completed; game health is not verified. Inspect runtime status before considering this deployment complete.')
-                if self.job['status'] == 'succeeded' and native_pending:
+                job['lines'].append('Game health verified.' if health['gameHealthy'] else 'Commands completed; game health is not verified. Inspect runtime status before considering this deployment complete.')
+                if job['status'] == 'succeeded' and native_pending:
                     self.workspace.set_preference('nativeUpdatePending', {})
         except Exception as e:
-            self.job["status"] = "failed"
-            self.job["lines"].append(str(e))
+            job["status"] = "failed"
+            job["lines"].append(str(e))
         finally:
-            if self.job.get('id'):
-                self.workspace.deployment(self.job['id'], self.job['status'], {'kind': self.job.get('kind'), 'files': self.job.get('files', {}), 'lines': self.job['lines'][-80:], 'health': self.job.get('health'), 'runtime': self.job.get('runtime')})
+            if job.get('id'):
+                self.workspace.deployment(job['id'], job['status'], {'kind': job.get('kind'), 'files': job.get('files', {}), 'lines': job['lines'][-80:], 'health': job.get('health'), 'runtime': job.get('runtime')})
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -884,6 +991,14 @@ class Handler(BaseHTTPRequestHandler):
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             s = self.studio
+            if u.path.startswith('/api/addons/'):
+                route = u.path.removeprefix('/api/addons/')
+                if route == 'map-image':
+                    image = s.addons.world().image_path(int(q.get('map', '64')))
+                    if image is None or not image.is_file():
+                        return self.send({'error': 'No installed map image is available.'}, 404)
+                    return self.send(image.read_bytes(), mime='image/png')
+                return self.send({'ok': True, **s.addons.get(route, q)})
             ACTIVE_CHANGESET.set(q.get('changeset') or self.headers.get('X-Studio-Changeset') or None)
             if u.path.startswith('/api/economy') or u.path in ('/api/item-usage', '/api/item-drop-summary'):
                 ACTIVE_CHANGESET.set(None)
@@ -917,7 +1032,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/updates/available':
                 return self.send(s.updates.check())
             if u.path == "/api/bootstrap":
-                return self.send({"application": APPLICATION, "studioVersion": studio_version(), "stateDir": str(s.state), "mode": "configuration-and-quests", "token": s.token, "root": str(s.root), "version": (s.root / "VERSION").read_text().strip(), "counts": {"items": len(s.items), "mobs": len(s.mobs), "settings": len(s.settings_schema), "files": len(s.inventory())}, "items": list(s.items.values()), "mobs": list(s.mobs.values()), "groups": s.groups()})
+                return self.send({"application": APPLICATION, "projectRoot": str(HERE), "modules": ["server", "addons"], "studioVersion": studio_version(), "stateDir": str(s.state), "mode": "configuration-and-quests", "token": s.token, "root": str(s.root), "version": (s.root / "VERSION").read_text().strip(), "counts": {"items": len(s.items), "mobs": len(s.mobs), "settings": len(s.settings_schema), "files": len(s.inventory())}, "items": list(s.items.values()), "mobs": list(s.mobs.values()), "groups": s.groups()})
             if u.path == "/api/group":
                 return self.send(s.group(q["source"], q["key"]))
             if u.path == "/api/drop-source":
@@ -970,8 +1085,25 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(s.file(q["id"]))
             if u.path == "/api/history":
                 return self.send(s.history())
+            if u.path == '/api/activity':
+                rows = [{'kind': 'server', 'title': row['title'], 'at': row['at'], 'detail': row.get('kind', ''), 'route': 'history'}
+                        for row in s.workspace.summary().get('recent', [])]
+                try:
+                    for row in s.addons.get('history', {})['history']:
+                        rows.append({'kind': 'addon', 'title': ('Previous Hub · ' if row.get('legacy') else '') + row.get('action', 'Add-on change') + ' ' + row.get('addon_id', ''),
+                                     'at': row.get('time', row.get('at', '')), 'detail': row.get('status', ''), 'route': 'installed'})
+                except (ValueError, OSError):
+                    pass
+                def activity_time(row):
+                    if isinstance(row['at'], (int, float)):
+                        return row['at']
+                    try:
+                        return datetime.fromisoformat(str(row['at']).replace('Z', '+00:00')).timestamp()
+                    except ValueError:
+                        return 0
+                return self.send({'items': sorted(rows, key=activity_time, reverse=True)[:100]})
             if u.path == "/api/status":
-                return self.send({"docker": s.docker_status(), "health": s.runtime_health(), "job": s.job})
+                return self.send({"docker": s.docker_status(), "health": s.runtime_health(), "job": s.public_job()})
             if u.path.startswith("/icons/"):
                 ident = unquote(u.path.split("/")[-1])
                 p = icon_path(s.root, s.icons, ident)
@@ -984,15 +1116,38 @@ class Handler(BaseHTTPRequestHandler):
             if u.path in static:
                 filename, mime = static[u.path]
                 return self.send((HERE / "web" / filename).read_bytes(), mime=mime)
+            addon_static = {'/addons.mjs': 'addons.mjs', '/addon_helpers.mjs': 'addon_helpers.mjs',
+                            '/addon_jobs.mjs': 'addon_jobs.mjs', '/addons.css': 'addons.css'}
+            if u.path in addon_static:
+                name = addon_static[u.path]
+                mime = 'text/css; charset=utf-8' if name.endswith('.css') else 'application/javascript; charset=utf-8'
+                return self.send((HERE / 'web' / name).read_bytes(), mime=mime)
             self.send({"error": "Not found"}, 404)
         except (ValueError, KeyError, OSError, zipfile.BadZipFile) as e:
             self.send({"error": str(e)}, 400)
 
     def do_POST(self):
+        try:
+            if urlparse(self.path).path == '/api/shutdown':
+                return self._post()
+            with self.studio.mutation_request():
+                return self._post()
+        except ValueError as error:
+            self.send({'error': str(error)}, 400)
+
+    def _post(self):
         ACTIVE_CHANGESET.set(None)
         try:
             self.guard(True)
+            self.connection.settimeout(30)
             length = int(self.headers.get("Content-Length", 0))
+            if urlparse(self.path).path == '/api/addons/packages/import':
+                if self.headers.get('Content-Type') != 'application/zip' or self.headers.get('Transfer-Encoding'):
+                    raise ValueError('Upload an add-on ZIP with a known byte length.')
+                self.connection.settimeout(30)
+                with self.studio.lock:
+                    return self.send({'ok': True, **self.studio.addons.import_archive(
+                        self.rfile, length, unquote(self.headers.get('X-Addon-Filename', 'addon.m2addon.zip')))})
             if urlparse(self.path).path == '/api/updates/package':
                 if self.headers.get('Content-Type') != 'application/zip':
                     raise ValueError('Upload a ZIP package.')
@@ -1002,6 +1157,17 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("A JSON request under 12 MB is required.")
             b = json.loads(self.rfile.read(length))
             s, path = self.studio, urlparse(self.path).path
+            if path.startswith('/api/addons/'):
+                if length > 65536 or not isinstance(b, dict):
+                    raise ValueError('Use a JSON object under 64 KB for add-on operations.')
+                with s.lock:
+                    return self.send({'ok': True, **s.addons.post(path.removeprefix('/api/addons/'), b)},
+                                     202 if path == '/api/addons/jobs/start' else 200)
+            if path == '/api/shutdown':
+                s.request_shutdown()
+                self.send({'ok': True, 'message': 'Stopping this Studio only.'})
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
             ACTIVE_CHANGESET.set(self.headers.get('X-Studio-Changeset') or None)
             if path.startswith("/api/economy"):
                 ACTIVE_CHANGESET.set(None)
@@ -1018,6 +1184,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(s.workspace.save_draft(b))
             if path == '/api/catalog/reload':
                 return self.send(s.reload_catalog())
+            if path == '/api/recovery/preview':
+                with s.lock:
+                    return self.send(s.save_recovery.preview(b['id']))
             if path == '/api/validate':
                 return self.send(s.apply(validate_only=True))
             if path == '/api/preview/bulk-drops':
@@ -1041,11 +1210,14 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/api/customisations/preview':
                 with s.lock:
                     return self.send(s.workspace.reconcile_plan(b))
+            if path == '/api/customisations/defer':
+                with s.lock:
+                    return self.send(s.workspace.defer_plan(b))
             if path == '/api/updates/recovery':
                 pending = s.workspace.preference('nativeUpdatePending', {})
                 if not pending or pending.get('ready'):
                     raise ValueError('No incomplete custom recovery is pending.')
-                if s.workspace.scan()['affectedFiles']:
+                if s.workspace.scan(include_deferred=False)['affectedFiles']:
                     raise ValueError('Resolve all affected custom entries before completing recovery.')
                 pending['ready'] = True
                 s.workspace.set_preference('nativeUpdatePending', pending)
@@ -1069,7 +1241,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/api/preview/crafting-resolve':
                 with s.lock:
                     return self.send(s.native_crafting.resolve(b))
-            actions = {"/api/preview/drop": s.drop_plan, "/api/preview/settings": s.settings_plan, "/api/preview/file": s.file_plan, "/api/preview/quest": s.quest_plan, "/api/preview/recipe": s.recipe_plan, "/api/preview/recipe-delete": s.recipe_delete_plan, "/api/preview/quest-delete": s.quest_delete_plan, "/api/commit": lambda x: s.commit(x["id"]), "/api/preview/restore": lambda x: s.restore_plan(x["id"]), "/api/apply": lambda x: s.apply(), "/api/quest-code": lambda x: {"code": s.quest_code(x)[1]}}
+            actions = {"/api/preview/drop": s.drop_plan, "/api/preview/settings": s.settings_plan, "/api/preview/file": s.file_plan, "/api/preview/quest": s.quest_plan, "/api/preview/recipe": s.recipe_plan, "/api/preview/recipe-delete": s.recipe_delete_plan, "/api/preview/quest-delete": s.quest_delete_plan, "/api/commit": lambda x: s.commit(x["id"]), "/api/preview/restore": lambda x: s.restore_plan(x["id"]), "/api/apply": lambda x: s.apply(acknowledge_interrupted=x.get('acknowledgeInterrupted')), "/api/quest-code": lambda x: {"code": s.quest_code(x)[1]}}
             if path not in actions:
                 return self.send({"error": "Not found"}, 404)
             self.send(actions[path](b))
@@ -1083,28 +1255,49 @@ def main():
     parser.add_argument("--port", type=int)
     parser.add_argument("--state", type=Path, default=None, help="Separate Studio data folder for another installation or disposable test world.")
     args = parser.parse_args()
+    lock = None
     try:
         selected = resolve_settings(args.root, args.port, args.state)
+        from local_lock import StudioLocks
+        lock = StudioLocks(selected['serverRoot'], selected['stateDir']).acquire()
         bind_state(selected)
         Handler.studio = Studio(Path(selected['serverRoot']), Path(selected['stateDir']))
     except (ValueError, OSError) as error:
+        if lock:
+            lock.close()
         parser.error(str(error))
     if Handler.studio.workspace.preference('economySchedule', None) is None:
         Handler.studio.economy.tools.schedule({'enabled': True, 'minutes': 60, 'retention': 180, 'filters': {}})
     Handler.studio.economy.tools.start()
     try:
         server = ThreadingHTTPServer(("127.0.0.1", selected['port']), Handler)
+        server.daemon_threads = False  # Close waits for in-flight handlers.
     except OSError:
+        Handler.studio.economy.tools.stop.set()
+        lock.close()
         parser.error(f"Local port {selected['port']} is unavailable. Close the other Studio instance or choose another --port.")
     print(f"Metin2 Server Studio {studio_version()}: http://127.0.0.1:{selected['port']}", flush=True)
     print("Reading installed files. Changes require Review then Save. Ctrl+C closes Studio.", flush=True)
+    run_file = Path(selected['stateDir']) / 'studio-run.json'
+    from installation import atomic_json
+    atomic_json(run_file, {'application': APPLICATION, 'projectRoot': str(HERE), 'stateDir': selected['stateDir'],
+                           'url': 'http://127.0.0.1:%s' % selected['port']})
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
+        while True:
+            try:
+                server.serve_forever()
+                break
+            except KeyboardInterrupt:
+                try:
+                    Handler.studio.request_shutdown()
+                    break
+                except ValueError as error:
+                    print(str(error), flush=True)
     finally:
         Handler.studio.economy.tools.stop.set()
         server.server_close()
+        lock.close()
+        run_file.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

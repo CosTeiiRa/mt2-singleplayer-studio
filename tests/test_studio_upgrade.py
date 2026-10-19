@@ -146,6 +146,46 @@ class UpgradeTests(unittest.TestCase):
         env.write_bytes(env.read_bytes().replace(b'M2_MAX_LEVEL=120', b'M2_MAX_LEVEL=119'))
         self.assertNotEqual(before, self.s.build_fingerprints())
 
+    def test_merged_files_matching_an_older_build_stay_pending_until_verified_apply(self):
+        from workspace import Workspace
+        paths = [self.s.game / 'Dockerfile', self.s.game / '.dockerignore']
+        originals = {path: path.read_bytes() for path in paths}
+        custom = {path: raw + b'\n# Saved Studio integration\n' for path, raw in originals.items()}
+        self.s.commit(self.s.plan('Custom build integration', custom, 'Fixture')['id'])
+        self.s.workspace.deployment('previous-build', 'succeeded', {'files': self.s.build_fingerprints()})
+        self.assertEqual(self.s.workspace.summary()['pending'], [])
+        # The game launcher can build new package files without a Studio
+        # deployment record. A later merge may restore byte-identical edits.
+        for path, raw in originals.items():
+            path.write_bytes(raw)
+        report = self.s.workspace.scan()
+        self.assertEqual(report['affectedFiles'], 2)
+        review = self.s.workspace.reconcile_plan({'id': report['id']})
+        self.s.commit(review['id'])
+        expected = {path.relative_to(self.s.root).as_posix() for path in paths}
+        self.assertEqual({row['path'] for row in self.s.workspace.summary()['pending']}, expected)
+        self.s.workspace = Workspace(self.s)
+        for status in ('validated', 'failed', 'unverified'):
+            self.s.workspace.deployment('attempt-' + status, status, {'files': self.s.build_fingerprints()})
+            self.assertEqual({row['path'] for row in self.s.workspace.summary()['pending']}, expected)
+        # Only a successful deployment that includes the saved files clears them.
+        self.s.workspace.deployment('verified-build', 'succeeded', {'files': self.s.build_fingerprints()})
+        self.assertEqual(self.s.workspace.summary()['pending'], [])
+
+    def test_accepting_game_values_without_file_writes_does_not_require_an_apply(self):
+        path = self.s.game / 'Dockerfile'
+        original = path.read_bytes()
+        custom = original + b'\n# Saved Studio integration\n'
+        self.s.commit(self.s.plan('Custom build integration', {path: custom}, 'Fixture')['id'])
+        self.s.workspace.deployment('previous-build', 'succeeded', {'files': self.s.build_fingerprints()})
+        path.write_bytes(original)
+        report = self.s.workspace.scan()
+        decisions = {choice['id']: 'update' for row in report['files'] for choice in row['choices']}
+        review = self.s.workspace.reconcile_plan({'id': report['id'], 'decisions': decisions})
+        self.assertEqual(review['files'], [])
+        self.s.commit(review['id'])
+        self.assertEqual(self.s.workspace.summary()['pending'], [])
+
     def test_validate_build_records_validation_without_restart(self):
         process = Mock(stdout=iter(['qc succeeded\n']))
         process.wait.return_value = 0
@@ -166,6 +206,33 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(self.s.job['status'], 'succeeded')
         self.assertIn('Metin2-Launcher.ps1', ' '.join(run.call_args.args[0]))
         self.assertFalse(self.s.workspace.preference('nativeUpdatePending'))
+
+    def test_game_update_can_run_with_custom_merge_pending_and_without_native_overrides(self):
+        path = self.s.sources['mob-base'][0]
+        base = b'Group fixture\n{\n Type drop\n Mob 8001\n 1 25041 1 50\n}\n'
+        custom, incoming = base.replace(b'1 50', b'1 100'), base.replace(b'1 50', b'1 80')
+        path.write_bytes(custom)
+        self.s.workspace.record_commit([(path, base, custom)], 'Custom', 'backup')
+        path.write_bytes(incoming)
+        report = self.s.workspace.scan()
+        self.s.commit(self.s.workspace.defer_plan({'id': report['id']})['id'])
+        self.assertEqual(path.read_bytes(), incoming)
+        with self.assertRaisesRegex(ValueError, 'pending custom merge'):
+            self.s.plan('Unrelated new edit in same file', {path: b'value 70\n'}, 'Review')
+        self.s.workspace.set_preference('nativeUpdatePending', {'ready': True})
+        with patch.object(self.s, 'docker_status', return_value={'available': True}), patch('server.threading.Thread'), patch.object(self.s.native_crafting, 'preflight', side_effect=AssertionError('A native custom review must not gate the game update')):
+            self.s.apply()
+        process = Mock(stdout=iter(['native build passed\n']))
+        process.wait.return_value = 0
+        with patch('server.subprocess.Popen', return_value=process) as run, patch.object(self.s, 'runtime_health', return_value={'gameHealthy': True}), patch('runtime_checks.verify_quest_access', return_value={'readable': True, 'detail': 'Readable'}), patch('runtime_checks.subprocess.run', side_effect=AssertionError('Deferred drops are not deployed custom overrides')), patch.object(self.s.native_crafting, 'config', return_value={'recipes': {'1': 'saved custom recipe'}}), patch.object(self.s.native_crafting, 'apply', side_effect=AssertionError('Do not reapply native overrides during the game update')):
+            self.s.run_apply()
+        self.assertEqual(self.s.job['status'], 'succeeded')
+        self.assertEqual(self.s.job['runtime']['checkedFields'], 0)
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(self.s.workspace.summary()['pendingMerges'], [path.relative_to(self.s.root).as_posix()])
+        self.assertEqual(self.s.workspace.scan()['affectedFiles'], 1)
+        self.assertEqual(path.read_bytes(), incoming)
+        path.unlink()
 
     def test_healthy_container_with_unreadable_quests_is_not_successful(self):
         self.s.workspace.set_preference('nativeUpdatePending', {'ready': True})

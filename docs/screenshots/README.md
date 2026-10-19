@@ -9,7 +9,7 @@ The seven JPEGs show the Studio dashboard used for the beta-1.0.0 documentation,
 - `quest-builder.jpg`: a new, unsaved hunt template with its guided fields and generated source.
 - `native-crafting.jpg`: existing Baek-Go potion recipe, opened without editing it.
 - `rollback-review.jpg`: preview of an existing configuration rollback, closed without confirming it.
-- `update-protection.png`: user-provided capture showing two affected quest build integration files, zero conflicting custom changes and the default keep-custom decisions. Adding the image did not perform a merge or Apply.
+- `update-protection.png`: historical user-provided capture showing the former keep-custom update review. Since alpha-1.8.1 game values take priority, so this capture is no longer used as current update-workflow documentation. Adding the image did not perform a merge or Apply.
 
 The quest and crafting editors use full-page captures so their fields and review controls remain visible. The drop editor, picker, reference explorer, economy overview and rollback dialog use viewport captures. Images have not been retouched. They show game content and aggregate statistics, without credentials, personal server paths or character/account identities.
 

@@ -2,9 +2,27 @@
 
 Installation and first launch: [README](../README.md). `<stateDir>` is the local world data folder printed by setup.
 
+## Client add-ons
+
+**Add-on Menu** is the first bundled package. Install/enable it to get an **Add-ons**
+button near the top-left in-game. Click it after entering a character, then choose
+an extension to open. Atlas overlays open the normal atlas; standalone extensions
+open their registered windows. Disabled/unavailable entries explain why they cannot
+open. This menu can be removed independently; other add-on controls remain.
+
+Use **Add-on settings → Normal game client**. Close that client, review and apply
+an add-on, then launch the game with your usual shortcut. The server may keep
+running. Backups cover changed pack files; a second playable client is optional
+under **Advanced testing tools**.
+
+If an update replaces the managed packs with clean game files, **Review reapply**
+uses those new files as the baseline and retains installed add-on settings. Apply
+is manual. Removing the last add-on restores the current game baseline. A partial
+external edit retaining Hub code remains a conflict for inspection.
+
 ## What you can change
 
-The inventory is generated from the installed package, rather than from a generic Metin2 server guide. Counts are discovered from the selected installation and change as files change. This beta was validated against game package 2.2.106.
+The inventory is generated from the installed package, rather than from a generic Metin2 server guide. Counts are discovered from the selected installation and change as files change. The initial small-beta target is server 2.2.110 / client 2.0.114; see the [acceptance matrix](BETA_REVIEW.md) for tested scope and remaining human checks.
 
 | Area | Editor | Source / behavior |
 |---|---|---|
@@ -90,12 +108,83 @@ CSV files use UTF-8 with BOM, comma separators, UTC timestamps and unrounded num
 
 1. Edit a target, recipe, quest, setting or file.
 2. Select **Review changes** and inspect the exact diff.
-3. Select **Save changes**. Studio backs up every original file, checks that it has not changed since review, then replaces it atomically. Multi-file saves roll back completed writes if an ordinary write error occurs.
+3. Select **Save changes**. Studio backs up every original file, checks that it has not changed since review, then replaces it atomically. Multi-file saves roll back completed writes if an ordinary write error occurs. An interrupted save is detected on startup and requires reviewed recovery before further saves or Apply.
 4. Select **Apply to server → Build & restart** when ready. This affects saved files only and disconnects players at the restart.
 
 Apply builds the game image first. The package’s Linux `qc` compiler checks custom quest source during that build. A failed image build leaves the running game untouched. After building successfully, Studio ensures MariaDB is available, stops the game, recreates the settings migrator, checks that it completed successfully, and recreates the game container. A later migration/start failure can leave the game stopped; inspect the output and the normal launcher before restarting. Wait for the normal launcher to report the game healthy before logging in.
 
 Backups are in `<stateDir>/backups/<change-id>/`, with a manifest and before/after files. An `.env` backup contains the original credentials, so keep this local data folder private. The web app does not serve backups or credential fields, and its `.env` review hides unrelated settings. Configuration backups do not back up characters or the database; use the package’s world-backup feature for that.
+
+## Backups and recovery
+
+Keep two separate backups before the beta:
+
+| Backup | Protects | How to retain it |
+| --- | --- | --- |
+| Game/world backup | Accounts, characters, inventories and other game/database state | Use the game's own backup tools and restore instructions; confirm you can restore it |
+| Studio private state | Drafts, change history, original configuration, applied crafting reconciliation, add-on baselines and journals | Stop Studio after critical work finishes, then preserve its complete `data/` folder; setup prints the selected state path |
+
+Studio's individual configuration/pack backups are useful for their recorded
+operations. They are not a database snapshot or a complete game installation.
+Retain both the game backup and Studio state when an update or Apply fails.
+
+### Interrupted server save
+
+If Studio closes or loses power during Save, reopening detects incomplete save
+journals. **Drafts & changes → Interrupted save recovery → Review recovery**
+previews **Restore interrupted save**. Saving, validation and Apply wait for recovery.
+Read the proposed file changes before confirming.
+
+Recovery restores original bytes only where the file still matches that save's
+attempted replacement. Files changed externally, including a subsequent game
+update, are kept. The review checks the observed hashes again before writing.
+Original before/after data remains in the backup; do not delete it. If the save
+already committed to SQLite, Studio can finish the journal without rewriting game
+files. An unresolved/corrupt journal needs private support, not manual database
+editing or a guessed rollback.
+
+### Interrupted server Apply
+
+Normal **Stop Studio** and Ctrl+C refuse during critical Apply, game-update or
+add-on work; Stop also refuses while a mutation or repository job is active.
+An operating-system shutdown or forced process
+termination can still interrupt it. On reopening, Studio marks an unfinished
+deployment interrupted and shows a warning until a later verified Apply. This
+warning is kept separately from the current operation: a successful validation
+does not clear it. Studio does not silently retry or restart the game.
+
+Inspect the recorded operation/output, game launcher, any still-running build
+commands and current game health before retrying. A failed build may leave the
+old game running; interruption after a stop/migration may leave it stopped.
+Studio blocks validation and retry while the previously recorded build process
+is still running. Wait for it to finish and inspect the outcome; do not launch a
+second build from the game's launcher to bypass that guard.
+
+Keep backups and review the saved pending files. Before retrying Apply, the
+dialog requires **I checked the game launcher and confirmed that no previous
+build command is still running. Retry this interrupted deployment.** Select this
+only after doing that check, then deliberately choose **Build & restart**.
+The process guard cannot establish what unrelated/external commands are doing,
+so this confirmation is still required. If the game/database needs restoration, use its
+own backup tools. Do not clear a journal or pending record to make a status look
+successful. Contact the supplying maintainer if the last completed step is unclear.
+
+### Interrupted client add-on Apply
+
+Close the selected game client before recovery. **Activity** and add-on settings
+show transaction/recovery state. Review the available recovery action and its
+target; preserve `<stateDir>/addons/`, including pack baselines and journals.
+Recovery must not overwrite a game update with an older pack. External or mixed
+pack changes require inspection; clean updated packs use **Review reapply**.
+The game server may stay running because this is a separate client operation.
+
+### Another Studio is already managing this game
+
+A game-installation lock prevents a second Studio from managing the same server
+through a different data folder. Close the first Studio after its critical work
+finishes and reopen the intended version. Changing the port or creating another
+state folder is not a workaround. Do not delete lock files to bypass a live owner.
+The game's own launcher remains independent of Studio's locks.
 
 ## Package-specific limits
 
@@ -118,13 +207,37 @@ Studio now retains editor drafts across navigation and reload, and offers named 
 
 Every new Studio save records original bytes, custom intent and last saved bytes in `<stateDir>/workspace.sqlite`, outside the game directory. Existing edits made before tracking need **Update protection → Track an existing edit from its original backup**. This registers a reviewed difference without rewriting the file. An arbitrary current file cannot reveal its unmodified original.
 
-Use **Update protection** to check the official package manifest, stage its ZIP, or import a ZIP with its published SHA-256. Staging does not install anything. Only incoming changes overlapping tracked custom edits need decisions. Example: original scroll parameter 50, custom 100, update 80 produces one choice. Keeping 100 retains unrelated incoming rewards and counts. Download the JSON review if you want a record of the choices. Unrelated package changes follow the normal native update.
+The game update takes priority initially; Studio then lets you decide how to merge your custom work. Use **Update protection** to check the official package manifest, stage its ZIP, or import a ZIP with its published SHA-256. Staging does not install anything. For example, original scroll parameter 50, custom 100 and game update 80 installs 80 first, while preserving 50/100/80 for the later merge review. Files absent from a package are left alone.
 
-After review, **Install reviewed files** calls the installation's existing `Invoke-M2PackageUpdate` with the exact staged ZIP and SHA-256. Native validation, protected-package rules and native backups remain in use. Studio then restores the selected custom differences before any build. **Apply** is separate and uses the native launcher's full-stack Start path for a pending package. Partial custom restoration blocks Apply and offers an installed-file recovery review. Never delete Studio's state or the native backup folder while recovering.
+After review, **Install reviewed game files** archives affected original/custom/current files under `<stateDir>/updates/update-custom-*/`, then calls the installation's existing `Invoke-M2PackageUpdate` with the exact staged ZIP and SHA-256. Native validation, protected-package rules and native backups remain in use. Studio verifies the game files and saves a persistent pending custom-merge review. **Apply** can build/run the game update before that merge is decided, using the native launcher's full-stack Start path and without reapplying Studio native-crafting overrides. A failed installation verification still requires recovery; retain Studio state and native backups.
 
-An update run directly in the external launcher bypasses Studio's pre-install review. Scan installed files afterward to recover affected tracked custom values before building. Studio cannot intercept an updater launched outside it. Builder transformations and persistent native-panel drop overrides can affect effective values; after Apply, customised drop fields are checked against the container's loaded drop files. A mismatch leaves the deployment unverified with a diagnostic. This still does not prove a final drop probability or every engine behaviour.
+After an external launcher update, use **Scan installed files / pending merges**. **Keep game; decide later** keeps the installed files unchanged and stores the custom merge for later, allowing the game build to proceed. Pending reviews survive Studio restarts and further package updates.
 
-**Validate build only** checks image/quest compilation without restarting the game. Apply records source fingerprints, stage logs and actual game health. A healthy Docker daemon alone does not mean the game is healthy. Configuration backups remain separate from database/world backups. All review tokens expire, and stale files are checked again before writes.
+In the later review, conflicting values default to **Use game value**. Choose **Keep my custom value** for selected changes you want back, then **Review selected merge** and save. Unrelated game updates are retained. You can accept the game values instead, or leave the review pending. Resolve a file's pending merge before making another direct edit to that file; use the normal editor afterwards to adapt the selected customisation before Build/Apply. Native crafting has its own review against the updated database. Unsupported add-on integrations can wait for adapter support. Replaced clean client packs can be reviewed as the new baseline for installed add-ons; version coverage warnings alone do not block review. Refresh Pocket Wiki data after content changes. Builder transformations and persistent native-panel drop overrides can affect effective values; runtime drop checks cover accepted active customisations and do not expect deferred custom values to be deployed.
+
+For client add-ons, **Compatibility unverified** means the current version or
+profile is outside the publisher's declared coverage, or independent in-game
+testing is still pending. It does not mean the add-on is known to be broken.
+You can review and apply it to an owned supported test target without changing
+version declarations. Details compare current and declared versions. Matching
+declarations show **Declared compatible**; **Known incompatibility** needs a
+specific recorded problem. Actual package, adapter and ownership failures still
+block installation with their reasons.
+
+Saving a reviewed merge leaves its file changes pending **Build/Apply**, even when
+the saved contents match an older Studio build. The game launcher may have built
+different files since that deployment. Pending saves survive Studio restarts and
+clear only after a verified Apply includes them; validation, failed builds and
+unverified runtime checks leave them pending. Accepting game values without
+rewriting files does not create extra deployment work.
+
+**Validate build only** checks image/quest compilation without restarting the game. Apply records source fingerprints, stage logs and actual game health. Runtime checks also compare saved Studio quest sources with the running image and require their compiled states, using the game account. A healthy Docker daemon alone does not mean the game is healthy. Configuration backups remain separate from database/world backups. All review tokens expire, and stale files are checked again before writes.
+
+The Apply dialog shows current pending changes first. Opening it puts earlier
+build results in a collapsed **Previous operation** section. A current validation
+result says explicitly that nothing was applied; pending changes require
+**Build & restart**. Reopening the dialog refreshes the pending list and resumes
+the progress display if an operation is still running.
 
 ## Additional editing tools
 
@@ -218,6 +331,16 @@ External changes to untouched native fields are retained. Changes to customised 
 The top bar shows **Apply changes (N)** for pending saved files (plus a pending native package update), and **No pending changes (0)** when everything matches the last verified deployment. Unsaved/preserved drafts and staged changes are excluded. Clicking a nonzero counter opens the existing file review/build/restart dialog. Apply is also rejected server-side when there are no saved changes, preventing an unnecessary restart. An in-progress operation remains accessible through the same control.
 
 Open a saved recipe and choose **Remove recipe** to review removal of just its section, preserving all other bytes. Studio-created quests have **Remove** in the library and **Remove quest** in their builder. This removes their saved source; Apply rebuilds without their compiled handlers. Package quests are retained because they can include shared game systems. Existing player flags, earned rewards and previously crafted items remain in the database. Re-creating/restoring the same quest ID keeps its old progress.
+
+Change history defaults to **Gameplay changes** for recipe, quest, drop and EXP/settings edits. **Update reconciliations** holds game-update merges and native crafting conflict resolutions; **All changes** shows both. Existing records are retained. Newer edits in either category can block a rollback.
+
+The **Change type** selector narrows the selected category to quests, crafting,
+drops, world settings, maps and spawns, shops, fishing, alchemy, items, skills,
+events or other server files. Counts show the matching saves. A save that touches
+several types appears under each relevant filter, with its types listed in the
+row. This includes older backups. Select **All types** and **All changes** to see
+the complete timeline available in history. A type filter does not split a save:
+rollback still reviews and restores all of its files.
 
 For rollback, open **Studio tools → Change history → Review rollback**, inspect the diff, then **Revert saved changes**. Apply separately to load the reverted files. Restores operate on all files in that saved change; newer edits in the same files must be reverted first. Blocked rows show the reason. A rollback/removal gets its own backup and can itself be undone. With a working change set selected, the review stages the reversal there instead of writing game files immediately.
 

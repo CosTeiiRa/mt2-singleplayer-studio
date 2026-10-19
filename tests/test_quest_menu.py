@@ -79,7 +79,7 @@ class QuestMenuTests(unittest.TestCase):
         finally:
             other.unlink()
 
-    def test_native_source_custom_diffs_survive_an_upstream_change(self):
+    def test_native_source_custom_diffs_can_be_explicitly_merged_after_update(self):
         self.s.commit(self.review()['id'])
         tracked = next(row for row in self.s.workspace.tracked() if row['path']==self.rel)
         self.assertEqual(tracked['original'], self.raw)

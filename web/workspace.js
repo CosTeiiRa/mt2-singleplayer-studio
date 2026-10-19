@@ -1,5 +1,6 @@
 'use strict';
 const WUI={info:null,activeSet:null,cache:new Map(),timers:new Map(),pending:new Map(),restoring:false,report:null,updatePoll:null};
+const ApplyUI={jobId:null,starting:'',loading:false,connectionFailed:false,error:''};
 const wDate=at=>at?new Date(at*1000).toLocaleString('en-GB'):'Not recorded';
 const wPrefix=()=>`metin2-studio:${S.data.root}:`;
 function draftIdentity(){
@@ -88,21 +89,87 @@ async function workspaceRefresh(){
   return WUI.info;
 }
 function refreshApplyControl(){
-  const info=WUI.info,running=S.status?.job.status==='running';
+  const info=WUI.info,running=S.status?.job.status==='running'||!!ApplyUI.starting;
   const files=info?.pending.length||0,packageUpdate=!!info?.preferences.nativeUpdatePending,count=files+Number(packageUpdate);
   const button=$('#apply-button');
+  const recovering=!!info?.saveRecovery?.length;
   button.disabled=!info||(!count&&!running);
-  button.textContent=running?'Applying changes…':count?`Apply changes (${count})`:'No pending changes (0)';
+  button.textContent=running?(ApplyUI.starting==='validation'||!ApplyUI.starting&&S.status?.job.kind==='validation'?'Validating build…':'Applying server changes…'):count?`Apply to server (${count})`:'No server changes (0)';
+  if(recovering){button.disabled=false;button.textContent='Save recovery required';}
+  const warning=$('#studio-recovery');
+  if(warning){
+    const interrupted=!!info?.interruptedDeployment||S.status?.job.status==='interrupted';
+    warning.hidden=!recovering&&!interrupted;
+    warning.innerHTML=recovering?'<strong>Interrupted save recovery required.</strong> Open <button class="button small" id="open-save-recovery">Drafts &amp; changes</button> to review recovery. Further saves and Apply are paused.':interrupted?'<strong>Deployment interrupted.</strong> Inspect the game launcher and any running build commands before retrying Apply. Saved changes remain pending; Studio did not restart the game automatically.':'';
+    const link=$('#open-save-recovery');if(link)link.onclick=()=>navigate('changes');
+  }
   button.title=count?`${files} saved ${files===1?'file':'files'}${packageUpdate?' and 1 game package update':''} awaiting Apply. Review before restarting.`:info?.deploymentKnown?'All saved changes match the last verified deployment. Drafts are excluded.':'No saved changes await Apply. Studio has not verified a deployment for this installation yet. Drafts are excluded.';
   if($('#apply-dialog').open){
     $('#apply-pending').innerHTML=`<p><strong>${count} pending ${count===1?'change':'changes'}</strong> · ${files} saved ${files===1?'file':'files'}${packageUpdate?' + 1 game package update':''}. ${info?.drafts.length||0} preserved drafts are excluded.</p>${packageUpdate?'<p>The game package update uses the native full-stack build.</p>':''}${!count?'<p>Nothing to apply. The server will not be restarted.</p>':''}${(info?.pending||[]).map(row=>`<div class="path">${esc(row.path)}</div>`).join('')}`;
-    $('#run-apply').disabled=!count||!S.status?.docker.available||running;
-    $('#run-validate').disabled=!S.status?.docker.available||running;
+    renderApplyDialog();
   }
+}
+
+function applyOperationTitle(job){
+  const kind=job.kind==='validation'||job.status==='validated'?'Validation':'Apply';
+  const result={running:'in progress',validated:'passed (validation only)',succeeded:'completed',unverified:'needs verification',failed:'failed',interrupted:'interrupted'}[job.status]??job.status;
+  return `${kind} · ${result}`;
+}
+
+function applyOperationMessage(job){
+  if(job.status==='interrupted')return 'Studio closed before this operation finished. Inspect the game launcher and any running build commands before retrying. Deployment is unverified and saved changes remain pending; no automatic restart or retry was performed.';
+  if(job.kind==='validation'||job.status==='validated')return job.status==='validated'?'Build and compilation passed. Validation did not apply changes or restart the game.':job.status==='running'?'Checking the build without applying changes or restarting the game.':'Validation did not deploy changes. Inspect its log.';
+  if(job.status==='succeeded')return 'This Apply completed and was verified. Check the current pending changes above for any newer saves.';
+  if(job.status==='unverified')return 'Commands completed, but deployment verification is incomplete. Changes stay pending.';
+  if(job.status==='failed')return 'The operation failed. Saved changes and backups are retained.';
+  return 'Build, migration and restart are in progress. Pending changes clear only after verified completion.';
+}
+
+function renderApplyDialog(){
+  if(!$('#apply-dialog').open)return;
+  const info=WUI.info,job=S.status?.job??{},running=job.status==='running';
+  const count=(info?.pending.length??0)+Number(!!info?.preferences.nativeUpdatePending);
+  const validation=ApplyUI.starting==='validation'||!ApplyUI.starting&&job.kind==='validation';
+  const interrupted=info?.interruptedDeployment;
+  const acknowledgement=$('#apply-interrupted-ack');
+  if(ApplyUI.interruptedId!==interrupted?.id){acknowledgement.checked=false;ApplyUI.interruptedId=interrupted?.id;}
+  $('#apply-interrupted-check').hidden=!interrupted;
+  if(running)ApplyUI.jobId=job.id;
+  let title=count?`${count} ${count===1?'change is':'changes are'} still not applied`:'No saved changes awaiting Apply';
+  let text=count?'Use Build & restart to load these saved changes. Validate build only checks compilation and leaves them pending.':'There are no saved changes waiting to be applied. Validation is optional and does not deploy anything.';
+  if(ApplyUI.loading){title='Checking saved changes…';text='Refreshing the pending list and server status.';}
+  else if(ApplyUI.starting){title=validation?'Starting validation only…':'Starting Apply…';text=validation?'This will check the build. Saved changes will remain pending.':'Waiting for the server operation to start.';}
+  else if(running){title=validation?'Validation in progress — changes are not being applied':'Applying saved changes…';text=applyOperationMessage(job);}
+  else if(info?.saveRecovery?.length){title='Interrupted save recovery required';text='Open Drafts & changes and Review recovery. Saving, validation and Apply are paused until the incomplete save is resolved.';}
+  else if(job.status==='interrupted'){title='Previous deployment was interrupted';text=applyOperationMessage(job);}
+  else if(ApplyUI.connectionFailed)text='Server status could not be refreshed. Reopen this dialog to check before starting an operation.';
+  else if(!S.status?.docker.available)text+=' Start Docker Desktop before running either operation.';
+  if(interrupted&&job.status!=='interrupted'&&!running)text+=' A previous interrupted deployment still needs a verified Apply. Inspect its game/build state before acknowledging a retry below.';
+  $('#apply-current-title').textContent=title;
+  $('#apply-current').className='notice apply-current '+(count?'apply-current-pending':'apply-current-clean');
+  $('#apply-explanation').textContent=text;
+  $('#apply-error').hidden=!ApplyUI.error;
+  $('#apply-error').textContent=ApplyUI.error;
+  const current=!ApplyUI.loading&&!ApplyUI.starting&&(running||job.id&&job.id===ApplyUI.jobId);
+  $('#apply-operation').hidden=!current;
+  $('#apply-operation-title').textContent=current?applyOperationTitle(job):'';
+  $('#apply-operation-result').textContent=current?applyOperationMessage(job):'';
+  $('#apply-log').hidden=!current||!job.lines?.length;
+  $('#apply-log').textContent=current?(job.lines??[]).join('\n'):'';
+  const deployed=info?.lastDeployment;
+  const historical=!current&&job.status&&job.status!=='idle'&&!running?job:deployed&&deployed.id!==job.id?{...deployed.payload,id:deployed.id,status:deployed.status,started:deployed.started,finished:deployed.finished}:null;
+  $('#apply-previous').hidden=ApplyUI.loading||!historical;
+  $('#apply-previous-title').textContent=historical?`Previous ${applyOperationTitle(historical).toLowerCase()} · ${wDate(historical.finished??historical.started)}`:'';
+  $('#apply-previous-note').textContent=historical?'This is an earlier operation. Its result does not mean newer saved changes have been applied. '+applyOperationMessage(historical):'';
+  $('#apply-previous-log').textContent=historical?(historical.lines??[]).join('\n'):'';
+  const blocked=ApplyUI.loading||ApplyUI.connectionFailed||!!ApplyUI.starting||running||!info||!S.status?.docker.available||!!info?.saveRecovery?.length;
+  $('#run-apply').disabled=blocked||!count||!!interrupted&&!acknowledgement.checked;
+  $('#run-validate').disabled=blocked;
 }
 async function initWorkspace(){
   try{WUI.activeSet=localStorage.getItem(wPrefix()+'active-set')||null}catch(error){}
   $('.topbar').insertAdjacentHTML('afterend',`<div class="workspace-ribbon"><div><label for="workspace-set">Working change set</label><select id="workspace-set"></select><button class="button small" id="workspace-board">Drafts &amp; changes</button></div><span id="workspace-context"></span><small id="draft-status" role="status"></small></div>`);
+  $('.workspace-ribbon').insertAdjacentHTML('afterend','<div id="studio-recovery" class="notice studio-recovery" role="alert" hidden></div>');
   await workspaceRefresh();
   $('#workspace-board').addEventListener('click',()=>navigate('changes'));
   $('#workspace-set').addEventListener('change',async e=>{
@@ -122,12 +189,14 @@ async function resumeWorkspaceDraft(id){
 async function renderChanges(){
   const info=await workspaceRefresh();
   $('#content').innerHTML=head('YOUR WORKSPACE','Drafts & changes','Preserve unfinished work, group related edits and review exactly what will be saved.')+
+    `${info.saveRecovery?.length?`<section class="panel work-section"><div class="panel-header"><h2>Interrupted save recovery</h2></div><div class="work-body"><p>Review recovery before saving or applying. Restore interrupted writes while keeping files changed since then. The original before/after backups are retained.</p>${info.saveRecovery.map(row=>`<article><h3>${esc(row.title)}</h3>${row.paths.map(path=>`<p class="path">${esc(path)}</p>`).join('')}${row.error?`<p class="notice">${esc(row.error)}</p>`:''}<button class="button" data-review-save-recovery="${esc(row.id)}" ${row.canRecover?'':'disabled'}>Review recovery</button></article>`).join('')}</div></section>`:''}`+
     `<div class="work-grid"><section class="panel"><div class="panel-header"><h2>New change set</h2></div><form id="changeset-form" class="work-form"><label for="changeset-name">Name</label><input id="changeset-name" maxlength="120" required placeholder="Protection scroll rebalance"><label for="changeset-note">Purpose and expected result</label><textarea id="changeset-note" maxlength="1500" rows="3" placeholder="Which targets, recipes and quests belong together?"></textarea><button class="button primary">Create change set</button><small>A change set holds reviewed edits without changing game files. Save the complete set when ready.</small></form></section>
     <section class="panel"><div class="panel-header"><h2>Saved changes awaiting apply</h2><span>${info.pending.length} tracked files</span></div><div class="work-body">${!info.deploymentKnown?'<p class="notice info">No successful Studio deployment has been recorded. The running configuration has not been verified.</p>':''}${info.pending.map(row=>`<p><code>${esc(row.path)}</code>${row.changedOutsideStudio?'<span class="pill">Changed outside Studio</span>':''}</p>`).join('')||'<p class="muted">No tracked file differences from the last recorded deployment.</p>'}<button class="button" id="changes-updates">Review update protection</button></div></section></div>
     <section class="panel work-section"><div class="panel-header"><h2>Change sets</h2><span>${info.changesets.length}</span></div><div class="work-list">${info.changesets.map(row=>`<article><div><strong>${esc(row.name)}</strong><p>${esc(row.note)}</p><small>${row.files} files · ${esc(row.status)} · ${wDate(row.updated)}</small></div><div class="work-actions">${row.status==='draft'?`<button class="button small" data-work-on="${row.id}">Work in this set</button><button class="button small" data-rebase-set="${row.id}">Review against current files</button><button class="button primary small" data-publish-set="${row.id}" ${row.files?'':'disabled'}>Review complete set</button>`:'<span class="pill">Saved to game files</span>'}</div></article>`).join('')||'<div class="empty">Create a named set to combine drops, recipes, quests and settings.</div>'}</div></section>
     <section class="panel work-section"><div class="panel-header"><h2>Preserved editor drafts</h2><span>${info.drafts.length}</span></div><div class="work-list">${info.drafts.map(row=>`<article><div><strong>${esc(row.title)}</strong><p>${esc(titles[row.kind]||row.kind)} · ${wDate(row.updated)}</p></div><div class="work-actions"><button class="button small" data-resume-draft="${esc(row.id)}">Resume</button><button class="button small" data-recover-draft="${esc(row.id)}">Recover to change set</button><button class="button ghost small" data-delete-draft="${esc(row.id)}">Discard draft</button></div></article>`).join('')||'<div class="empty">Drafts appear here as you edit. They do not affect the game.</div>'}</div></section>`;
   $('#changeset-form').addEventListener('submit',e=>{e.preventDefault();attempt(async()=>{const row=await api('/api/changesets/create',{name:$('#changeset-name').value,note:$('#changeset-note').value});WUI.activeSet=row.id;localStorage.setItem(wPrefix()+'active-set',row.id);await renderChanges();toast('Change set created. Choose an editor to add changes.')})});
   $('#changes-updates').addEventListener('click',()=>navigate('updates'));
+  $$('[data-review-save-recovery]').forEach(button=>button.addEventListener('click',()=>preview('/api/recovery/preview',{id:button.dataset.reviewSaveRecovery})));
   $$('[data-work-on]').forEach(button=>button.addEventListener('click',()=>attempt(async()=>{WUI.activeSet=button.dataset.workOn;localStorage.setItem(wPrefix()+'active-set',WUI.activeSet);S.data.groups=(await api('/api/bootstrap')).groups;await workspaceRefresh();toast('Working in the selected change set.')})));
   $$('[data-rebase-set]').forEach(button=>button.onclick=()=>attempt(async()=>{const report=await api('/api/changesets/review-update',{id:button.dataset.rebaseSet});toolDialog('Review staged work against current files','<div id="update-report"></div>');renderUpdateReport(report);$('#reconcile-custom').disabled=false;$('#reconcile-custom').textContent='Rebase staged changes';$('#reconcile-custom').replaceWith($('#reconcile-custom').cloneNode(true));$('#reconcile-custom').onclick=()=>attempt(async()=>{await api('/api/changesets/rebase',{id:report.id,decisions:updateChoices()});$('#tool-dialog').close();await renderChanges();toast('Staged work rebased. Game files are unchanged. Review the complete set before saving.')})}));
   $$('[data-recover-draft]').forEach(button=>button.onclick=()=>attempt(async()=>{await api('/api/drafts/to-set',{id:button.dataset.recoverDraft});await renderChanges();toast('Draft copied into a change set. Review it against current files before publishing.')}));
@@ -138,17 +207,27 @@ async function renderChanges(){
 function updateChoices(){
   const decisions={};$$('[data-custom-choice]').forEach(select=>{if(select.value)decisions[select.dataset.customChoice]=select.value});return decisions;
 }
+function customMergeMarkup(row,file,report){
+  const gameFirst=report.kind==='package',laterMerge=report.kind==='installed';
+  const title=gameFirst?'Game update takes priority':row.conflict?(laterMerge?'Conflict · game value selected':'Choose a value'):'Custom change available to merge';
+  const values=[['Original',row.original],['Your custom value',row.custom],['Game update',row.incoming]];
+  const choice=gameFirst?'<p class="work-help">The game value is installed first. Your custom value stays available in the later merge review.</p>':
+    `<label class="work-choice">Merge decision<select data-custom-choice="${esc(row.id)}" aria-label="Decision for custom change on line ${row.line}">${row.conflict&&!laterMerge?'<option value="">Choose…</option>':''}<option value="keep" ${laterMerge&&!row.conflict?'selected':''}>Keep my custom value</option><option value="update" ${laterMerge&&row.conflict?'selected':''}>Use game value</option></select></label>`;
+  return `<article class="work-conflict ${row.conflict&&!gameFirst?'needs-choice':''}"><div class="work-conflict-title"><strong>${title}</strong><small>Original version ${esc(file.originalVersion)} · line ${row.line}</small></div><pre class="work-context">${esc(row.context)}</pre><div class="work-three">${values.map(([label,value])=>`<div><span>${label}</span><pre>${value===null?'(not present)':esc(value)}</pre></div>`).join('')}</div>${choice}</article>`;
+}
 function renderUpdateReport(report){
   WUI.report=report;
   const pack=report.package;
+  const gameFirst=report.priority==='game';
   $('#update-report').innerHTML=`<div class="work-report-heading"><div><h2>${pack?'Package '+esc(pack.version):'Installed file changes'}</h2><p>${report.affectedFiles} affected files · ${report.conflicts} conflicting custom changes · ${report.trackedFiles} tracked files</p></div><button class="button small" id="update-export">Download report</button></div>${pack?`<p class="notice ${pack.verified?'info':''}">${pack.files} package files · ${pack.verified?'SHA-256 matched the supplied release checksum':'Preview only: import with the published SHA-256 to enable installation'} · ${esc(pack.kind)} package</p>`:''}
-    <p class="work-help">${esc(report.scope)}</p>${report.files.map(file=>`<section class="work-conflict-file"><h3>${esc(file.path)}</h3>${file.choices.map(row=>`<article class="work-conflict ${row.conflict?'needs-choice':''}"><div class="work-conflict-title"><strong>${row.conflict?'Choose a value':'Custom value retained by default'}</strong><small>Original version ${esc(file.originalVersion)} · line ${row.line}</small></div><pre class="work-context">${esc(row.context)}</pre><div class="work-three">${[['Original',row.original],['Your custom value',row.custom],['Incoming update',row.incoming]].map(([label,value])=>`<div><span>${label}</span><pre>${value===null?'(not present)':esc(value)}</pre></div>`).join('')}</div><label class="work-choice">Decision<select data-custom-choice="${row.id}" aria-label="Decision for custom change on line ${row.line}">${row.conflict?'<option value="">Choose…</option>':''}<option value="keep">Keep my custom value</option><option value="update">Use update value</option></select></label></article>`).join('')}</section>`).join('')||'<div class="empty">No incoming changes affect tracked custom entries. Unrelated update changes need no individual approval.</div>'}
-    <div class="work-actions work-report-actions">${pack?`<button id="install-reviewed-update" class="button primary" ${pack.verified?'':'disabled'}>Review package installation</button>`:`<button id="reconcile-custom" class="button primary" ${report.affectedFiles?'':'disabled'}>Review selected merge</button>`}</div>`;
+    <p class="work-help">${esc(report.scope)}</p>${report.files.map(file=>`<section class="work-conflict-file"><h3>${esc(file.path)}${file.deferred?' · pending merge':''}</h3>${file.choices.map(row=>customMergeMarkup(row,file,report)).join('')||`<p class="work-help">${gameFirst?'This game file will be installed first. Original and custom values are preserved for later review.':'The current game already contains these custom values. Review the merge to accept the game as the new baseline.'}</p>`}</section>`).join('')||'<div class="empty">No incoming changes affect tracked custom entries. Unrelated update changes need no individual approval.</div>'}
+    <div class="work-actions work-report-actions">${pack?`<button id="install-reviewed-update" class="button primary" ${pack.verified?'':'disabled'}>Review game package installation</button>`:`<button id="reconcile-custom" class="button primary" ${report.affectedFiles?'':'disabled'}>Review selected merge</button>${report.kind==='installed'?`<button id="defer-custom-merge" class="button" ${report.affectedFiles?'':'disabled'}>Keep game; decide later</button>`:''}`}</div>`;
   $('#update-export').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({...report,decisions:updateChoices()},null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download=`metin2-custom-update-review-${Date.now()}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)});
   $('#reconcile-custom')?.addEventListener('click',()=>preview('/api/customisations/preview',{id:report.id,decisions:updateChoices()}));
+  $('#defer-custom-merge')?.addEventListener('click',()=>preview('/api/customisations/defer',{id:report.id}));
   $('#install-reviewed-update')?.addEventListener('click',()=>{
     if($$('[data-custom-choice]').some(select=>!select.value))return toast('Choose Keep custom or Use update for each conflict.',true);
-    const dialog=$('#update-install-dialog');$('#update-install-summary').textContent=`Install ${pack.version}: ${pack.files} package files, ${report.affectedFiles} files with custom decisions. The native updater creates its normal backups. Selected custom values are restored before any build. Apply to server is a separate action.`;
+    const dialog=$('#update-install-dialog');$('#update-install-summary').textContent=`Install ${pack.version}: ${pack.files} package files, ${report.affectedFiles} tracked custom files supplied by the package. Game values are installed first. Original and custom values are archived and retained for a later merge review; no custom merge is applied automatically. The native updater creates its normal backups. Build/Apply is separate.`;
     $('#confirm-update-install').onclick=()=>attempt(async()=>{const result=await api('/api/updates/install',{id:report.id,decisions:updateChoices()});dialog.close();$('#update-operation').textContent=result.message;pollUpdateOperation()});dialog.showModal();
   });
 }
@@ -158,9 +237,9 @@ async function pollUpdateOperation(){
 }
 async function renderUpdates(){
   await workspaceRefresh();
-  $('#content').innerHTML=head('KEEP YOUR CUSTOM WORK','Update protection','Review only updates that overlap your custom changes. Original, custom and incoming values stay separate.')+
-    `<div class="notice info">Studio stores originals and custom changes outside the game installation. Use this page for a review before package installation. Updates launched elsewhere bypass that preview; Scan installed files can detect and recover tracked custom entries afterward.</div>
-    <div class="work-grid"><section class="panel"><div class="panel-header"><h2>Review installed changes</h2></div><div class="work-body"><p>Track changes as you save through Studio. A scan leaves game files untouched.</p><button class="button primary" id="scan-customisations">Scan installed files</button><p class="work-help">${WUI.info.tracked.length} tracked files. Earlier edits made outside Studio need an original backup before they can be identified reliably.</p></div></section>
+  $('#content').innerHTML=head('UPDATE FIRST, MERGE LATER','Update protection','The game wins initially. Decide how to merge your preserved custom work afterwards.')+
+    `<div class="notice info">Install and run the game update first. Studio preserves the original, custom and game values for a separate merge review. Conflicts default to the game value; you choose what to keep, reapply or adapt. Keep game; decide later lets the update proceed without resolving every custom merge. The game launcher remains independent.</div>
+    <div class="work-grid"><section class="panel"><div class="panel-header"><h2>Review custom merges</h2></div><div class="work-body"><p>Compare your custom work with the installed game update. Scanning leaves game files untouched.</p><button class="button primary" id="scan-customisations">Scan installed files / pending merges</button><p class="work-help">${WUI.info.tracked.length} tracked files · ${WUI.info.pendingMerges?.length||0} pending merges. Earlier edits made outside Studio need an original backup.</p></div></section>
     <section class="panel"><div class="panel-header"><h2>Preview a game update</h2></div><div class="work-body"><div class="work-actions"><button class="button" id="check-official-update">Check official release</button><button class="button" id="download-official-update" disabled>Download &amp; preview</button></div><p id="official-offer" class="work-help">Uses this installation’s ordinary/protected server channel.</p><form id="update-upload" class="work-form"><label for="update-zip">Or import the server update ZIP</label><input id="update-zip" type="file" accept=".zip,application/zip" required><label for="update-sha">Published SHA-256</label><input id="update-sha" pattern="[a-fA-F0-9]{64}" placeholder="Required to install; optional for preview"><button class="button">Upload &amp; preview custom differences</button></form></div></section></div>
     <p id="update-operation" class="notice" role="status">No update operation running.</p><section class="panel work-update-report" id="update-report"><div class="empty">Scan installed files or preview a package to see affected custom changes.</div></section>`;
   $('#scan-customisations').onclick=()=>attempt(async()=>renderUpdateReport(await api('/api/customisations')));
@@ -172,16 +251,17 @@ async function renderUpdates(){
 function renderWorkspaceOverview(){
   const info=WUI.info||{drafts:[],pending:[],tracked:[],changesets:[],recent:[]},c=S.data.counts;
   $('#content').innerHTML=head('YOUR SERVER WORKSPACE','Your world, under control.','Pick up unfinished work, review custom changes and track what has been applied.','<button class="button" data-go="updates">Review update protection ↗</button>')+
-    `<div class="stats">${[[info.drafts.length,'Preserved drafts','Unfinished editor work'],[info.changesets.filter(row=>row.status==='draft').length,'Open change sets','Related changes reviewed together'],[info.pending.length,'Files awaiting apply',info.deploymentKnown?'Since the last Studio deployment':'Deployment state not yet recorded'],[info.tracked.length,'Protected custom files','Originals retained outside the game']].map(([n,label,hint])=>`<div class="stat"><div class="stat-label">${label}</div><strong>${fmt(n)}</strong><small>${hint}</small></div>`).join('')}</div>
+    `${info.pendingMerges?.length?`<div class="notice info">${info.pendingMerges.length} custom merges await review. The game values remain in place until you save a merge. <button class="button small" data-go="updates">Review custom merges</button></div>`:''}<div class="stats">${[[info.drafts.length,'Preserved drafts','Unfinished editor work'],[info.changesets.filter(row=>row.status==='draft').length,'Open change sets','Related changes reviewed together'],[info.pending.length,'Files awaiting apply',info.deploymentKnown?'Since the last Studio deployment':'Deployment state not yet recorded'],[info.tracked.length,'Protected custom files','Originals retained outside the game']].map(([n,label,hint])=>`<div class="stat"><div class="stat-label">${label}</div><strong>${fmt(n)}</strong><small>${hint}</small></div>`).join('')}</div>
     <div class="work-grid work-section"><section class="panel"><div class="panel-header"><h2>Continue your work</h2><button class="subtle-link" data-go="changes">All drafts &amp; changes ↗</button></div><div class="work-list">${info.drafts.slice(0,4).map(row=>`<article><div><strong>${esc(row.title)}</strong><p>${esc(titles[row.kind])} · ${wDate(row.updated)}</p></div><button class="button small" data-home-draft="${esc(row.id)}">Resume</button></article>`).join('')||'<div class="empty">Choose an editor to begin. Drafts are preserved as you work.</div>'}</div></section>
     <section class="panel"><div class="panel-header"><h2>Recent activity</h2></div><div class="work-list">${info.recent.slice(0,5).map(row=>`<article><div><strong>${esc(row.title)}</strong><p>${esc(row.kind)} · ${wDate(row.at)}</p></div></article>`).join('')||'<div class="empty">Studio saves, staged changes and apply results will appear here.</div>'}</div></section></div>
     <div class="quick-grid work-section"><article class="feature-card"><div class="mini-label">LOOT &amp; REWARDS</div><h2>Shape the rewards.</h2><p>Compare targets and inspect shared pools before changing the loot.</p><button class="button primary" data-go="drops">Open drop editor ↗</button></article><article class="feature-card secondary"><div class="mini-label">STORIES &amp; PROGRESSION</div><h2>Build an adventure.</h2><p>Manage quests and crafting alongside the items they use.</p><div class="work-actions"><button class="button" data-go="quests">Browse quests ↗</button><button class="button" data-go="crafting">Crafting ↗</button></div></article></div>
     <details class="panel work-catalog"><summary>Installed catalog · ${fmt(c.items)} items · ${fmt(c.mobs)} targets · ${fmt(c.files)} files</summary><p>Version ${esc(S.data.version)}. Catalog and source definitions can differ from the running database. Docker availability alone does not verify game health.</p><div class="work-actions"><button class="button" data-go="settings">World settings</button><button class="button" data-go="files">Config library</button><button class="button" data-go="economy">Economy</button></div></details>`;
   bindNavigation();$$('[data-home-draft]').forEach(button=>button.onclick=()=>attempt(()=>resumeWorkspaceDraft(button.dataset.homeDraft)));
+  renderAddonOverview();
 }
 
 const baseUpdatesPage=renderUpdates;
-renderUpdates=async function(){await baseUpdatesPage();const pending=(await workspaceRefresh()).preferences.nativeUpdatePending;if(pending&&!pending.ready){$('#update-operation').insertAdjacentHTML('afterend','<p class="notice">A native package was installed but custom restoration did not finish. Scan installed files, review the choices and save the selected merge. Then verify recovery before Apply.</p><button class="button" id="finish-update-recovery">Verify custom recovery</button>');$('#finish-update-recovery').onclick=()=>attempt(async()=>{await api('/api/updates/recovery',{});await renderUpdates();toast('Custom recovery verified. Apply the pending native build when ready.')})}};
+renderUpdates=async function(){await baseUpdatesPage();const pending=(await workspaceRefresh()).preferences.nativeUpdatePending;if(pending&&!pending.ready){$('#update-operation').insertAdjacentHTML('afterend','<p class="notice">Package installation or verification needs recovery. Check the native launcher result, scan changed files and keep the game values before verifying recovery. Custom merge decisions can remain deferred.</p><button class="button" id="finish-update-recovery">Verify package recovery</button>');$('#finish-update-recovery').onclick=()=>attempt(async()=>{await api('/api/updates/recovery',{});await renderUpdates();toast('Package recovery recorded. Apply the game update when ready; review custom merges separately.')})}};
 
 const recoverableUpdatesPage=renderUpdates;
 renderUpdates=async function(){await recoverableUpdatesPage();$('#update-operation').insertAdjacentHTML('afterend','<div class="editor-actions"><button class="button" id="adopt-custom-file">Track an existing edit from its original backup</button><small>Earlier manual edits need an original file to identify your custom differences. New Studio saves are tracked automatically.</small></div>');$('#adopt-custom-file').onclick=()=>attempt(async()=>{const paths=await api('/api/customisations/adopt-sources');toolDialog('Track existing configuration edits',`<p>Choose the current file and its unmodified original backup. Review the differences before registering them. Game files are unchanged.</p><label>Current configuration<select id="adopt-path" class="wide-input">${paths.map(path=>`<option>${esc(path)}</option>`).join('')}</select></label><label>Original backup file<input id="adopt-original" type="file"></label><button class="button primary" id="adopt-review">Review custom differences</button>`);$('#adopt-review').onclick=()=>attempt(async()=>{const file=$('#adopt-original').files[0];if(!file||file.size>2000000)throw new Error('Choose an original backup under 2 MB.');const bytes=new Uint8Array(await file.arrayBuffer());let raw='';for(const byte of bytes)raw+=String.fromCharCode(byte);const body={path:$('#adopt-path').value,original:btoa(raw)};$('#tool-dialog').close();await preview('/api/customisations/adopt',body)})})};

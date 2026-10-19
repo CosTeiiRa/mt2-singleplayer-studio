@@ -1,5 +1,148 @@
 # Changelog
 
+Older entries describe behavior at that release. See the README and latest entry
+for the current normal-client and game-update workflow.
+
+## beta-1.11.0
+
+- Added a recorded exact-executable adapter profile for client 2.0.114, observed
+  with server 2.2.110. Isolated actual-pack and native atlas/menu/wiki/input
+  lifecycle checks passed; logged-in gameplay remains independent acceptance.
+- Added journalled interrupted-save detection and reviewed recovery, retaining
+  external/game-update edits and blocking further saves/Apply until resolved.
+- Stop Studio refuses during critical deployment/update/add-on work. Startup
+  records unfinished deployments as interrupted instead of silently losing them
+  or replaying a build/restart. Warnings survive validation; a recorded running
+  build blocks retry/validation, and retry requires a launcher/build confirmation.
+- Added game-installation locking across Studio copies using separate state
+  folders, while retaining existing state-folder locks.
+- Prepared a small-beta scope, operator recovery/tester checklist, current
+  normal-client documentation, root MIT license and private support/security/
+  contribution guidance. Public repository/history review and independent human
+  acceptance remain separate gates; no publication or invitation is performed.
+
+## alpha-1.10.1
+
+- The Apply dialog now leads with current pending changes. Previous build results
+  have a separate collapsed section; validation explicitly leaves changes pending
+  and does not restart the game. Both actions are blocked while an operation starts.
+- Added a Change type filter alongside history categories, including quests,
+  crafting, drops, world settings, maps, shops and other content areas. Mixed saves
+  appear under every affected type. Existing backups and full-save rollback guards
+  are preserved.
+
+## alpha-1.10.0
+
+- Added Add-on Menu as the first bundled add-on. Its in-game Add-ons button lists
+  installed extensions and opens windows or the native atlas, with paging and
+  disabled, automatic and unavailable states. Removing it retains other add-ons.
+- Added read-only installed metadata and open actions to client API v2. Opening
+  an already visible window raises it without toggling it closed.
+- Default descriptions now have readable usage, shortcut, settings and coverage
+  sections with safe headings and lists.
+- Change history separates gameplay edits from game-update reconciliations, with
+  an All changes view. Existing backups are classified without rewriting them;
+  rollbacks retain their category and guards against newer edits in either group.
+
+
+## alpha-1.9.0
+
+- Add-ons now apply to the normal supported game client, with reviewed changes,
+  pack backups and transaction recovery. No extra playable copy is required.
+- Moved optional sandbox/copy creation under Advanced testing tools. Exact
+  client process and executable checks protect pack writes while it is open.
+- Clean game-pack replacements offer a manual reapply review against the new
+  game baseline. Settings survive; removal restores that updated baseline and
+  failed reapply restores current game files. Mixed external changes stay blocked.
+- Added normal-client lifecycle, update/reapply, stale-review, failure recovery
+  and UI coverage.
+
+## alpha-1.8.4
+
+- Version/profile declarations now describe compatibility coverage. Unlisted
+  versions show Compatibility unverified and permit reviewed installation;
+  missing declarations and experimental integrations carry the same warning.
+- Added separate compatibility badges, current-versus-declared version details,
+  and clear distinctions between publisher declarations and recorded failures.
+  Existing adapter, package, dependency and ownership blockers remain.
+- Updated installed compatibility after game updates without trapping disable
+  or removal. A target changing during review still requires a fresh review.
+- Added manager, pack integration and UI tests for version differences, warnings,
+  installation/removal, evidence-based labels and retained safety checks.
+
+## alpha-1.8.3
+
+- Saved merges remain pending until a verified Apply deploys them, including
+  merges that restore bytes from an older Studio build after a game update.
+  Validation, failed builds and unverified runtime checks do not clear that work.
+- Runtime verification now checks saved Studio quest source hashes and compiled
+  quest states as the game account. Missing or stale custom quest output leaves
+  Apply unverified. Deferred game-first quest integration remains optional.
+- Added regressions for external updates, restart persistence, unsuccessful
+  deployment attempts, accepting game values and compiled quest verification.
+
+## alpha-1.8.2
+
+- Corrected update priority to install the game first and let the user merge
+  preserved custom work afterwards. Package installation never restores a merge
+  automatically, and no longer discards custom intent.
+- Pending merges retain original/custom/game values across restarts and further
+  updates. Conflicts default to the game value; explicit review can select custom
+  changes while keeping unrelated updates. Added Keep game; decide later.
+- Deferred merges do not gate the native game build or runtime verification.
+  A pending package build does not reapply Studio native-crafting overrides.
+- Added deferred-state, repeated-update, explicit-merge, game-build and UI tests.
+
+## alpha-1.8.1
+
+- Made the game authoritative during package updates and installed-file recovery.
+  Supplied game files retain their update values; old Studio overrides are retired
+  instead of being restored. Files absent from a package are left alone.
+- Archived displaced original/custom/current files privately before invoking the
+  native updater. Separate compatibility review can recover prior work later.
+- Removed custom-value restoration controls from game-update reviews. Staged new
+  work retains its own explicit merge review. Added regression and UI coverage.
+
+## alpha-1.8.0
+
+- Bundled Pocket Wiki with in-game crafting, upgrade chains, configured sources
+  and uses, native wiki links, bookmarks/history, pinned cards and attempt costs.
+- Added API v2 lifecycle, independent windows, guarded shortcuts, world-local
+  preferences and reference data, preserving API-v1 atlas add-ons.
+- Added structured reference snapshots with provenance and reviewed refresh.
+  Current native snapshots exclude pending Studio overrides; configuration and
+  seed references retain their coverage labels.
+- Added owned playable test copies for the recorded executable. Original client
+  installations remain read only; executable drift blocks test-copy writes.
+- Added correctness, lifecycle, refresh/removal and native UI checks. Native
+  harness results remain distinct from connected interactive gameplay.
+
+## alpha-1.3.0
+
+- Added local add-on ZIP import directly in Discover, using the shared package cache and reviewed install/update flow.
+- Added filename/checksum details and removal from the local catalog while retaining installed code and recovery data.
+- Added creator runtime/HTTP fixtures and an actual-pack creator-workflow rehearsal with exact restoration.
+- Adopted user-selected source trust; removed publisher verification badges and certification/signing launch requirements.
+- Live client writes, browser/gameplay acceptance, independent creator trials and optional shared catalog hosting remain separate work.
+
+## alpha-1.2.0
+
+- Added explicit HTTPS repository subscriptions, stable/prerelease channels, manual update discovery and separate download/install reviews.
+- Added bounded archive validation, immutable archive checksums, cached offline selection, withdrawal checks and explicit source-switch acknowledgement.
+- Added creator scaffolding, artifact creation/inspection, static catalog generation, experimental API v1 and dependency version comparisons.
+- Added typed settings controls and retained installed details/settings when a source disappears.
+- Added a redacted support report and a fresh-upstream-baseline fixture rehearsal.
+- Documented precise acceptance status and drafted community launch/maintenance responsibilities.
+- Public catalog hosting, browser acceptance and interactive gameplay remain pending. Live client packs remain read only.
+
+## alpha-1.1.0
+
+- Integrated Add-on Hub into the existing Studio service and navigation.
+- Added world-bound sandbox management, shared session authorization, atlas-to-editor links and combined activity.
+- Added optional local pack dependencies, safe history-copy migration and authenticated shutdown.
+- Preserved server deployment and add-on recovery as separate workflows.
+- Live client writes and interactive gameplay validation remain unavailable.
+
 ## beta-1.0.0
 
 First distributable beta of Metin2 Singleplayer Studio.

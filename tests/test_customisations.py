@@ -144,6 +144,7 @@ class WorkspaceTests(unittest.TestCase):
         _, changes, rebased = self.workspace.reconciliation({'id': report['id'], 'decisions': {choice['id']: 'keep'}})
         self.assertEqual(changes[path], b'a 100\nb 99\n')
         self.assertEqual(rebased['table.txt'][0], b'a 80\nb 99\n')
+        self.assertEqual(rebased['table.txt'][1], b'a 100\nb 99\n')
         path.write_bytes(b'a 70\nb 99\n')
         with self.assertRaisesRegex(ValueError, 'changed since this review'):
             self.workspace.reconciliation({'id': report['id'], 'decisions': {choice['id']: 'keep'}})
@@ -160,6 +161,48 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(changes, {})
         self.workspace.record_commit([], 'Accept update', 'backup2', {'reconciled': rebased})
         self.assertEqual(self.workspace.tracked(), [])
+
+    def test_deferred_merge_survives_restart_and_can_be_chosen_later(self):
+        path = self.root / 'table.txt'
+        base, custom, incoming = b'a 50\nb 1\n', b'a 100\nb 1\n', b'a 80\nb 99\n'
+        path.write_bytes(incoming)
+        self.workspace.record_commit([], 'Update first', 'archive', {'deferred': {'table.txt': (base, custom, incoming, 'old-version')}})
+        self.workspace = Workspace(self.studio)
+        self.assertEqual(self.workspace.deferred_paths(), {'table.txt'})
+        self.assertEqual(self.workspace.tracked(active_only=True), [])
+        self.assertEqual(self.workspace.scan(include_deferred=False)['affectedFiles'], 0)
+        report = self.workspace.scan()
+        self.assertEqual(report['priority'], 'merge')
+        self.assertTrue(report['files'][0]['deferred'])
+        # Default conflict decision leaves the game value in place.
+        self.assertEqual(self.workspace.reconciliation({'id': report['id']})[1], {})
+        choice = report['files'][0]['choices'][0]
+        _, changes, rebased = self.workspace.reconciliation({'id': report['id'], 'decisions': {choice['id']: 'keep'}})
+        self.assertEqual(path.read_bytes(), incoming)  # Preview is read only.
+        self.assertEqual(changes[path], b'a 100\nb 99\n')
+        path.write_bytes(changes[path])
+        self.workspace.record_commit([(path, incoming, changes[path])], 'Chosen merge', 'merge-backup', {'reconciled': rebased})
+        self.assertEqual(self.workspace.deferred_paths(), set())
+        self.assertEqual(self.workspace.tracked()[0]['original'], incoming)
+        self.assertEqual(self.workspace.scan()['affectedFiles'], 0)
+
+    def test_deferral_keeps_all_three_versions_without_writing_game_files(self):
+        path = self.root / 'table.txt'
+        base, custom, incoming = b'x 50\n', b'x 100\n', b'x 80\n'
+        path.write_bytes(custom)
+        self.workspace.record_commit([(path, base, custom)], 'Custom', 'backup')
+        path.write_bytes(incoming)
+        self.studio.plan = lambda title, changes, hint, **kwargs: {'title': title, 'changes': changes, **kwargs}
+        report = self.workspace.scan()
+        plan = self.workspace.defer_plan({'id': report['id']})
+        self.assertEqual(plan['changes'], {})
+        self.assertEqual(path.read_bytes(), incoming)
+        self.workspace.record_commit([], plan['title'], 'deferred', plan['metadata'])
+        record = self.workspace.tracked()[0]
+        self.assertEqual((record['original'], record['custom'], record['expected']), (base, custom, incoming))
+        self.assertEqual(self.workspace.scan(include_deferred=False)['affectedFiles'], 0)
+        with self.assertRaisesRegex(ValueError, 'tracking changed'):
+            self.workspace.reconciliation({'id': report['id']})
 
     def test_unsupported_draft_types_and_other_installation_are_rejected(self):
         with self.assertRaises(ValueError):
