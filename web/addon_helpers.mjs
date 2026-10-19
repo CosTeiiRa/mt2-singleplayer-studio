@@ -51,7 +51,14 @@ export function installedRecord(item, installed = []) {
 export function addonStatus(item, installed) {
   const record = installedRecord(item, installed);
   if (item.error || item.valid === false || item.validation_errors?.length || item.status === 'invalid') return {label: 'Package issue', tone: 'danger'};
-  if (record) return record.enabled === false ? {label: 'Disabled', tone: 'muted'} : {label: 'Enabled', tone: 'success'};
+  if (record) {
+    const integrity=record.integrity??item.integrity;
+    if(integrity?.status==='missing')return {label:'Needs reinstall',tone:'danger'};
+    if(integrity?.status==='changed')return {label:'Files changed',tone:'copper'};
+    if(integrity?.status==='unavailable')return {label:'Cannot verify files',tone:'danger'};
+    if(integrity?.status!=='healthy')return {label:'Files not checked',tone:'muted'};
+    return record.enabled === false ? {label: 'Disabled', tone: 'muted'} : {label: 'Enabled', tone: 'success'};
+  }
   return {label: 'Available', tone: 'muted'};
 }
 

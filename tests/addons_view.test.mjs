@@ -3,6 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const nodes=new Map(),listeners=new Map();
+const integrityTimers=new Map();let timerId=0;
+globalThis.window={setTimeout:callback=>{integrityTimers.set(++timerId,callback);return timerId;},clearTimeout:id=>integrityTimers.delete(id),
+  addEventListener:(kind,callback)=>listeners.set('window:'+kind,[callback])};
 class Element {
   constructor(){this.children=[];this.dataset={};this.innerHTML='';this.open=false;this.className='';}
   set id(value){this._id=value;nodes.set(value,this);}get id(){return this._id;}
@@ -139,7 +142,7 @@ test('updated game exposes an explicit review before reapplying installed addons
   try{
     await views.mount(ctx);
     assert.match(root.innerHTML,/The game client changed/);
-    assert.match(root.innerHTML,/Review reapply/);
+    assert.match(root.innerHTML,/Review reinstall/);
     const button={dataset:{action:'reapply'},closest:()=>button};
     await listeners.get('click')[0]({target:button});
     assert.deepEqual(reviewed,{addon_id:item.id,action:'reapply'});
@@ -147,6 +150,64 @@ test('updated game exposes an explicit review before reapplying installed addons
     assert.ok(!requests.some(path=>path.endsWith('/apply')));
   }finally{state.installation=previous;state.installed=[];delete state.game_update;nodes.get('ah-plan-dialog').close();}
 });
+test('open installed view automatically detects deleted files and offers reviewed reinstall without applying',async()=>{
+  const previous=structuredClone(state);
+  state.installed=[{...item,enabled:true,integrity:{status:'healthy'}}];
+  state.integrity={status:'healthy',repair_available:false};
+  const ctx=context('installed'),original=ctx.api;
+  let reviewed;
+  ctx.api=async(path,body)=>{
+    if(path.endsWith('/state')){requests.push(path);return {state:structuredClone(state)};}
+    if(path.endsWith('/plan')){reviewed=body;return {plan:{id:'repair-plan',action:'repair',addon_id:item.id,can_apply:true,changes:[],warnings:[],conflicts:[]}};}
+    return original(path,body);
+  };
+  const tick=async()=>{const [id,callback]=[...integrityTimers].at(-1);integrityTimers.delete(id);await callback();};
+  try{
+    await views.mount(ctx);
+    assert.doesNotMatch(root.innerHTML,/Needs reinstall/);
+    state.installed[0].integrity={status:'missing'};
+    state.integrity={status:'missing',repair_available:true,repair_action:'repair',message:'Missing <payload>',missing_files:['m2hub_addons/<payload>.py']};
+    requests=[];await tick();
+    assert.deepEqual(requests,['/api/addons/state']);
+    assert.match(root.innerHTML,/Needs reinstall/);
+    assert.match(root.innerHTML,/Missing &lt;payload&gt;/);
+    assert.match(root.innerHTML,/m2hub_addons\/&lt;payload&gt;\.py/);
+    assert.match(root.innerHTML,/data-action="repair"/);
+    assert.match(root.innerHTML,/aria-checked="true"/);
+    const button={dataset:{action:'repair',id:item.id},closest:()=>button};
+    await listeners.get('click')[0]({target:button});
+    assert.deepEqual(reviewed,{addon_id:item.id,action:'repair'});
+    assert.ok(!requests.some(path=>path.endsWith('/apply')));
+    nodes.get('ah-plan-dialog').close();
+    state.integrity={status:'healthy',repair_available:false};state.installed[0].integrity={status:'healthy'};
+    await tick();
+    assert.doesNotMatch(root.innerHTML,/Needs reinstall|Add-ons need reinstalling/);
+  }finally{for(const key of Object.keys(state))delete state[key];Object.assign(state,previous);}
+});
+
+test('returning to Studio rechecks files and failed checks cannot leave a healthy status',async()=>{
+  const previous=structuredClone(state);
+  state.installed=[{...item,enabled:true,integrity:{status:'healthy'}}];
+  state.integrity={status:'healthy'};
+  const ctx=context('installed'),original=ctx.api;let fail=false;
+  ctx.api=async(path,body)=>{
+    if(path.endsWith('/state')){if(fail)throw Error('offline');return {state:structuredClone(state)};}
+    return original(path,body);
+  };
+  try{
+    await views.mount(ctx);fail=true;
+    await listeners.get('window:focus')[0]();
+    assert.match(root.innerHTML,/Cannot verify files/);
+    fail=false;await listeners.get('visibilitychange')[0]();
+    assert.doesNotMatch(root.innerHTML,/Cannot verify files/);
+    current=false;
+    const [id,callback]=[...integrityTimers].at(-1);integrityTimers.delete(id);
+    requests=[];await callback();
+    assert.equal(integrityTimers.size,0);
+    assert.deepEqual(requests,[]);
+  }finally{current=true;for(const key of Object.keys(state))delete state[key];Object.assign(state,previous);}
+});
+
 test('atlas uses namespaced images and links the resolved mob to Studio editors',async()=>{
   await views.mount(context('atlas'));
   assert.match(root.innerHTML,/href="\/api\/addons\/map-image\?map=64"/);

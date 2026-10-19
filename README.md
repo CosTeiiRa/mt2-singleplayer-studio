@@ -1,6 +1,6 @@
 # Metin2 Studio
 
-**beta-1.11.0** · A local dashboard for your Metin2 Singleplayer world and client add-ons.
+**beta-1.11.1** · A local dashboard for your Metin2 Singleplayer world and client add-ons.
 
 Edit drops, create quests, manage crafting, explore items and follow the economy.
 Add in-game tools such as Boss Atlas and Pocket Wiki through the same application.

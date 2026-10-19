@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
 import {escapeHtml,descriptionSummary,descriptionMarkup,unwrap,filterCatalog,installedRecord,addonStatus,compatibilityStatus,formatTime,changeRows,mapRegions,mapBounds,respawnLabel,sourceLabel,booleanSettings,settingFields,parseSettingValue} from '../web/addon_helpers.mjs';
 
 test('sectioned descriptions show headings and lists while cards keep a short summary',()=>{
@@ -56,10 +58,40 @@ test('response envelopes preserve direct data and reject server errors',()=>{
 test('installed state takes precedence over catalog flags and invalid packages stay visible',()=>{
   const item={id:'hub.map',installed:false};
   assert.equal(installedRecord(item,[{id:'hub.map',enabled:false}]).enabled,false);
-  assert.deepEqual(addonStatus(item,[{id:'hub.map',enabled:false}]),{label:'Disabled',tone:'muted'});
+  assert.deepEqual(addonStatus(item,[{id:'hub.map',enabled:false,integrity:{status:'healthy'}}]),{label:'Disabled',tone:'muted'});
   assert.equal(addonStatus({...item,error:'Checksum mismatch'},[]).label,'Package issue');
   assert.equal(addonStatus(item,[]).label,'Available');
   assert.equal(addonStatus({...item,status:'incompatible'},[]).label,'Available');
+});
+
+test('file integrity takes precedence over saved enabled preferences',()=>{
+  const item={id:'hub.map',installed:true,enabled:true,integrity:{status:'healthy'}};
+  for(const [status,label] of [['missing','Needs reinstall'],['changed','Files changed'],['unavailable','Cannot verify files'],['unverified','Files not checked']]){
+    for(const enabled of [true,false])assert.equal(addonStatus(item,[{id:item.id,enabled,integrity:{status}}]).label,label);
+  }
+  assert.equal(addonStatus(item,[{id:item.id,enabled:true,integrity:{status:'healthy'}}]).label,'Enabled');
+  assert.equal(addonStatus({id:item.id},[{id:item.id,enabled:true}]).label,'Files not checked');
+});
+
+test('the main Studio notice checks local files and clears after a successful reinstall',async()=>{
+  const source=fs.readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+  const notice={hidden:true,innerHTML:''},requests=[];
+  let response={state:{integrity:{status:'missing',repair_available:true,message:'Missing <file>'}}},fail=false;
+  const context={$:()=>notice,document:{hidden:false},esc:escapeHtml,api:async path=>{requests.push(path);if(fail)throw Error('offline');return response;}};
+  vm.createContext(context);
+  vm.runInContext(source.slice(source.indexOf('let addonNoticeBusy='),source.indexOf('async function updateStatus(')),context);
+  await context.refreshAddonNotice(true);
+  assert.equal(notice.hidden,false);
+  assert.match(notice.innerHTML,/Add-ons need reinstalling/);
+  assert.match(notice.innerHTML,/Missing &lt;file&gt;/);
+  assert.match(notice.innerHTML,/href="#installed">Review reinstall/);
+  response={state:{integrity:{status:'healthy'}}};
+  await context.refreshAddonNotice(true);
+  assert.equal(notice.hidden,true);
+  fail=true;await context.refreshAddonNotice(true);
+  assert.equal(notice.hidden,false);
+  assert.match(notice.innerHTML,/could not be checked/);
+  assert.ok(requests.every(path=>path==='/api/addons/state'));
 });
 
 test('compatibility distinguishes uncertainty, publisher declarations and recorded incompatibility',()=>{

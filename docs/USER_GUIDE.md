@@ -38,7 +38,7 @@ an add-on, then launch the game with your usual shortcut. The server may keep
 running. Backups cover changed pack files; a second playable client is optional
 under **Advanced testing tools**.
 
-If an update replaces the managed packs with clean game files, **Review reapply**
+If an update replaces the managed packs with clean game files, **Review reinstall**
 uses those new files as the baseline and retains installed add-on settings. Apply
 is manual. Removing the last add-on restores the current game baseline. A partial
 external edit retaining Hub code remains a conflict for inspection.
@@ -198,7 +198,7 @@ Close the selected game client before recovery. **Activity** and add-on settings
 show transaction/recovery state. Review the available recovery action and its
 target; preserve `<stateDir>/addons/`, including pack baselines and journals.
 Recovery must not overwrite a game update with an older pack. External or mixed
-pack changes require inspection; clean updated packs use **Review reapply**.
+pack changes require inspection; clean updated packs use **Review reinstall**.
 The game server may stay running because this is a separate client operation.
 
 ### Another Studio is already managing this game

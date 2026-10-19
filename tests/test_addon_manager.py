@@ -127,6 +127,126 @@ class ManagerTests(unittest.TestCase):
         self.apply('demo.legend', 'remove')
         self.assertEqual(self.backend.physical_snapshot(), physical)
 
+    def test_integrity_verifies_files_without_changing_saved_settings_or_packs(self):
+        self.apply('demo.markers')
+        self.apply('demo.legend')
+        self.apply('demo.legend', 'disable')
+        physical = self.backend.physical_snapshot()
+        state_bytes = self.manager._state_path.read_bytes()
+        state = self.manager.state()
+        self.assertEqual(state['integrity']['status'], 'healthy')
+        self.assertTrue(all(row['integrity']['status'] == 'healthy' for row in state['installed']))
+        self.assertFalse(next(row for row in state['installed'] if row['id'] == 'demo.legend')['enabled'])
+        self.assertEqual(self.manager._state_path.read_bytes(), state_bytes)
+        self.assertEqual(self.backend.physical_snapshot(), physical)
+
+    def test_clean_game_update_marks_every_saved_addon_as_needing_reinstall(self):
+        self.apply('demo.markers')
+        self.apply('demo.legend')
+        self.apply('demo.legend', 'disable')
+        _, physical = self.updated_game()
+        state = self.manager.state()
+        self.assertEqual(state['integrity']['status'], 'missing')
+        self.assertTrue(state['integrity']['repair_available'])
+        self.assertEqual(state['integrity']['repair_action'], 'reapply')
+        self.assertTrue(all(row['integrity']['status'] == 'missing' for row in state['installed']))
+        self.assertFalse(next(row for row in state['installed'] if row['id'] == 'demo.legend')['enabled'])
+        self.assertEqual(self.backend.physical_snapshot(), physical)
+
+    def test_missing_payload_is_identified_and_reviewed_repair_preserves_other_files(self):
+        self.apply('demo.markers')
+        self.apply('demo.legend')
+        self.manager.apply(self.manager.plan('demo.markers', 'configure', {'show_labels': False})['id'])
+        expected = self.backend.snapshot()
+        damaged = dict(expected)
+        del damaged['m2hub_addons/markers.py']
+        self.set_target(damaged)
+        physical = self.backend.physical_snapshot()
+        state = self.manager.state()
+        records = {row['id']: row for row in state['installed']}
+        self.assertEqual(records['demo.markers']['integrity']['status'], 'missing')
+        self.assertEqual(records['demo.legend']['integrity']['status'], 'healthy')
+        self.assertEqual(state['integrity']['repair_action'], 'repair')
+        self.assertIsNone(state['game_update'])
+        self.assertEqual(next(row for row in self.manager.catalog()['items'] if row['id'] == 'demo.markers')['integrity']['status'], 'missing')
+        plan = self.manager.plan('demo.markers', 'repair')
+        self.assertTrue(plan['can_apply'], plan['conflicts'])
+        self.assertEqual([row['path'] for row in plan['changes']], ['m2hub_addons/markers.py'])
+        self.assertEqual(self.backend.physical_snapshot(), physical)
+        self.manager.apply(plan['id'])
+        self.assertEqual(self.backend.snapshot(), expected)
+        self.assertEqual(self.manager.state()['integrity']['status'], 'healthy')
+        self.assertFalse(next(row for row in self.manager.state()['installed'] if row['id'] == 'demo.markers')['settings']['show_labels'])
+        self.apply('demo.markers', 'remove')
+        self.apply('demo.legend', 'remove')
+        self.assertEqual(self.backend.physical_snapshot(), self.original_physical)
+
+    def test_missing_shared_loader_marks_all_addons_and_reverted_hook_can_be_repaired(self):
+        def preview(files):
+            result = dict(files)
+            if 'm2hub_config.py' in files:
+                result['game.py'] += b'# owned hook\n'
+                result['m2hub_runtime.py'] = b'# shared runtime\n'
+            return result
+        self.backend.preview = preview
+        original_prepare = self.backend.prepare
+        self.backend.prepare = lambda files, staging: original_prepare(preview(files), staging)
+        self.apply('demo.markers')
+        self.apply('demo.legend')
+        expected = self.backend.snapshot()
+        damaged = dict(expected)
+        damaged.pop('m2hub_runtime.py')
+        damaged['game.py'] = self.original_logical['game.py']
+        self.set_target(damaged)
+        # set_target uses prepare; write the deliberate damage without reinjecting hooks.
+        for name, content in original_prepare(damaged, self.root / 'unused').items():
+            (self.target / name).write_bytes(content)
+        state = self.manager.state()
+        self.assertTrue(all(row['integrity']['status'] == 'missing' for row in state['installed']))
+        self.apply('demo.markers', 'repair')
+        self.assertEqual(self.backend.snapshot(), expected)
+
+    def test_unexpected_manual_changes_are_reported_and_cannot_be_overwritten_by_repair(self):
+        self.apply('demo.markers')
+        for name, value in [('m2hub_addons/markers.py', b'# manual add-on edit\n'), ('ui.py', b'# new game or manual UI\n')]:
+            with self.subTest(path=name):
+                damaged = self.backend.snapshot()
+                damaged[name] = value
+                self.set_target(damaged)
+                physical = self.backend.physical_snapshot()
+                state = self.manager.state()
+                self.assertEqual(state['integrity']['status'], 'changed')
+                self.assertFalse(state['integrity']['repair_available'])
+                with self.assertRaisesRegex(ValueError, 'Only missing owned'):
+                    self.manager.plan('demo.markers', 'repair')
+                self.assertEqual(self.backend.physical_snapshot(), physical)
+
+    def test_missing_payload_with_unrelated_game_edit_is_not_a_safe_repair(self):
+        self.apply('demo.markers')
+        damaged = self.backend.snapshot()
+        damaged.pop('m2hub_addons/markers.py')
+        damaged['ui.py'] = b'# upstream or manual change\n'
+        self.set_target(damaged)
+        state = self.manager.state()
+        self.assertEqual(state['installed'][0]['integrity']['status'], 'missing')
+        self.assertFalse(state['integrity']['repair_available'])
+        with self.assertRaisesRegex(ValueError, 'Only missing owned'):
+            self.manager.plan('demo.markers', 'repair')
+
+    def test_missing_or_corrupt_pack_keeps_saved_addons_visible_as_unavailable(self):
+        self.apply('demo.markers')
+        physical = self.backend.physical_snapshot()
+        for name in ('root.index', 'root.data'):
+            with self.subTest(path=name):
+                (self.target / name).unlink()
+                state = self.manager.state()
+                self.assertEqual(state['integrity']['status'], 'unavailable')
+                self.assertEqual(state['installed'][0]['integrity']['status'], 'unavailable')
+                self.assertFalse(state['integrity']['repair_available'])
+                (self.target / name).write_bytes(physical[name])
+        (self.target / 'root.data').write_bytes(b'broken pack')
+        self.assertEqual(self.manager.state()['integrity']['status'], 'unavailable')
+
     def test_game_update_during_review_invalidates_reapply_without_writes(self):
         self.apply('demo.markers')
         self.updated_game()

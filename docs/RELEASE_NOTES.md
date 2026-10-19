@@ -1,4 +1,24 @@
-# beta-1.11.0 — small beta candidate
+# beta-1.11.1 — detect missing add-ons and review reinstalls
+
+Studio checks the current client pack fingerprints against the last successful
+add-on installation. Missing payloads or loading hooks show **Needs reinstall**;
+unexpected edits and unreadable packs show their own status. Saved enabled
+preferences and settings remain available independently of the file status.
+
+The main Studio screen shows when add-on files need attention. Add-on pages
+check local files every 15 seconds while visible and when returning to the page.
+The main screen checks alongside its regular status refresh and on window focus.
+Checks inspect local files only and never automatically install or download.
+
+**Review reinstall** uses updated clean game packs as the new baseline after a
+game update. For isolated missing owned files or loading hooks reverted to the
+known baseline, a reviewed repair restores the saved installation. Unexpected
+manual edits remain blocked. Missing or unreadable game packs require repair
+through the game launcher first. The client must be closed before applying;
+the game server can stay running. Pack backups and transaction recovery remain
+in effect.
+
+## beta-1.11.0 — small beta candidate
 
 This candidate adds recovery for interrupted server saves, visible interrupted
 deployment state, critical-operation shutdown guards and a lock shared by Studio

@@ -11,7 +11,7 @@ announced here. The [beta checklist](BETA_REVIEW.md) records release and trial g
 | --- | --- |
 | Studio integration | One local launcher/service/world for server tools, add-ons, activity and the browser atlas |
 | Normal game client | Reviewed install/update/settings/enable/disable/removal with pack backups; no extra playable copy required |
-| Game updates | Clean replacement packs can become the new baseline through Review reapply; no automatic reapply or restoration over a game update |
+| Game updates | Clean replacement packs can become the new baseline through Review reinstall; no automatic reapply or restoration over a game update |
 | Packages | Root manifest, declared checksummed payload, namespaced destinations, API/dependency/ownership checks and immutable installed payloads |
 | Sources | Local ZIPs, explicit HTTPS catalogs and public GitHub repositories/collections; no repository build/install scripts run by the manager |
 | Updates | Manual metadata checks, escaped changelogs and distinct download/install reviews; no automatic add-on updates |

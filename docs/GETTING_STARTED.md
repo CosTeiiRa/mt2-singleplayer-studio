@@ -72,7 +72,7 @@ For an existing working world, use the game's backup feature before your first A
 | Studio fails to start | Read `studio.err.log` in the data folder printed by setup. Run `python studio.py setup --check` to verify the remembered paths. |
 | An update conflicts with my edit | Review Update protection or **Crafting → Review crafting conflicts**, select the desired values, save and Apply separately. |
 | Cannot apply a client add-on | Close the selected game client and review again. Check Add-on settings for missing pack support or an unsupported integration; the server may stay running. |
-| A game update replaced my add-ons | Use **Review reapply** to review them on the new game baseline. Adapt unsupported integrations when support is available; the game update takes priority. |
+| A game update replaced my add-ons | Use **Review reinstall** to review them on the new game baseline. Adapt unsupported integrations when support is available; the game update takes priority. |
 | I want to undo an edit | **Studio tools → Change history → Review rollback → Revert saved changes**. Review newest related edits first; Apply loads the rollback. |
 
 ## Small beta scope

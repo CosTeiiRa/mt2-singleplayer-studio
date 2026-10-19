@@ -48,6 +48,38 @@ const $ = selector => host?.root?.querySelector(selector) ?? document.querySelec
 const names = {overview:'Overview',discover:'Discover',installed:'Installed',atlas:'Boss atlas',activity:'Activity',settings:'Settings'};
 const store = {state:{installed:[]}, catalog:[], history:[], maps:[], mapsMeta:{}, map:null, diagnostics:null, csrf:'',repositories:[],releases:[],updates:[]};
 const ui = {page:'overview',query:'',category:'all',mapId:'',busy:false,loaded:false,error:'',atlasFilter:'all',detailsId:null,plan:null,jobWatch:0};
+let integrityTimer,checkingIntegrity=false;
+
+async function checkIntegrity(context=host) {
+  if(!context?.current()||host!==context||ui.busy||checkingIntegrity||document.hidden)return;
+  checkingIntegrity=true;
+  const previous=JSON.stringify([store.state.integrity,store.state.installed]);
+  try{
+    const result=unwrap(await api('state'),'state');
+    if(host!==context||!context.current())return;
+    store.state=result;
+  }catch(error){
+    if(host!==context||!context.current())return;
+    store.state={...store.state,integrity:{status:'unavailable',message:'Client files could not be checked. Refresh to try again.',repair_available:false},
+      installed:store.state.installed.map(item=>({...item,integrity:{status:'unavailable'}}))};
+  }finally{checkingIntegrity=false;}
+  context.onState?.(store.state);
+  if(previous!==JSON.stringify([store.state.integrity,store.state.installed]))render();
+}
+
+function watchIntegrity(context) {
+  if(typeof window==='undefined')return;
+  window.clearTimeout(integrityTimer);
+  const tick=async()=>{
+    if(host!==context||!context.current())return;
+    await checkIntegrity(context);
+    if(host===context&&context.current())integrityTimer=window.setTimeout(tick,15000);
+  };
+  integrityTimer=window.setTimeout(tick,15000);
+}
+
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)return checkIntegrity();});
+globalThis.window?.addEventListener('focus',()=>checkIntegrity());
 
 
 
@@ -74,6 +106,7 @@ async function refresh({quiet=false,reconnect=false}={}) {
   if(host!==context||!context.current())return;
   if (results[0].status === 'rejected') throw results[0].reason;
   store.state = unwrap(results[0].value,'state');
+  context.onState?.(store.state);
   store.csrf = results[0].value.csrf_token ?? store.state.csrf_token ?? store.csrf;
   if (results[1].status === 'fulfilled') {const data=unwrap(results[1].value,'catalog');store.catalog=asArray(data.items ?? data);}
   else if (!quiet) toast(`Catalog unavailable: ${results[1].reason.message}`,true);
@@ -145,11 +178,19 @@ function banners() {
   let output='';const recovery=store.state.recovery;
   if (recovery && recovery.status!=='complete' && recovery.status!=='recovered' && recovery.required!==false) output+=`<div class="callout danger">${icon('warning')}<p><strong>An interrupted change needs attention.</strong><br>${e(typeof recovery==='string'?recovery:recovery.message ?? 'Review recovery before making another change.')}</p><button class="button danger small" data-action="recover" ${mutation(false)}>Recover installation</button></div>`;
   if (store.state.installation && !store.state.installation.writable) output+=`<div class="callout">${icon('shield')}<p><strong>Client changes are currently unavailable.</strong> ${e(store.state.installation.details?.read_only_reason??'Check client support and reconnect in Add-on settings.')}</p></div>`;
-  if(store.state.game_update)output+=`<div class="callout">${icon('info')}<p><strong>The game client changed.</strong> ${e(store.state.game_update.message)}</p>${store.state.game_update.reapply_available?`<button class="button small" data-action="reapply" ${mutation(false)}>Review reapply</button>`:''}</div>`;
+  const integrity=store.state.integrity;
+  if(integrity&&!['healthy','empty'].includes(integrity.status))output+=`<div class="callout danger" role="status"><div>${icon('warning')}<strong>${integrity.status==='missing'?'Add-ons need reinstalling.':integrity.status==='unavailable'?'Cannot verify installed add-ons.':'Check installed add-on files.'}</strong><p>${e(integrity.message)}</p>${integrity.missing_files?.length||integrity.changed_files?.length?`<details><summary>Affected client files</summary><ul>${[...(integrity.missing_files??[]).map(path=>'Missing: '+path),...(integrity.changed_files??[]).map(path=>'Changed: '+path)].map(note=>`<li><code>${e(note)}</code></li>`).join('')}</ul></details>`:''}</div>${reinstallButton()}</div>`;
+  else if(store.state.game_update)output+=`<div class="callout">${icon('info')}<p><strong>The game client changed.</strong> ${e(store.state.game_update.message)}</p>${reinstallButton()}</div>`;
   const warnings=planMessages([...(store.state.warnings??[]),...(store.state.startup_warning?[store.state.startup_warning]:[])]);
   if(warnings.length)output+=`<div class="callout">${icon('info')}<ul class="warning-list">${warnings.map(message=>`<li>${e(message)}</li>`).join('')}</ul></div>`;
   if(store.state.dependencies?.lzokay===false) output+='<div class="callout"><p><strong>Client pack support needs installation.</strong> Run Install Add-on Support.bat once, then restart Studio. Server editors and the atlas remain available.</p></div>';
   return output;
+}
+
+function reinstallButton(id='') {
+  const integrity=store.state.integrity;
+  const action=integrity?.repair_available?integrity.repair_action:!integrity&&store.state.game_update?.reapply_available?'reapply':null;
+  return action?`<button class="button small primary" data-action="${e(action)}" data-id="${e(id)}" ${mutation(false)}>Review reinstall</button>`:'';
 }
 
 function setup() {
@@ -215,7 +256,7 @@ function openUpdateDetails(id){
 function installedPage() {
   const installed=asArray(store.state.installed);
   return heading('YOUR COLLECTION','Installed add-ons','Manage what is enabled. Every change gets a file plan before it is applied.',`<a href="#addons" class="button primary">${icon('plus')}Find add-ons</a>`)+banners()+updatePanel()+(installed.length ?
-    `<section class="panel"><div class="panel-header"><h2>${installed.length} installed ${installed.length===1?'add-on':'add-ons'}</h2><span class="tagline-inline">${installed.filter(item=>item.enabled!==false).length} enabled</span></div><div class="table-scroll"><table class="data-table"><thead><tr><th>Add-on</th><th>Version</th><th>Compatibility</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>${installed.map(record=>{const id=record.id??record.addon_id;const item=store.catalog.find(entry=>entry.id===id)??record;return `<tr><td><div class="row-title"><div class="metric-icon">${icon(addonIcon(item))}</div><div><strong>${e(item.name??id)}</strong>${store.updates.some(update=>update.id===id)?'<span class="pill copper">Update available</span>':''}<small>${e(id)}</small></div></div></td><td class="mono">${e(record.version??item.version??'Unknown')}${record.distribution?.commit?`<div class="field-hint">${e(record.distribution.selection==='development'?'Development':'Release')} · ${e(record.distribution.commit.slice(0,12))}</div>`:''}</td><td>${compatibilityBadge(record)}</td><td><button class="toggle-button" role="switch" aria-checked="${record.enabled!==false}" aria-label="Enable ${e(item.name??id)}" data-action="plan" data-id="${e(id)}" data-operation="${record.enabled===false?'enable':'disable'}" ${mutation(false)}><span class="toggle-track" aria-hidden="true"></span>${record.enabled===false?'Disabled':'Enabled'}</button></td><td><div class="row-actions"><button class="button small ghost" data-action="details" data-id="${e(id)}">Details</button><button class="icon-button" aria-label="Remove ${e(item.name??id)}" title="Review removal" data-action="plan" data-id="${e(id)}" data-operation="remove" ${mutation(false)}>${icon('remove')}</button></div></td></tr>`;}).join('')}</tbody></table></div></section>`:
+    `<section class="panel"><div class="panel-header"><h2>${installed.length} installed ${installed.length===1?'add-on':'add-ons'}</h2><span class="tagline-inline">${installed.filter(item=>item.enabled!==false).length} enabled</span></div><div class="table-scroll"><table class="data-table"><thead><tr><th>Add-on</th><th>Version</th><th>Compatibility</th><th>Client files</th><th>Enabled</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>${installed.map(record=>{const id=record.id??record.addon_id;const item=store.catalog.find(entry=>entry.id===id)??record;const status=record.integrity?.status==='healthy'?{label:'Verified',tone:'success'}:addonStatus(record,installed);return `<tr><td><div class="row-title"><div class="metric-icon">${icon(addonIcon(item))}</div><div><strong>${e(item.name??id)}</strong>${store.updates.some(update=>update.id===id)?'<span class="pill copper">Update available</span>':''}<small>${e(id)}</small></div></div></td><td class="mono">${e(record.version??item.version??'Unknown')}${record.distribution?.commit?`<div class="field-hint">${e(record.distribution.selection==='development'?'Development':'Release')} · ${e(record.distribution.commit.slice(0,12))}</div>`:''}</td><td>${compatibilityBadge(record)}</td><td><span class="pill ${status.tone}">${e(status.label)}</span>${record.integrity?.status==='missing'?reinstallButton(id):''}</td><td><button class="toggle-button" role="switch" aria-checked="${record.enabled!==false}" aria-label="Enable ${e(item.name??id)}" data-action="plan" data-id="${e(id)}" data-operation="${record.enabled===false?'enable':'disable'}" ${mutation(false)}><span class="toggle-track" aria-hidden="true"></span>${record.enabled===false?'Disabled':'Enabled'}</button></td><td><div class="row-actions"><button class="button small ghost" data-action="details" data-id="${e(id)}">Details</button><button class="icon-button" aria-label="Remove ${e(item.name??id)}" title="Review removal" data-action="plan" data-id="${e(id)}" data-operation="remove" ${mutation(false)}>${icon('remove')}</button></div></td></tr>`;}).join('')}</tbody></table></div></section>`:
     `<section class="panel">${empty('Your collection starts here','Install an example in a disposable sandbox to try the full review, enable, and removal workflow.','<a class="button primary" href="#addons">Explore add-ons '+icon('arrow')+'</a>')}</section>`)+`<div class="source-box"><strong>Removal respects ownership.</strong><p>The manager rebuilds the remaining add-on combination. Unexpected manual changes must be resolved before writing files.</p></div>`;
 }
 
@@ -293,6 +334,7 @@ export async function mount(context) {
     if(!context.current())return;
     if(ui.page==='atlas')await loadAtlas(true);
     if(ui.page==='settings')await loadDiagnostics();
+    watchIntegrity(context);
   }catch(error){ui.error=error.message;render();}
 }
 
@@ -306,7 +348,7 @@ function openDetails(id) {
   const item=store.catalog.find(addon=>addon.id===id)??store.state.installed.find(addon=>addon.id===id);if(!item)return;
   ui.detailsId=id;const record=installedRecord(item,store.state.installed);const status=addonStatus(item,store.state.installed);const error=itemError(item);
   const requires=asArray(item.requires);const conflicts=asArray(item.conflicts);
-  $('#ah-details-content').innerHTML=`<div class="dialog-header"><div><p class="eyebrow">${e(humanize(item.category??'Add-on'))} · LOCAL ALPHA PACKAGE</p><h2 id="ah-details-title">${e(item.name??item.id)}</h2><p>v${e(item.version??'?')} · by ${e(typeof item.author==='object'?item.author.name:item.author??'Unknown author')}</p></div><button class="icon-button" data-action="close-details" aria-label="Close add-on details">${icon('close')}</button></div><div class="dialog-body">${error?`<div class="callout danger">${icon('warning')}<p>${e(error)}</p></div>`:''}${descriptionMarkup(item.description)}<div class="detail-tags"><span class="pill ${status.tone}">${e(status.label)}</span><span class="pill muted">${e(humanize(item.kind??'client-python'))}</span>${item.license?`<span class="pill muted">${e(item.license)}</span>`:''}</div><h3>Package information</h3><dl class="definition-list"><dt>Identifier</dt><dd class="mono">${e(item.id)}</dd>${distributionMarkup(item)}${record?.distribution?.commit&&record.distribution.commit!==item.distribution?.commit?`<dt>Installed commit</dt><dd class="mono">${e(record.distribution.commit)}</dd>`:''}<dt>Entry point</dt><dd class="mono">${e(item.entry??'Not provided')}</dd><dt>Dependencies</dt><dd>${requires.length?requires.map(value=>e(typeof value==='string'?value:JSON.stringify(value))).join(', '):'None declared'}</dd><dt>Conflicts</dt><dd>${conflicts.length?conflicts.map(value=>e(typeof value==='string'?value:JSON.stringify(value))).join(', '):'None declared'}</dd><dt>Capabilities</dt><dd>${asArray(item.capabilities).map(value=>e(typeof value==='string'?humanize(value):JSON.stringify(value))).join(', ')||'None declared'}</dd></dl>${compatibilityDetails(item)}<div class="callout">${icon('info')}<p>Add-ons run with the game client’s permissions. Choose code you trust.</p></div>${item.release_notes?`<h3>Release notes</h3><p class="detail-description">${e(typeof item.release_notes==='string'?item.release_notes:JSON.stringify(item.release_notes))}</p>`:''}<details class="json-details"><summary>View package manifest</summary><pre>${e(JSON.stringify(item,null,2))}</pre></details></div><div class="dialog-footer"><span>${store.state.installation?'Target: '+targetLabel(store.state.installation):'Connect an installation to review changes'}</span>${item.distribution?.kind==='local'?`<button class="button ghost" data-action="forget-package" data-id="${e(id)}" ${mutation(false)}>Remove from catalog</button>`:''}<button class="button ghost" data-action="close-details">Close</button>${record?`<button class="button danger" data-action="plan" data-id="${e(id)}" data-operation="remove" ${mutation(false)}>Review removal</button>${(item.update_available || (record.version && record.version !== item.version))?`<button class="button primary" data-action="plan" data-id="${e(id)}" data-operation="update" ${mutation(!!error)}>Review update ${icon('arrow')}</button>`:''}`:`<button class="button primary" data-action="plan" data-id="${e(id)}" data-operation="install" ${mutation(!!error||!store.state.installation)}>Review install ${icon('arrow')}</button>`}</div>`;
+  $('#ah-details-content').innerHTML=`<div class="dialog-header"><div><p class="eyebrow">${e(humanize(item.category??'Add-on'))} · LOCAL ALPHA PACKAGE</p><h2 id="ah-details-title">${e(item.name??item.id)}</h2><p>v${e(item.version??'?')} · by ${e(typeof item.author==='object'?item.author.name:item.author??'Unknown author')}</p></div><button class="icon-button" data-action="close-details" aria-label="Close add-on details">${icon('close')}</button></div><div class="dialog-body">${error?`<div class="callout danger">${icon('warning')}<p>${e(error)}</p></div>`:''}${descriptionMarkup(item.description)}<div class="detail-tags"><span class="pill ${status.tone}">${e(status.label)}</span><span class="pill muted">${e(humanize(item.kind??'client-python'))}</span>${item.license?`<span class="pill muted">${e(item.license)}</span>`:''}</div><h3>Package information</h3><dl class="definition-list"><dt>Identifier</dt><dd class="mono">${e(item.id)}</dd>${distributionMarkup(item)}${record?.distribution?.commit&&record.distribution.commit!==item.distribution?.commit?`<dt>Installed commit</dt><dd class="mono">${e(record.distribution.commit)}</dd>`:''}<dt>Entry point</dt><dd class="mono">${e(item.entry??'Not provided')}</dd><dt>Dependencies</dt><dd>${requires.length?requires.map(value=>e(typeof value==='string'?value:JSON.stringify(value))).join(', '):'None declared'}</dd><dt>Conflicts</dt><dd>${conflicts.length?conflicts.map(value=>e(typeof value==='string'?value:JSON.stringify(value))).join(', '):'None declared'}</dd><dt>Capabilities</dt><dd>${asArray(item.capabilities).map(value=>e(typeof value==='string'?humanize(value):JSON.stringify(value))).join(', ')||'None declared'}</dd></dl>${compatibilityDetails(item)}<div class="callout">${icon('info')}<p>Add-ons run with the game client’s permissions. Choose code you trust.</p></div>${item.release_notes?`<h3>Release notes</h3><p class="detail-description">${e(typeof item.release_notes==='string'?item.release_notes:JSON.stringify(item.release_notes))}</p>`:''}<details class="json-details"><summary>View package manifest</summary><pre>${e(JSON.stringify(item,null,2))}</pre></details></div><div class="dialog-footer"><span>${store.state.installation?'Target: '+targetLabel(store.state.installation):'Connect an installation to review changes'}</span>${item.distribution?.kind==='local'?`<button class="button ghost" data-action="forget-package" data-id="${e(id)}" ${mutation(false)}>Remove from catalog</button>`:''}<button class="button ghost" data-action="close-details">Close</button>${record?`${record.integrity?.status==='missing'?reinstallButton(id):''}<button class="button danger" data-action="plan" data-id="${e(id)}" data-operation="remove" ${mutation(false)}>Review removal</button>${(item.update_available || (record.version && record.version !== item.version))?`<button class="button primary" data-action="plan" data-id="${e(id)}" data-operation="update" ${mutation(!!error)}>Review update ${icon('arrow')}</button>`:''}`:`<button class="button primary" data-action="plan" data-id="${e(id)}" data-operation="install" ${mutation(!!error||!store.state.installation)}>Review install ${icon('arrow')}</button>`}</div>`;
   const body=$('#ah-details-content .dialog-body');
   if(item.errors?.length||item.warnings?.length){const messages=document.createElement('div');messages.className=`callout ${item.errors?.length?'danger':''}`;messages.innerHTML=`${icon('info')}<ul class="warning-list">${[...planMessages(item.errors),...planMessages(item.warnings)].map(message=>`<li>${e(message)}</li>`).join('')}</ul>`;body.prepend(messages);}
   if(record){
@@ -394,9 +436,9 @@ document.addEventListener('click',async event=>{
     else if(action==='clear-filters'){ui.query='';ui.category='all';render();$('#ah-catalog-search')?.focus();}
     else if(action==='refresh'){setBusy(true);try{await refresh({reconnect:true});if(ui.page==='atlas')await loadAtlas(true);if(ui.page==='settings')await loadDiagnostics();toast('Workspace refreshed.');}finally{setBusy(false);}}
     else if(action==='review-pending')openPlan(store.state.pending_plan);
-    else if(action==='plan'||action==='reapply'){
+    else if(action==='plan'||action==='reapply'||action==='repair'){
       if(ui.busy)return;setBusy(true);
-      try{const result=await api('plan',{addon_id:action==='reapply'?store.state.installed[0]?.id:id,action:action==='reapply'?'reapply':button.dataset.operation??'install'});if(host===context&&context.current()){const plan=unwrap(result,'plan');store.state.pending_plan=plan;openPlan(plan);}}finally{setBusy(false);}
+      try{const result=await api('plan',{addon_id:['reapply','repair'].includes(action)?id||store.state.installed[0]?.id:id,action:['reapply','repair'].includes(action)?action:button.dataset.operation??'install'});if(host===context&&context.current()){const plan=unwrap(result,'plan');store.state.pending_plan=plan;openPlan(plan);}}finally{setBusy(false);}
     }
     else if(action==='apply'){
       const result=await runMutation(()=>api('apply',{plan_id:ui.plan.id}),'Change applied to the selected client. Open the game as usual.');if(result){$('#ah-plan-dialog').close();ui.plan=null;}

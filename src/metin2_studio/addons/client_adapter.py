@@ -19,7 +19,7 @@ BOOTSTRAP = b'''\n# M2HUB_BOOTSTRAP_V1 - generated from the current baseline\ntr
 GAME_BOOTSTRAP = b'''\n# M2HUB_GAME_V2 - owned game lifecycle integration\ntry:\n    import m2hub_client\n    m2hub_client.install(globals())\nexcept Exception:\n    import dbg\n    import traceback\n    dbg.TraceError("M2Hub game integration: " + traceback.format_exc())\n'''
 
 
-def normalized_client(path):
+def normalized_client(path, *, allow_missing_packs=False):
     path = Path(path).expanduser().resolve()
     if (path / 'root.index').is_file() and path.name.lower() == 'pack':
         path = path.parent
@@ -28,6 +28,15 @@ def normalized_client(path):
     if (path / 'Klient' / 'pack' / 'root.index').is_file():
         path = path / 'Klient'
     if not (path / 'pack' / 'root.index').is_file() or not (path / 'pack' / 'root.data').is_file():
+        if allow_missing_packs:
+            if path.name.lower() == 'pack':
+                path = path.parent
+            if path.name.lower() == 'serwer':
+                path = path.parent / 'Klient'
+            if (path / 'Klient').is_dir():
+                path = path / 'Klient'
+            if path.is_dir() and ((path / 'metin2client.exe').is_file() or (path.parent / 'hub-sandbox.json').is_file()):
+                return path
         raise ValueError('Choose an existing Klient folder, its Serwer sibling, or their parent folder.')
     return path
 
@@ -135,7 +144,7 @@ ConvertTo-Json -InputObject $clients -Compress
 
 class ClientAdapter:
     def __init__(self, path, state_dir):
-        self.target_root = normalized_client(path)
+        self.target_root = normalized_client(path, allow_missing_packs=True)
         self.state_dir = Path(state_dir).resolve()
         self.ident = hashlib.sha256(str(self.target_root).casefold().encode('utf-8')).hexdigest()[:20]
         self._lock = threading.RLock()
@@ -176,8 +185,13 @@ class ClientAdapter:
         return self._world
 
     def profile(self):
-        physical = self.physical_snapshot()
-        fingerprint = digest(b''.join(bytes.fromhex(digest(physical[n])) for n in sorted(physical)))
+        pack_error = None
+        try:
+            physical = self.physical_snapshot()
+            fingerprint = digest(b''.join(bytes.fromhex(digest(physical[n])) for n in sorted(physical)))
+        except OSError:
+            fingerprint = None
+            pack_error = 'Client packs are missing or unreadable. Repair or finish updating the game client, then check again.'
         executable = self.target_root / 'metin2client.exe'
         executable_hash = digest(executable.read_bytes()) if executable.is_file() else (self.marker or {}).get('source_executable_sha256')
         validation = recorded_profile(executable_hash)
@@ -186,6 +200,7 @@ class ClientAdapter:
         writable = bool(self.marker) and (not is_playable or bool(validation and executable_hash == self.marker.get('source_executable_sha256')))
         if normal_client:
             writable = bool(validation and executable_hash == self._connected_executable_hash)
+        writable = writable and pack_error is None
         return {'id': self.ident, 'profile_id': validation['id'] if validation else None,
                 'name': 'Playable add-on test copy' if is_playable else 'Disposable client-pack sandbox' if self.marker else 'Metin2 Singleplayer',
                 'path': str(self.target_root), 'client_root': str(self.target_root), 'server_root': str(self.server_root),
@@ -197,7 +212,7 @@ class ClientAdapter:
                 'runtime_validation': 'native startup/import/widgets smoke-tested; interactive gameplay pending' if validation else 'not validated against a recorded native-client profile',
                 'validation': validation,
                 'executable_sha256': executable_hash,
-                'read_only_reason': None if writable else 'This client runtime is not validated for pack changes, or its executable changed. Reconnect after updating; the game itself can still be updated normally.',
+                'read_only_reason': pack_error or (None if writable else 'This client runtime is not validated for pack changes, or its executable changed. Reconnect after updating; the game itself can still be updated normally.'),
                 'sandbox_scope': 'Root client packs only; this is not a standalone runnable game' if self.marker else None}}
 
     def snapshot(self):

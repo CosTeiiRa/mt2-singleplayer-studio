@@ -187,9 +187,13 @@ class Manager:
                                 "message": "An unfinished installation transaction requires recovery."}
             if self._connection_error:
                 warnings.append(self._connection_error)
+            integrity = self._integrity(stored) if self._backend is not None else None
+            public_installed = self._installed_public(installed, installation)
+            for item in public_installed:
+                item['integrity'] = integrity['addons'].get(item['id'], {})
             return {"version": VERSION, "installation": installation,
                     "reference": copy.deepcopy(stored.get('reference')) if self._backend is not None else None,
-                    "installed": self._installed_public(installed, installation),
+                    "installed": public_installed, "integrity": integrity,
                     "pending_plan": copy.deepcopy(self._pending["public"]) if self._pending else None,
                     "game_update": self._game_update(stored) if self._backend is not None else None,
                     "recovery": recovery, "warnings": warnings}
@@ -229,6 +233,7 @@ class Manager:
             packages, errors = self.catalog_provider()
             installed = self._stored()["installed"] if self._backend else {}
             profile = self._backend.profile() if self._backend else {}
+            integrity = self._integrity(self._stored()) if self._backend else None
             items = []
             for addon_id, package in sorted(packages.items(), key=lambda row: _display_order(row[0])):
                 item = package.metadata()
@@ -239,6 +244,8 @@ class Manager:
                             update_available=bool(record and record.get("package_digest") != package.digest),
                             status="installed" if record else "available")
                 item.update(self._compatibility_info(package.manifest, profile))
+                if record:
+                    item['integrity'] = integrity['addons'].get(addon_id, {})
                 items.append(item)
             for item in errors:
                 item.update(installed=False, enabled=False)
@@ -467,12 +474,74 @@ class Manager:
         return {'detected': True, 'reapply_available': bool(stored['installed']),
                 'message': 'The client packs were replaced outside Studio, for example by a game update. Current game files take priority. Review reapplying add-ons against this new baseline; old game packs will not be restored.'}
 
+    @staticmethod
+    def _repairable(stored: dict, logical: dict) -> bool:
+        """Only restore deleted owned files or hooks reverted to their known baseline."""
+        expected, baseline = stored.get('logical_hashes'), stored.get('baseline')
+        if not expected or baseline is None:
+            return False
+        actual = _hashes(logical)
+        changed = {name for name in set(expected) | set(actual) if expected.get(name) != actual.get(name)}
+        return bool(changed) and all(name in expected and expected[name] != baseline.get(name)
+                                     and actual.get(name) == baseline.get(name) for name in changed)
+
+    def _integrity(self, stored: dict) -> dict:
+        """Inspect current bytes independently of saved enabled/installed preferences."""
+        result = {'status': 'healthy', 'message': 'Installed add-on files match the last successful apply.',
+                  'repair_available': False, 'repair_action': None, 'addons': {},
+                  'missing_files': [], 'changed_files': []}
+        installed = stored['installed']
+        if not installed:
+            result.update(status='empty', message='No add-ons are installed on this client.')
+            return result
+        expected = stored.get('logical_hashes')
+        if not expected or not stored.get('physical_hashes'):
+            result.update(status='unverified', message='Installed add-on files have no recorded fingerprints. Review this installation.')
+        else:
+            try:
+                backend = self._require()
+                physical = _snapshot(backend.physical_snapshot(), 'physical_snapshot')
+                if set(stored['physical_hashes']) - set(physical):
+                    raise ValueError('Managed client pack files are missing.')
+                if _hashes(physical) != stored['physical_hashes']:
+                    logical = _snapshot(backend.snapshot(), 'snapshot')
+                    actual = _hashes(logical)
+                    result['missing_files'] = sorted(set(expected) - set(actual))
+                    result['changed_files'] = sorted(name for name in set(expected) | set(actual)
+                                                     if name in actual and expected.get(name) != actual[name])
+                    update = self._game_update(stored, logical, physical)
+                    repairable = self._repairable(stored, logical)
+                    if update:
+                        result.update(status='missing', repair_available=True, repair_action='reapply',
+                                      message='The game client packs were replaced. Your saved add-ons need reinstalling on the updated client.')
+                    elif repairable:
+                        result.update(status='missing', repair_available=True, repair_action='repair',
+                                      message='Add-on files or loading hooks are missing. Review reinstalling your saved add-ons.')
+                    elif actual != expected:
+                        result.update(status='changed', message='Client files changed outside Studio. Review the affected files before repairing add-ons.')
+                    else:
+                        result.update(status='changed', message='The client packs were repacked outside Studio. Review these changes before applying add-ons.')
+            except (ValueError, OSError) as error:
+                result.update(status='unavailable', message='Client packs could not be verified. Repair or finish updating the game client, then check again.',
+                              detail=str(error))
+        payloads = {name for record in installed.values() for name in record['file_hashes']}
+        shared = {name for name, value in (expected or {}).items()
+                  if value != (stored.get('baseline') or {}).get(name) and name not in payloads}
+        shared.update(name for name in (COMMON_INIT, CONFIG_PATH) if name in (expected or {}))
+        missing, changed = set(result['missing_files']), set(result['changed_files'])
+        for addon_id, record in installed.items():
+            required = set(record['file_hashes']) | shared
+            absent, modified = sorted(required & missing), sorted(required & changed)
+            status = result['status'] if result['status'] in ('unavailable', 'unverified') else 'missing' if absent or modified and result['status'] == 'missing' else 'changed' if modified else 'healthy'
+            result['addons'][addon_id] = {'status': status, 'missing_files': absent, 'changed_files': modified}
+        return result
+
     def plan(self, addon_id: str, action: str = "install", settings: dict | None = None) -> dict:
         with self._lock:
             backend = self._require()
             if self._journal_path.exists():
                 raise ValueError("Recover the unfinished transaction before planning another change.")
-            if action not in ("install", "remove", "enable", "disable", "update", "configure", "refresh-data", "reapply"):
+            if action not in ("install", "remove", "enable", "disable", "update", "configure", "refresh-data", "reapply", "repair"):
                 raise ValueError("Unsupported action: %s" % action)
             if not isinstance(addon_id, str):
                 raise ValueError("addon_id must be a string.")
@@ -521,13 +590,17 @@ class Manager:
             game_update = self._game_update(stored, logical, physical)
             if action == 'reapply' and not game_update:
                 raise ValueError('No clean game-client update is awaiting an add-on review.')
+            if action == 'repair' and (game_update or not self._repairable(stored, logical)):
+                raise ValueError('This client needs a fresh installation check. Only missing owned add-on files and reverted loading hooks can be repaired here.')
             baseline = dict(logical) if game_update else self._baseline(stored, logical)
             profile = backend.profile()
             conflicts, warnings = self._desired_valid(desired, profile)
             if game_update:
                 warnings.append(game_update['message'])
-            else:
+            elif action != 'repair':
                 conflicts.extend(self._drift(stored, logical, physical))
+            if action == 'repair':
+                warnings.append('Reinstall restores the recorded add-on files, loading hooks and settings.')
             blockers = getattr(backend, 'mutation_blockers', None)
             if profile.get('writable') and callable(blockers):
                 conflicts.extend(blockers())
@@ -555,7 +628,7 @@ class Manager:
                       "reference": copy.deepcopy(getattr(backend, 'reference_metadata', None)),
                       "game_update": game_update,
                       "warnings": sorted(set(warnings)), "conflicts": sorted(set(conflicts)),
-                      "can_apply": not conflicts, "summary": ('Reapply add-ons to the updated game: %d logical file changes' % len(changes)) if action == 'reapply' else "%s %s: %d logical file changes" % (action.capitalize(), addon_id, len(changes)),
+                      "can_apply": not conflicts, "summary": ('Reinstall add-ons: %d logical file changes' % len(changes)) if action == 'repair' else ('Reapply add-ons to the updated game: %d logical file changes' % len(changes)) if action == 'reapply' else "%s %s: %d logical file changes" % (action.capitalize(), addon_id, len(changes)),
                       "installed": self._installed_public(desired, profile), "desired_state": self._installed_public(desired, profile),
                       "preview_kind": "backend" if callable(preview) else "composition",
                       "created_at": _now(), "physical_changes": "Pack files are built and validated in staging during apply."}

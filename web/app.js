@@ -9,7 +9,7 @@ let addonModule;
 async function loadAddonTools(page,current){
   addonModule=await import('/addons.mjs');
   if(!current())return;
-  await addonModule.mount({page,root:$('#content'),api,toast,current,openDrops:openAtlasDrops,openMapSource:openAtlasSource,
+  await addonModule.mount({page,root:$('#content'),api,toast,current,onState:renderAddonNotice,openDrops:openAtlasDrops,openMapSource:openAtlasSource,
     importPackage:file=>api('/api/addons/packages/import',file,{'Content-Type':'application/zip','X-Addon-Filename':encodeURIComponent(file.name)})});
 }
 async function openAtlasDrops(id){
@@ -476,7 +476,25 @@ async function runServerOperation(validateOnly){
   finally{ApplyUI.starting='';await updateStatus();}
 }
 let applyTimer;
+let addonNoticeBusy=false,addonNoticeChecked=0;
+function renderAddonNotice(state){
+  const notice=$('#addon-installation-notice'),integrity=state?.integrity;
+  if(!notice)return;
+  notice.hidden=!integrity||['healthy','empty'].includes(integrity.status);
+  if(!notice.hidden)notice.innerHTML=`<strong>${integrity.status==='missing'?'Add-ons need reinstalling.':'Add-on files need attention.'}</strong> ${esc(integrity.message)} <a href="#installed">${integrity.repair_available?'Review reinstall':'Check installed add-ons'} →</a>`;
+}
+async function refreshAddonNotice(force=false){
+  const notice=$('#addon-installation-notice');
+  if(!notice||addonNoticeBusy||document.hidden||!force&&Date.now()-addonNoticeChecked<15000)return;
+  addonNoticeBusy=true;addonNoticeChecked=Date.now();
+  try{
+    const data=await api('/api/addons/state');renderAddonNotice(data.state);
+  }catch{
+    notice.hidden=false;notice.innerHTML='Add-on files could not be checked. <a href="#installed">Check installed add-ons →</a>';
+  }finally{addonNoticeBusy=false;}
+}
 async function updateStatus(){
+  refreshAddonNotice();
   try{
     const data=await api('/api/status');S.status=data;
     const badge=$('#docker-badge');
@@ -528,6 +546,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   $('#commit-button').addEventListener('click',commit);
   $('#discard-draft').addEventListener('click',()=>attempt(async()=>{await workspaceForget();dirty(false);navigate(S.route||S.page,{reload:true})}));
   $('#connection-info').addEventListener('click',()=>toast('Connected server folder:\n'+S.data.root));
+  window.addEventListener('focus',()=>refreshAddonNotice(true));
   $('#apply-button').addEventListener('click',openApplyDialog);
   $('#run-validate').addEventListener('click',()=>runServerOperation(true));
   $('#run-apply').addEventListener('click',()=>runServerOperation(false));

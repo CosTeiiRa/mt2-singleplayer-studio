@@ -57,7 +57,7 @@ targets or remove the need to preserve their original recovery files.
 
 Normal-client installation is implemented with reviewed plans, exact executable
 checks, pack backups and transaction recovery. Clean game-pack replacements offer
-**Review reapply** against the new baseline; mixed external edits require
+**Review reinstall** against the new baseline; mixed external edits require
 inspection. Game updates take priority and never require keeping an old game
 version for Studio. Unknown executables or changed hooks need adapter support;
 publisher version coverage warnings alone do not prove incompatibility.

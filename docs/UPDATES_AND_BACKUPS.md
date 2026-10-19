@@ -27,7 +27,7 @@ does not reapply Studio crafting overrides; review them separately against the
 updated database. Server Build/Apply remains a separate step.
 
 **Client add-ons after a game update:** when the managed packs are replaced with
-clean game files, Studio offers **Review reapply**. It proposes composing the
+clean game files, Studio offers **Review reinstall**. It proposes composing the
 installed add-on code and saved settings over the new game baseline. Review and
 Apply explicitly; removing the last add-on then restores that updated baseline.
 Mixed external changes that still contain Hub files remain conflicts for

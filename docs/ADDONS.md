@@ -2,7 +2,7 @@
 
 [Back to the overview](../README.md#see-what-you-can-do) · [All documentation](README.md)
 
-This guide covers **beta-1.11.0**: installing, configuring, updating and removing
+This guide covers **beta-1.11.1**: installing, configuring, updating and removing
 client add-ons, plus creating and sharing your own. Choose authors and sources
 you trust; add-ons run with the game client's permissions.
 
@@ -64,9 +64,28 @@ permissions, so choose packages you trust.
 World and Pocket Wiki data are generated from local game sources during a reviewed
 operation. They are snapshots, not a live connection to Studio or a complete view
 of every engine rule. Refresh reference data after content changes. If a game
-update replaces the managed packs with clean game files, **Review reapply** uses
+update replaces the managed packs with clean game files, **Review reinstall** uses
 the new files as the proposed baseline and retains your installed add-on settings.
 Nothing is reapplied automatically; see [game updates](UPDATES_AND_BACKUPS.md#updating-the-game-or-studio).
+
+## Missing add-ons and reinstalls
+
+Studio checks client pack fingerprints against the last successful installation.
+The **Client files** column shows **Needs reinstall** when saved add-on files or
+loading hooks are missing. The enabled switch remains your saved preference;
+it does not prove that the files are still present in the game.
+
+Add-on pages check every 15 seconds while visible and when you return to Studio.
+A notice also appears on the main screen when files need attention. These checks
+read local files and never download or reinstall automatically.
+
+Choose **Review reinstall**, close the game client, review the proposed changes,
+and apply. A clean game update becomes the new baseline. Isolated deleted add-on
+files or hooks reverted to the known baseline can be repaired from the saved
+installation, keeping settings and pack backups. Unexpected manual changes are
+shown for review and block repair. If whole game packs are missing or unreadable,
+repair the game through its launcher first, then return to Studio. The server can
+stay running throughout add-on repair.
 
 ## Package sources
 

@@ -27,7 +27,7 @@ class AddonService:
         self.source = None
         self.warning = None
         try:
-            self.source = normalized_client(studio.root)
+            self.source = normalized_client(studio.root, allow_missing_packs=True)
         except (ValueError, OSError):
             self.warning = 'No sibling Klient root packs were found. The atlas and server editors remain available.'
         self.repositories = RepositoryStore(self.state_dir, PACKAGE / 'catalog')

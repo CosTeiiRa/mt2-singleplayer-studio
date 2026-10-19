@@ -162,6 +162,46 @@ class AddonIntegrationTests(unittest.TestCase):
         for name, raw in new_physical.items():
             self.assertEqual((self.client / 'pack' / name).read_bytes(), raw)
 
+    def test_deleted_addon_payload_is_detected_and_repaired_with_running_client_guard(self):
+        running = self.supported_client()
+        self.apply('community.boss-atlas')
+        pack = codec.EterPack.open(self.client / 'pack')
+        files = pack.files()
+        files.pop('m2hub_addons/boss_atlas.py')
+        for name, raw in zip(('root.index', 'root.data'), pack.build(files)):
+            (self.client / 'pack' / name).write_bytes(raw)
+        state = self.service.state()
+        self.assertEqual(state['installed'][0]['integrity']['status'], 'missing')
+        self.assertEqual(state['integrity']['repair_action'], 'repair')
+        physical = self.service.manager._backend.physical_snapshot()
+        running.return_value = True
+        plan = self.service.post('plan', {'addon_id': 'community.boss-atlas', 'action': 'repair'})['plan']
+        self.assertFalse(plan['can_apply'])
+        self.assertTrue(any('Close this Metin2' in conflict for conflict in plan['conflicts']))
+        self.assertEqual(self.service.manager._backend.physical_snapshot(), physical)
+        running.return_value = False
+        self.apply('community.boss-atlas', 'repair')
+        self.assertEqual(self.service.state()['integrity']['status'], 'healthy')
+        self.apply('community.boss-atlas', 'remove')
+        for name, raw in self.original.items():
+            self.assertEqual((self.client / 'pack' / name).read_bytes(), raw)
+
+    def test_missing_client_pack_is_visible_after_service_restart_and_can_be_rechecked(self):
+        self.supported_client()
+        self.apply('community.boss-atlas')
+        path = self.client / 'pack/root.index'
+        installed_index = path.read_bytes()
+        path.unlink()
+        self.studio._addons = None
+        service = self.studio.addons
+        state = service.state()
+        self.assertFalse(state['installation']['writable'])
+        self.assertEqual(state['installed'][0]['id'], 'community.boss-atlas')
+        self.assertEqual(state['installed'][0]['integrity']['status'], 'unavailable')
+        self.assertFalse(state['integrity']['repair_available'])
+        path.write_bytes(installed_index)
+        self.assertEqual(service.state()['integrity']['status'], 'healthy')
+
     def test_running_client_probe_matches_only_the_exact_executable_path(self):
         from metin2_studio.addons.client_adapter import running_client
         from subprocess import CompletedProcess
