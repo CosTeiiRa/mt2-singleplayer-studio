@@ -441,7 +441,8 @@ class ManagerTests(unittest.TestCase):
         self.apply("demo.markers")
         self.apply("demo.markers", "remove")
         self.assertEqual(self.backend.physical_snapshot(), original)
-        self.assertFalse((self.root / "d:").exists())
+        # Joining "d:" resolves a drive-relative path on a D: Windows runner.
+        self.assertNotIn("d:", {path.name.casefold() for path in self.root.iterdir()})
 
     def test_install_update_remove_uses_immutable_installed_payload(self):
         self.apply("demo.markers")
