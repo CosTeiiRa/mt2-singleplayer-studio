@@ -7,7 +7,7 @@ Detailed requirements, setup choices, your first server edit and common startup 
 ## Requirements and compatibility
 
 - **Windows 10/11** and **Python 3.10+** for base Studio. The initial small-beta target uses 64-bit Python **3.13**; optional add-on pack support needs 64-bit Python **3.11+** and matching binary wheels. Download Python from [python.org](https://www.python.org/downloads/windows/); enable its launcher/PATH option if offered.
-- An existing, working **Metin2 Singleplayer Linux/Docker server package**, with a `Serwer` directory containing `files/`, `linux-port/docker/` and `VERSION`. The initial beta target is server **2.2.110** / client **2.0.114**; exact executable and integration support are checked before pack writes. Older fixtures used 2.2.106–2.2.109 and are historical evidence, not a current all-version guarantee. Other Metin2 distributions, remote servers, WSL-only paths and standalone client folders are unsupported.
+- An existing, working **Metin2 Singleplayer Linux/Docker server package**, with a `Serwer` directory containing `files/`, `linux-port/docker/` and `VERSION`. The latest dashboard/catalogue checks used server **2.2.111** / client **2.0.115**. Recorded add-on pack/lifecycle verification used client **2.0.114** with server **2.2.110**; exact executable identity and integration support are checked before pack writes. These observations do not guarantee every game/client version. Other Metin2 distributions, remote servers, WSL-only paths and standalone client folders are unsupported.
 - The game's normal Docker Desktop / Docker Compose setup. Keep using its launcher to start the game. Docker is needed for native crafting and Apply; file-based editors remain usable with Docker stopped.
 - Write access to the selected server and Studio folders.
 
@@ -19,7 +19,7 @@ change client packs. The package contains Studio code, not the game or its asset
 
 ## Install on a computer where the game already works
 
-1. Use the source ZIP supplied for this beta; repository publication is a separate maintainer action. Extract it fully into a permanent folder, for example `C:\Tools\Metin2Studio`. Do not run the files from inside the ZIP or place Studio inside `Serwer`.
+1. Download the portable source ZIP and `SHA256SUMS.txt` from the [latest beta release](https://github.com/CosTeiiRa/mt2-singleplayer-studio/releases/tag/beta-1.20.0). Extract it fully into a permanent folder, for example `C:\Tools\Metin2Studio`. Do not run the files from inside the ZIP or place Studio inside `Serwer`.
 2. Confirm Python is installed. If a terminal is available, `py -3 --version` or `python --version` should show Python 3.10 or newer.
 3. Double-click **Install Studio.bat**. Choose the **existing `Serwer` folder** in the folder picker. You can also select its `Metin2 Singleplayer` parent folder. Setup validates the package files, saves your choice locally and creates a desktop shortcut. It does not copy or replace game files, start Docker, build images or restart the game.
 4. Double-click **Start Studio.bat**, or the **Metin2 Studio** desktop shortcut. The dashboard opens at **http://127.0.0.1:8765**. Starting an already running matching instance reuses it.
@@ -77,14 +77,14 @@ For an existing working world, use the game's backup feature before your first A
 
 ## Small beta scope
 
-This is a **limited beta candidate for one local owner on Windows**. The initial
-target is Metin2 Singleplayer server **2.2.110** / client **2.0.114**, with 64-bit
-Python **3.13**. See the [beta checklist and evidence](BETA_REVIEW.md) before
-testing; automated checks and isolated native-client checks do not establish
-logged-in gameplay acceptance on every machine.
+This is an **experimental beta for one local owner on Windows**, with 64-bit
+Python **3.13** as the primary local target. Current dashboard observations and
+recorded add-on verification cover different game/client versions, as described
+above. See the [beta checklist and evidence](BETA_REVIEW.md); automated and
+isolated native-client checks do not establish gameplay acceptance on every machine.
 
 Back up your world/database with the game's own tools before testing. Studio's
 configuration and pack backups cover different data and do not protect character
 progress. Preserve Studio's complete private `data/` folder too. Use
 [Support](../SUPPORT.md) for reports and [Security](../SECURITY.md) for private issues.
-No public repository release or Discord invitation is announced by this package.
+Repository visibility and any community invitation remain separate maintainer decisions.

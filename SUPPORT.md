@@ -4,10 +4,10 @@ Studio is an unofficial local tool for an existing Metin2 Singleplayer
 installation. The initial beta targets Windows and the versions listed in the
 [beta checklist](docs/BETA_REVIEW.md). It does not include the game.
 
-No public repository, support inbox or Discord invitation is announced by this
-package. During the private beta, send reports through the private conversation
-in which the maintainer supplied your build. A public reporting destination must
-be chosen before a public invitation; do not post private game files in Discord.
+Report reproducible bugs in [GitHub Issues](https://github.com/CosTeiiRa/mt2-singleplayer-studio/issues/new/choose).
+Repository access is required while the beta remains private. Use
+[SECURITY.md](SECURITY.md) for sensitive reports; do not post security details or
+private game files in an issue.
 
 ## Report a problem
 

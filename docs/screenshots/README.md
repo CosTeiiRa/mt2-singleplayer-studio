@@ -1,7 +1,8 @@
 # Dashboard captures
 
-The seven JPEGs show the Studio dashboard used for the beta-1.0.0 documentation, connected to game package 2.2.106. They were captured on 17 October 2026 from the browser UI, without changing game configurations or deploying anything. The additional PNG was supplied by the user on 18 October 2026; it shows update protection on game package 2.2.108. That illustration does not extend the release's tested compatibility claim.
+The JPEGs show the Studio dashboard used for the beta-1.0.0 documentation, connected to game package 2.2.106. They were captured on 17 October 2026 from the browser UI, without changing game configurations or deploying anything. The additional PNG was supplied by the user on 18 October 2026; it shows update protection on game package 2.2.108. That illustration does not extend the release's tested compatibility claim.
 
+- `addons.png`: installed add-on manager captured on 19 October 2026, showing all four bundled extensions.
 - `drop-editor.jpg`: installed Metin of Sorrow drop group, with the reward list scrolled to individual items.
 - `item-search.jpg`: item picker filtered to bonus items, without selecting a replacement.
 - `item-usage.jpg`: read-only references for Skill Book.

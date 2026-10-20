@@ -2,6 +2,9 @@
 
 ## beta-1.20.0
 
+- Prepare a single beta release with cleaned Git author metadata, refreshed
+  installation/support documentation and a rebuilt source-only archive.
+
 - Read English map labels from the installed client and game translations; retain
   original names under Sources & coverage without changing game files.
 - Prefer client dungeon atlas images and readable native navigation layouts.

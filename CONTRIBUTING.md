@@ -1,10 +1,9 @@
 # Contributing to Studio
 
-The project is preparing a small private beta. No repository publication or
-community invitation is implied by these files. Agree on a proposed change with
-the maintainer through the private beta conversation until contribution channels
-are announced. Use [SUPPORT.md](SUPPORT.md) for bugs and [SECURITY.md](SECURITY.md)
-for sensitive reports.
+Studio is an experimental beta. Use [GitHub Issues](https://github.com/CosTeiiRa/mt2-singleplayer-studio/issues)
+to discuss a proposed change and submit focused pull requests. Repository access
+is required while the beta remains private. Use [SUPPORT.md](SUPPORT.md) for bugs
+and [SECURITY.md](SECURITY.md) for sensitive reports.
 
 ## Development scope
 

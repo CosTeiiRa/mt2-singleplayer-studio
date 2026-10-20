@@ -6,8 +6,8 @@ labels: ""
 assignees: ""
 ---
 
-<!-- Use this only after the maintainer opens public reporting. Security concerns
-belong in the private route in SECURITY.md. Do not attach game files, .env,
+<!-- Security concerns belong in the private route in SECURITY.md.
+Do not attach game files, .env,
 databases, data/, backups, tokens or unredacted logs. -->
 
 **Versions**

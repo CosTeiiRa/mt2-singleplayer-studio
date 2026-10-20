@@ -19,4 +19,4 @@ This source release excludes `.vendor` and therefore does not bundle those binar
 
 No game client executable, root pack, extracted game source, artwork, map image, server data, installation key/configuration, or full source export belongs to the source release. The Hub reads such material from an existing installation at runtime and can copy selected root packs/configuration into a private project-owned sandbox for local validation. Those copies are not covered by the Hub's MIT license and must not be shared as part of a Hub source release.
 
-Metin2 and related names/material remain with their respective rights holders. The Singleplayer distribution's own terms remain applicable to its content. This alpha claims no official endorsement, partnership, public distribution permission, or verified runtime compatibility.
+Metin2 and related names/material remain with their respective rights holders. The Singleplayer distribution's own terms remain applicable to its content. This beta claims no official endorsement, partnership, public distribution permission, or verified runtime compatibility.

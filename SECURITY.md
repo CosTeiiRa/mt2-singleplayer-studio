@@ -12,15 +12,16 @@ that code is harmless.
 
 ## Report privately
 
-Until a public repository and a private reporting channel are announced, report
-potential credential disclosure, unsafe file writes or untrusted-code execution
-through the private conversation used to obtain this beta. Do not publish an
-exploit, a token or a private game file in a bug report or Discord message.
-Provide affected versions and a minimal reproduction with invented data.
+Use the repository's [private vulnerability reporting](https://github.com/CosTeiiRa/mt2-singleplayer-studio/security/advisories/new)
+when **Security → Report a vulnerability** is available. If that option is
+unavailable, contact the maintainer through the private channel where you
+received the beta to arrange a private report. Do not open a public issue with
+security details, tokens, private game files or exploit instructions.
 
-This package does not declare an invented contact address or response deadline.
-Before public release, the maintainer must establish and test a private reporting
-route and update this document with it. A public GitHub issue is not that route.
+Provide affected versions and a minimal reproduction with invented data. The
+maintainer must enable and test GitHub private vulnerability reporting when the
+repository becomes public; the private beta uses its existing private contact
+channel. No response deadline is promised.
 
 ## Private material
 

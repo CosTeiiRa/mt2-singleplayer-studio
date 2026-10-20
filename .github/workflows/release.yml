@@ -36,4 +36,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" dist/*.zip dist/SHA256SUMS.txt --verify-tag --prerelease --title "$RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --prerelease --title "$RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md --target "$GITHUB_SHA"
+            gh release upload "$RELEASE_TAG" dist/*.zip dist/SHA256SUMS.txt --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/*.zip dist/SHA256SUMS.txt --verify-tag --prerelease --title "$RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md
+          fi

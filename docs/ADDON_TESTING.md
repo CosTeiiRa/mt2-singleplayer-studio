@@ -22,8 +22,8 @@ targeting the same game. These checks must not force-crash a real world.
 The 18 October 2026 extracted beta-1.11.0 regression run passed 411 Python tests
 with one Windows symlink-permission skip, and all 86 JavaScript tests. Fresh
 setup/start/reuse/stop and private-state retention passed on a disposable server
-fixture. The [local validation record](BETA_REVIEW.md#local-validation--18-october-2026)
-records clean-install, packaging, dependency and live-Studio restart boundaries.
+fixture. This is historical evidence; the [current validation record](BETA_REVIEW.md#validation)
+records the latest checks and remaining acceptance work.
 
 ### Client 2.0.114 evidence — 18 October 2026
 

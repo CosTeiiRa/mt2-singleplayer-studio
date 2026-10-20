@@ -1,9 +1,9 @@
 # Add-on roadmap and acceptance status
 
-Current scope: **Studio beta-1.11.0**, preparing a small private trial. Implemented
-features and automated/native checks are distinct from independent human
-acceptance. No public repository, hosted catalog or community invitation is
-announced here. The [beta checklist](BETA_REVIEW.md) records release and trial gates.
+Current scope: **Studio beta-1.20.0**, an experimental beta. Implemented features
+and automated/native checks are distinct from independent human acceptance.
+Hosted catalogs and community invitations are separate maintainer decisions.
+The [beta checklist](BETA_REVIEW.md) records release evidence and pending trials.
 
 ## Implemented platform
 

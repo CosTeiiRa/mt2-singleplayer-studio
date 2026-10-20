@@ -1,6 +1,6 @@
 # Metin2 Studio
 
-**beta-1.16.0** · A local dashboard for your Metin2 Singleplayer world and client add-ons.
+**beta-1.20.0** · A local dashboard for your Metin2 Singleplayer world and client add-ons.
 
 Edit drops, create quests, manage crafting, explore items and manage your world.
 Add in-game tools such as Boss Atlas and Pocket Wiki through the same application.
@@ -12,7 +12,7 @@ Add in-game tools such as Boss Atlas and Pocket Wiki through the same applicatio
 You need **Windows 10/11**, **Python 3.10+**, and an existing working
 **Metin2 Singleplayer Linux/Docker installation**.
 
-1. Extract Studio into its own permanent folder outside the game's `Serwer` folder.
+1. Download the ZIP from the [latest beta release](https://github.com/CosTeiiRa/mt2-singleplayer-studio/releases/tag/beta-1.20.0) and extract it into its own permanent folder outside the game's `Serwer` folder.
 2. Run **Install Studio.bat** and select your existing **Serwer** folder.
 3. Run **Start Studio.bat**, or use the **Metin2 Studio** desktop shortcut.
 
