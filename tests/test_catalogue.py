@@ -250,6 +250,44 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual(after['items']['110000']['description'],before['items']['110000']['description'])
         self.assertEqual(restarted.status['serverMode'],'cached')
 
+    def test_client_map_labels_images_and_ore_badges_share_the_offline_cache(self):
+        data, write = packs(self.root)
+        picture = data['icon']['icon/item/00010.tga']
+        data['locale']['locale/en/locale_game.txt'] = b'MAP_TEST\tEnglish map\n'
+        data['root'] = {'localeinfo.py': b'MINIMAP_ZONE_NAME_DICT = {\n"test_map": MAP_TEST,\n}\nraise RuntimeError("never execute")',
+                        'ui/atlas/test_map/atlas.tga':picture, 'ui/flea/dt/ic_ore.tga':picture}
+        write('locale'); write('root')
+        mining = self.root / 'linux-port/docker/game/share/locale/poland/quest/quest/systems/mining.quest'
+        mining.parent.mkdir(parents=True); mining.write_text('when 20047.click begin pc.mining() end')
+        self.rows['catalog-mobs'].append(['20047','ore','Diamond vein','5','1','0','1'])
+        pack = self.root.parent / 'Klient/pack/root.data'; before=pack.read_bytes()
+        service=self.service(); snapshot=service.refresh(True)
+        self.assertEqual(snapshot['mapNames'], {'test_map':'English map'})
+        self.assertTrue(service.client.icon_path(snapshot['mapImages']['test_map']).is_file())
+        self.assertEqual(snapshot['mobs']['20047']['gathering'], 'mining')
+        self.assertEqual(snapshot['mobs']['20047']['iconKind'], 'category')
+        self.assertEqual(pack.read_bytes(), before)
+        self.online=False; pack.write_bytes(b'client temporarily unavailable')
+        offline=service.refresh(True)
+        self.assertEqual(offline['mapNames'],snapshot['mapNames'])
+        self.assertEqual(offline['mapImages'],snapshot['mapImages'])
+        self.assertEqual(service.status['clientMode'],'cached')
+
+
+    def test_previous_client_cache_upgrades_without_map_fields_and_survives_offline(self):
+        packs(self.root)
+        service=self.service(); snapshot=service.refresh(True)
+        path=service.client.cache; cached=json.loads(path.read_text(encoding='utf-8'))
+        cached['schema']=3; cached.pop('mapNames',None); cached.pop('mapImages',None)
+        path.write_text(json.dumps(cached),encoding='utf-8')
+        upgraded,mode=service.client.load()
+        self.assertEqual((upgraded['schema'],mode),(4,'current'))
+        path.write_text(json.dumps(cached),encoding='utf-8')
+        (self.root.parent/'Klient/pack/gamedata.data').write_bytes(b'unavailable')
+        old,mode=service.client.load()
+        self.assertEqual((old['schema'],mode),(3,'cached'))
+        self.assertEqual(old['names'],cached['names'])
+
 
 class ImageTests(unittest.TestCase):
     def test_tga_rle_and_orientation_decode_to_expected_png_pixels(self):

@@ -998,10 +998,10 @@ class Handler(BaseHTTPRequestHandler):
             if u.path.startswith('/api/addons/'):
                 route = u.path.removeprefix('/api/addons/')
                 if route == 'map-image':
-                    image = s.addons.world().image_path(int(q.get('map', '64')))
-                    if image is None or not image.is_file():
+                    image, mime = s.addons.world().image_data(int(q.get('map', '64')))
+                    if image is None:
                         return self.send({'error': 'No installed map image is available.'}, 404)
-                    return self.send(image.read_bytes(), mime='image/png')
+                    return self.send(image, mime=mime)
                 return self.send({'ok': True, **s.addons.get(route, q)})
             ACTIVE_CHANGESET.set(q.get('changeset') or self.headers.get('X-Studio-Changeset') or None)
             if u.path.startswith('/api/economy') or u.path in ('/api/item-usage', '/api/item-drop-summary', '/api/mob-summary'):

@@ -44,3 +44,13 @@ test('creature references share portraits, names and game levels with honest cat
   assert.match(ctx.mobIcon(102),/Client category badge/);
   assert.doesNotMatch(ctx.mobIcon(103),/<img/);
 });
+
+
+test('NPCs and mining deposits without portraits use labelled category artwork',()=>{
+  const ctx={S:{mobMap:{9001:{name:'Trader',category:'npc',iconAvailable:false},20047:{name:'Vein',category:'npc',gathering:'mining',iconAvailable:false}}},esc:String};
+  vm.createContext(ctx);vm.runInContext(source.slice(source.indexOf('function mobIcon('),source.indexOf('function helpDetails(')),ctx);
+  assert.match(ctx.mobIcon(9001),/NPC category icon/);assert.match(ctx.mobIcon(9001),/<svg/);
+  assert.match(ctx.mobIcon(20047),/Mining deposit category icon/);
+  assert.notEqual(ctx.mobIcon(9001),ctx.mobIcon(20047));
+  assert.doesNotMatch(ctx.mobIcon(20047),/<img|Client portrait/);
+});

@@ -304,13 +304,13 @@ function settings() {
 }
 
 function sourceMarkup(map) {
-  return `<details class="source-box help-details"><summary>Sources & coverage</summary><p>${e(map?.coverage?.scope||'Installed spawn configuration.')}</p><p>Base intervals; no live presence or countdown. ${e(map?.coverage?.intervals||'')}</p><p class="mono">${e(sourceLabel(map?.source))}</p>${map?.coverage?.omitted?.length?`<p>${map.coverage.omitted.length} unsupported or malformed rows omitted.</p>`:''}</details>`;
+  return `<details class="source-box help-details"><summary>Sources & coverage</summary><p>${e(map?.coverage?.scope||'Installed spawn configuration.')}</p><p>Base intervals; no live presence or countdown. ${e(map?.coverage?.intervals||'')}</p><p class="mono">${e(sourceLabel(map?.source))}</p>${map?.original_name&&map.original_name!==map.name?`<p>Configured name: ${e(map.original_name)}</p>`:''}${map?.coverage?.omitted?.length?`<p>${map.coverage.omitted.length} unsupported or malformed rows omitted.</p>`:''}</details>`;
 }
 const atlasDrops=new Map();
 const atlasTypes=[['all','All'],['monster','Mobs'],['boss','Bosses'],['metin','Metins'],['ore','Mining ores'],['npc','NPCs']];
 function atlas() {
   const map=store.map,species=atlasSpecies(map,ui.atlasFilter,ui.atlasSearch),regions=species.flatMap(m=>m.zones);
-  const label=m=>host.mobContent?host.mobContent(m.mob_id,{detail:m.type==='ore'?'Mining deposit':undefined}):`<span><strong>${e(m.name)}</strong><small>#${e(m.mob_id)} · Lv. ${e(m.level??'?')}</small></span>`;
+  const label=m=>host.mobContent?host.mobContent(m.mob_id,{detail:m.type==='ore'?'Mining deposit':undefined,iconCategory:m.type==='ore'?'ore':undefined}):`<span><strong>${e(m.name)}</strong><small>#${e(m.mob_id)} · Lv. ${e(m.level??'?')}</small></span>`;
   return heading('KNOW THE WORLD','World atlas','Explore creatures, spawn zones and configured drops.')+banners()+
     `<div class="atlas-toolbar"><select id="ah-map-select" aria-label="Map">${store.maps.map(m=>`<option value="${e(m.id)}" ${String(m.id)===String(ui.mapId)?'selected':''}>${e(m.name)}</option>`).join('')}</select><input id="ah-atlas-search" type="search" aria-label="Search atlas creatures" placeholder="Creature name or ID…" value="${e(ui.atlasSearch)}"><span>${species.length} creatures · ${regions.length} zones</span></div>`+
     `<div class="atlas-filters" role="group" aria-label="Quick spawn filters">${atlasTypes.map(([id,name])=>`<button type="button" class="button small" data-atlas-filter="${id}" aria-pressed="${ui.atlasFilter===id}">${name}<span>${atlasSpecies(map,id,ui.atlasSearch).length}</span></button>`).join('')}</div>`+
@@ -320,10 +320,11 @@ function atlas() {
 function mapGraphic(map,regions) {
   const {x,y,width,height}=mapBounds(map,mapRegions(map));
   const safeImage=typeof map.image_url==='string'&&map.image_url.startsWith('/api/addons/map-image?')?map.image_url:null;
+  const imageLabel=!safeImage?'Spawn diagram · no map image':map.image_source==='game-navigation'?'Navigation layout · configured zones':map.image_source==='client-atlas'?'Client atlas · configured zones':'Configured spawn zones';
   const radius=Math.max(width,height)/140;
   const grid=Array.from({length:9},(_,i)=>`<path d="M${x+width*(i+1)/10} ${y}v${height}M${x} ${y+height*(i+1)/10}h${width}" class="atlas-grid-line"/>`).join('');
   const marks=regions.filter(r=>Number.isFinite(r.x)&&Number.isFinite(r.y)).map(r=>`<g class="atlas-feature" data-atlas-mob="${e(r.mob_id)}" data-atlas-creature="${e(r.mob_id)}"><title>${e(r.name)} · ${r.x}, ${r.y} · ${e(respawnLabel(r))}</title>${r.width&&r.height?`<rect x="${r.x-r.width/2}" y="${r.y-r.height/2}" width="${r.width}" height="${r.height}" class="atlas-region" vector-effect="non-scaling-stroke"/>`:''}<circle cx="${r.x}" cy="${r.y}" r="${radius}" class="atlas-marker ${r.type==='metin'?'metin':''}" vector-effect="non-scaling-stroke"/></g>`).join('');
-  return `<div class="atlas-canvas"><span class="atlas-tag">${map.coverage?.bounds_verified===false?'Map extent unverified':'Configured spawn zones'}</span><svg viewBox="${x} ${y} ${width} ${height}" role="img" aria-label="${e(map.name)} configured spawn zones" preserveAspectRatio="xMidYMid meet">${safeImage?`<image href="${e(safeImage)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="none" opacity=".7"/>`:''}${grid}${marks}</svg></div>`;
+  return `<div class="atlas-canvas"><span class="atlas-tag">${imageLabel}${map.coverage?.bounds_verified===false?' · extent unverified':''}</span><svg viewBox="${x} ${y} ${width} ${height}" role="img" aria-label="${e(map.name)} configured spawn zones" preserveAspectRatio="xMidYMid meet">${safeImage?`<image href="${e(safeImage)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="none" opacity="1"/>`:''}${grid}${marks}</svg></div>`;
 }
 async function focusAtlas(id,pin=false){
   if(ui.page!=='atlas'||!host?.current())return;
@@ -337,7 +338,7 @@ async function focusAtlas(id,pin=false){
   detail.hidden=!selected;
   if(!selected){detail.innerHTML='';return;}
   const mob=atlasSpecies(store.map).find(m=>m.mob_id===selected);if(!mob)return;
-  detail.innerHTML=`<div class="atlas-creature-head"><div class="atlas-creature-identity">${host.mobContent?host.mobContent(selected,{detail:mob.type==='ore'?'Mining deposit':undefined}):`<strong>${e(mob.name)}</strong>`}</div><div class="atlas-creature-actions"><span class="pill">${ui.atlasPinned===selected?'Pinned':'Preview'} · ${mob.zones.length} zones</span>${mob.type!=='ore'?`<button class="button small" data-action="open-drops" data-id="${e(selected)}">View drops in Studio ↗</button>`:''}</div></div><div class="atlas-creature-drops" role="status">${mob.type==='ore'?'Mining deposit · rewards come from the game’s mining system.':'Loading configured drops…'}</div><details class="help-details"><summary>Spawn configuration</summary>${mob.zones.map(r=>`<p>X ${e(r.x)} · Y ${e(r.y)} · ${e(respawnLabel(r))}${r.random_group?' · possible random group':r.group_spawn?' · group spawn':''} <button class="subtle-link" data-action="open-map-source" data-path="${e(r.source)}">${e(String(r.source??'').split('/').pop())}:${e(r.line)}</button></p>`).join('')}</details>`;
+  detail.innerHTML=`<div class="atlas-creature-head"><div class="atlas-creature-identity">${host.mobContent?host.mobContent(selected,{detail:mob.type==='ore'?'Mining deposit':undefined,iconCategory:mob.type==='ore'?'ore':undefined}):`<strong>${e(mob.name)}</strong>`}</div><div class="atlas-creature-actions"><span class="pill">${ui.atlasPinned===selected?'Pinned':'Preview'} · ${mob.zones.length} zones</span>${mob.type!=='ore'?`<button class="button small" data-action="open-drops" data-id="${e(selected)}">View drops in Studio ↗</button>`:''}</div></div><div class="atlas-creature-drops" role="status">${mob.type==='ore'?'Mining deposit · rewards come from the game’s mining system.':'Loading configured drops…'}</div><details class="help-details"><summary>Spawn configuration</summary>${mob.zones.map(r=>`<p>X ${e(r.x)} · Y ${e(r.y)} · ${e(respawnLabel(r))}${r.random_group?' · possible random group':r.group_spawn?' · group spawn':''} <button class="subtle-link" data-action="open-map-source" data-path="${e(r.source)}">${e(String(r.source??'').split('/').pop())}:${e(r.line)}</button></p>`).join('')}</details>`;
   positionAtlasPreview(selected);
   if(mob.type==='ore'||!host.mobSummary)return;
   try{

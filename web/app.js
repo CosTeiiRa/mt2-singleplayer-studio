@@ -64,17 +64,21 @@ function iconPlaceholder(id){return `<span class="item-icon item-placeholder" ar
 function icon(id){if(typeof S!=='undefined'&&S.itemMap?.[id]?.iconAvailable===false)return iconPlaceholder(id);return /^\d{1,10}$/.test(String(id)) ? `<img class="item-icon" src="/icons/${encodeURIComponent(id)}" alt="" loading="lazy" data-icon-id="${esc(id)}">` : iconPlaceholder(id)}
 function bindImages(root=document){$$('img.item-icon',root).forEach(img=>{
   if(img.dataset.iconBound)return;img.dataset.iconBound='1';
-  const fallback=()=>{const el=document.createElement('span');el.className='item-icon item-placeholder';el.setAttribute('aria-hidden','true');el.title=img.classList.contains('mob-icon')?'Creature portrait unavailable':'No local icon available for item #'+(img.dataset.iconId||'unknown');el.textContent='◇';img.replaceWith(el)};
+  const fallback=()=>{const el=document.createElement('span'),mob=img.classList.contains('mob-icon');el.className=mob?'item-icon mob-placeholder':'item-icon item-placeholder';el.setAttribute('aria-hidden','true');el.title=mob?'Category icon · portrait unavailable':'No local icon available for item #'+(img.dataset.iconId||'unknown');if(mob)el.innerHTML=creatureIcon(img.dataset.mobKind||'npc');else el.textContent='◇';img.replaceWith(el)};
   img.addEventListener('error',fallback,{once:true});
   if(img.complete&&img.naturalWidth===0)fallback();
 })}
-function mobIcon(id){
-  const mob=S.mobMap?.[id],kind=mob?.category||'monster';
-  if(mob?.iconAvailable)return `<img class="item-icon mob-icon" src="/mob-icons/${encodeURIComponent(id)}" alt="" loading="lazy" title="${mob.iconKind==='portrait'?'Client portrait':'Client category badge'}">`;
-  return `<span class="item-icon mob-placeholder" aria-hidden="true" title="Portrait unavailable">${({metin:'◆',boss:'♛',monster:'♜',npc:'♙'})[kind]||'◇'}</span>`;
+function mobIcon(id,category=''){
+  const mob=S.mobMap?.[id],kind=category||(mob?.gathering==='mining'?'ore':mob?.category)||'monster';
+  if(mob?.iconAvailable)return `<img class="item-icon mob-icon" src="/mob-icons/${encodeURIComponent(id)}" alt="" loading="lazy" data-mob-kind="${esc(kind)}" title="${mob.iconKind==='portrait'?'Client portrait':'Client category badge'}">`;
+  return `<span class="item-icon mob-placeholder" aria-hidden="true" title="${kind==='ore'?'Mining deposit':kind==='npc'?'NPC':'Creature'} category icon · portrait unavailable">${creatureIcon(kind)}</span>`;
+}
+function creatureIcon(kind){
+  const paths={npc:'M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM4 21v-2a8 8 0 0 1 16 0v2',ore:'m12 2 7 5 3 9-10 6L2 16l3-9 7-5Zm0 0v20M5 7l7 5 7-5M2 16l10-4 10 4',metin:'m12 2 6 5 2 14H4L6 7l6-5Zm0 0-2 8 5 4-3 7',boss:'m2 7 5 4 5-8 5 8 5-4-3 14H5L2 7Zm5 10h10',monster:'m4 3 5 3h6l5-3v13l-8 6-8-6V3Zm4 8h1m6 0h1M9 17h6'};
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[kind]||paths.npc}"/></svg>`;
 }
 function mobContent(id,options={}){
-  const mob=S.mobMap?.[id];return `${mobIcon(id)}<span class="item-copy"><strong>${esc(options.title||mob?.name||'#'+id)}</strong><small>#${esc(id)} · Lv. ${esc(mob?.level??'?')} · ${esc(options.detail||mob?.category||'Creature')}</small></span>`;
+  const mob=S.mobMap?.[id];return `${mobIcon(id,options.iconCategory)}<span class="item-copy"><strong>${esc(options.title||mob?.name||'#'+id)}</strong><small>#${esc(id)} · Lv. ${esc(mob?.level??'?')} · ${esc(options.detail||mob?.category||'Creature')}</small></span>`;
 }
 function mobHelpAttrs(id){return `data-help-mob="${esc(id)}"`}
 function helpDetails(title,body){return `<details class="help-details"><summary>${esc(title)}</summary><div>${body}</div></details>`}

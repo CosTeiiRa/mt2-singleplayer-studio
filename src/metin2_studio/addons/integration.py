@@ -173,7 +173,11 @@ class AddonService:
         # Always read the saved selected-world configuration, not an active draft.
         if fresh and hasattr(self.studio, 'catalogue'):
             self.studio.refresh_catalog(force=True)
-        return WorldData(self.studio.root, mobs=getattr(self.studio, 'mobs', None), include_monsters=True)
+        catalogue = getattr(self.studio, 'catalogue', None)
+        snapshot = getattr(catalogue, 'snapshot', None) or {}
+        return WorldData(self.studio.root, mobs=getattr(self.studio, 'mobs', None), include_monsters=True,
+                         map_names=snapshot.get('mapNames'), map_images=snapshot.get('mapImages'),
+                         image_resolver=getattr(getattr(catalogue, 'client', None), 'icon_path', None))
 
     def map(self, ident):
         result = copy.deepcopy(self.world().map(ident))

@@ -10,6 +10,7 @@ import time
 
 from .catalog import item_identity, item_metadata, _usable_name
 from .catalogue_client import ClientCatalogue, fingerprint
+from .addons.map_data import _mining_ids
 from .database import query
 from .installation import atomic_json
 from .item_help import item_description
@@ -87,7 +88,8 @@ class Catalogue:
         self.status = {}
         self.paths = [self.root / name for name in ('VERSION','files/items.json','files/playerbot_names_en.tsv',
                       'files/static/item_icons.json','files/static/icons','linux-port/docker/mariadb/initdb.d/dumps/world.sql',
-                      'files/admin_panel.py','linux-port/docker/seban-panel/app.py','linux-port/docker/ENGINE')]
+                      'files/admin_panel.py','linux-port/docker/seban-panel/app.py','linux-port/docker/ENGINE',
+                      'linux-port/docker/game/share/locale/poland/quest/quest/systems/mining.quest')]
         self.paths += self.client.paths
         try:
             cached = json.loads(self.cache.read_text('utf-8'))
@@ -259,16 +261,19 @@ class Catalogue:
                 ident, rank, typ = str(row[0]), int(row[3]), int(row[4])
                 mobs[ident] = {'id':ident,'name':client.get('mobs',{}).get(ident) or mob_names.get(ident) or row[2],
                                'original':row[2],'category':'metin' if typ == 2 else 'npc' if typ not in (0,2) else 'boss' if rank >= 4 else 'monster','level':int(row[6])}
+        mining_ids = _mining_ids(self.root / 'linux-port/docker/game/share/locale/poland')
         mob_icons = {}
         for ident, mob in mobs.items():
+            if int(ident) in mining_ids:
+                mob['gathering'] = 'mining'
             portrait = client.get('mobIcons', {}).get(ident)
-            badge = client.get('mobBadges', {}).get(mob['category'])
+            badge = client.get('mobBadges', {}).get('ore' if mob.get('gathering') == 'mining' else mob['category'])
             picture = portrait or badge
             mob['iconAvailable'] = picture in available
             mob['iconKind'] = 'portrait' if portrait else 'category' if badge else 'unavailable'
             if mob['iconAvailable']:
                 mob_icons[ident] = picture
-        result = {'items':items,'mobs':mobs,'definitions':definitions,'icons':icons,'legacyIcons':legacy,'mobIcons':mob_icons}
+        result = {'items':items,'mobs':mobs,'definitions':definitions,'icons':icons,'legacyIcons':legacy,'mobIcons':mob_icons, 'mapNames':client.get('mapNames', {}), 'mapImages':client.get('mapImages', {})}
         result['revision'] = checksum(result)
         return result
 

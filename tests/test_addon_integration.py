@@ -1,4 +1,5 @@
 """Merged API boundaries using original synthetic packs, never a live game."""
+from contextlib import ExitStack
 import io
 import json
 from pathlib import Path
@@ -61,6 +62,8 @@ def make_world(base):
 @unittest.skipIf(codec.lzokay is None, 'Install optional add-on dependencies to exercise synthetic pack integration.')
 class AddonIntegrationTests(unittest.TestCase):
     def setUp(self):
+        self.contexts = ExitStack()
+        self.addCleanup(self.contexts.close)
         test_root = Path(__file__).resolve().parents[1] / '.test-tmp'
         test_root.mkdir(exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(dir=test_root)
@@ -90,8 +93,8 @@ class AddonIntegrationTests(unittest.TestCase):
 
     def supported_client(self):
         (self.client / 'metin2client.exe').write_bytes(b'fixture runtime')
-        self.enterContext(patch('metin2_studio.addons.client_adapter.recorded_profile', return_value={'id': 'fixture-runtime'}))
-        running = self.enterContext(patch('metin2_studio.addons.client_adapter.running_client', return_value=False))
+        self.contexts.enter_context(patch('metin2_studio.addons.client_adapter.recorded_profile', return_value={'id': 'fixture-runtime'}))
+        running = self.contexts.enter_context(patch('metin2_studio.addons.client_adapter.running_client', return_value=False))
         self.service.post('connect', {'path': str(self.client)})
         return running
 

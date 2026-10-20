@@ -102,3 +102,40 @@ class MapDataTests(unittest.TestCase):
         ore = [r for r in world.map(64)['regions'] if r['type'] == 'ore']
         self.assertEqual(len(ore), 1)
         self.assertEqual(ore[0]['mob_id'], 20047)
+
+    def test_english_labels_and_navigation_copies_are_read_without_executing_or_changing_game_source(self):
+        import base64
+        from metin2_studio.catalogue_client import png_pixels
+        image = png_pixels(bytes([0,0,2])+bytes(9)+__import__('struct').pack('<HHBB',1,1,32,32)+bytes([0,0,255,255]))
+        admin = self.root / 'files/admin_panel.py'; admin.parent.mkdir()
+        admin.write_text("EVENT_MAPS=((64,'Polish name','English valley'),)\nPLAYERBOT_MAP_TILES={64:" + repr(base64.b64encode(image).decode()) + "}\nraise RuntimeError('must not execute')\n")
+        modules = admin.parent / 'editsql/modules.py'; modules.parent.mkdir()
+        modules.write_text("MAP_NAMES={64:P('Polish','English map')}\n")
+        folder = self.locale / 'map/test_map'
+        (folder / 'server_attr').write_bytes(b'exact same map geometry')
+        copy = self.locale / 'map/monkey_dungeon'
+        copy.mkdir(); (copy / 'server_attr').write_bytes((folder / 'server_attr').read_bytes())
+        (copy / 'Setting.txt').write_text('MapSize 3 4\n')
+        (self.locale / 'map/index').write_text('64 test_map\n65 monkey_dungeon\n')
+        before = admin.read_bytes()
+        world = WorldData(self.root, include_monsters=True)
+        self.assertEqual(world.map(64)['name'], 'English map')
+        self.assertEqual(world.map(64)['original_name'], 'Test map')
+        self.assertEqual(world.map(65)['image_source'], 'game-navigation')
+        self.assertEqual(world.image_data(65), (image, 'image/png'))
+        self.assertEqual(admin.read_bytes(), before)
+        self.assertEqual(WorldData(self.root).map(64)['name'], 'Test map')
+        (copy / 'server_attr').write_bytes(b'different geometry')
+        self.assertIsNone(WorldData(self.root, include_monsters=True).map(65)['image_url'])
+        modules.write_text("MAP_NAMES={64:P('Polish','New English map label')}\n")
+        self.assertEqual(WorldData(self.root, include_monsters=True).map(64)['name'], 'New English map label')
+
+    def test_cached_client_atlas_and_english_name_take_priority_over_dashboard_data(self):
+        image = self.root / 'studio-cache.png'; image.write_bytes(b'cached client image')
+        world = WorldData(self.root, include_monsters=True, map_names={'test_map':'Client English map'},
+                          map_images={'test_map':'cached-image'}, image_resolver=lambda name:image if name=='cached-image' else None)
+        result = world.map(64)
+        self.assertEqual((result['name'],result['name_source']), ('Client English map','client-en'))
+        self.assertEqual(result['image_source'], 'client-atlas')
+        self.assertEqual(world.image_data(64), (b'cached client image','image/png'))
+        self.assertEqual(world.image_path(64), image)

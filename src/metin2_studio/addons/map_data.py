@@ -3,19 +3,24 @@ from __future__ import annotations
 
 import ast
 import json
+import hashlib
+from functools import lru_cache
 import math
 import re
 from pathlib import Path
+
+from metin2_studio.game_maps import references, navigation_png, directory_label
 
 
 def _text(path):
     return path.read_bytes().decode('utf-8-sig', errors='replace')
 
 
-def _literal_maps(panel):
+@lru_cache(maxsize=16)
+def _panel_metadata(filename, modified, size):
     result = {}
     try:
-        tree = ast.parse(_text(panel / 'app.py'))
+        tree = ast.parse(_text(Path(filename)))
         for node in tree.body:
             if isinstance(node, ast.Assign):
                 for target in node.targets:
@@ -27,6 +32,28 @@ def _literal_maps(panel):
     except (OSError, SyntaxError):
         pass
     return result
+
+
+def _literal_maps(panel):
+    path = panel / 'app.py'
+    try:
+        stat = path.stat()
+        return _panel_metadata(str(path), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return {}
+
+
+@lru_cache(maxsize=256)
+def _attribute_digest(filename, modified, size):
+    return hashlib.sha256(Path(filename).read_bytes()).digest()
+
+
+def _same_attributes(path):
+    try:
+        stat = path.stat()
+        return _attribute_digest(str(path), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return None
 
 
 def _groups(path, all_members=False):
@@ -64,12 +91,16 @@ def _mining_ids(locale):
 
 
 class WorldData:
-    def __init__(self, server_root, mobs=None, include_monsters=False):
+    def __init__(self, server_root, mobs=None, include_monsters=False, map_names=None, map_images=None, image_resolver=None):
         self.root = Path(server_root).resolve()
         self.locale = self.root / 'linux-port' / 'docker' / 'game' / 'share' / 'locale' / 'poland'
         self.panel = self.root / 'linux-port' / 'docker' / 'seban-panel'
         self.maps_root = self.locale / 'map'
         self.metadata = _literal_maps(self.panel)
+        self.english, self.navigation = references(self.root) if include_monsters else ({}, {})
+        self.client_names, self.client_images = map_names or {}, map_images or {}
+        self.image_resolver = image_resolver
+        self._images = {}
         self.groups = _groups(self.locale / 'group.txt')
         self.group_members = _groups(self.locale / 'group.txt', all_members=True)
         self.random_groups = {}
@@ -187,11 +218,34 @@ class WorldData:
         images = self.metadata.get('MAP_IMAGE_FILES', {})
         image = images.get(ident)
         image_path = self.panel / 'static' / 'maps' / str(image) if image else None
-        has_image = bool(image_path and image_path.is_file() and image_path.resolve().is_relative_to((self.panel / 'static' / 'maps').resolve()))
-        result = {'id': ident, 'name': self.metadata.get('MAP_NAMES', {}).get(ident, directory.replace('metin2_map_', '').replace('_', ' ').title()),
+        if not (image_path and image_path.is_file() and image_path.resolve().is_relative_to((self.panel / 'static' / 'maps').resolve())):
+            image_path = None
+        source = 'game-dashboard' if image_path else None
+        client = self.image_resolver(self.client_images.get(directory.lower())) if self.image_resolver else None
+        if client and client.is_file():
+            image_path, source = client, 'client-atlas'
+        elif self.include_monsters and (not image_path or re.search(r'dungeon|tower|catacomb', directory, re.I)):
+            # Some dungeon terrain textures are nearly black. Reuse the game's
+            # walkability drawing instead; copies must have identical attributes.
+            layout = self.navigation.get(ident)
+            if not layout:
+                signature = _same_attributes(folder / 'server_attr')
+                if signature:
+                    layout = next((value for other, value in self.navigation.items()
+                                   if other in self.directories and _same_attributes(self.maps_root / self.directories[other] / 'server_attr') == signature), None)
+            layout = navigation_png(layout)
+            if layout:
+                image_path, source = layout, 'game-navigation'
+        self._images[ident] = image_path
+        original = self.metadata.get('MAP_NAMES', {}).get(ident, directory_label(directory))
+        translated = self.client_names.get(directory.lower()) or self.english.get(ident)
+        label = translated or (directory_label(directory) if self.include_monsters and re.search(r'[ąćęłńóśźż]|^(?:Loch|Grota) ', original, re.I) else original)
+        result = {'id': ident, 'name': label, 'original_name': original,
+                  'name_source': 'client-en' if directory.lower() in self.client_names else 'game-en' if ident in self.english else 'directory' if label != original else 'configured',
+                  'image_source': source,
                   'directory': directory, 'width': width or 1024, 'height': height or 1024,
                   'base_x': bx, 'base_y': by, 'regions': regions,
-                  'image_url': '/api/map-image?map=%s' % ident if has_image else None,
+                  'image_url': '/api/map-image?map=%s' % ident if image_path else None,
                   'source': {'path': folder.relative_to(self.root).as_posix(), 'kind': 'installed-configuration'},
                   'coverage': {'live': False, 'intervals': 'base configured intervals; server overrides are not applied',
                                'scope': ('boss.txt, stone.txt, regen.txt, npc.txt and ore_veins build additions' if self.include_monsters else 'boss.txt and stone.txt') + '; quest-spawned and dynamic dungeon encounters are excluded',
@@ -200,11 +254,18 @@ class WorldData:
         return result
 
     def image_path(self, ident):
-        m = self.map(ident)
-        if not m['image_url']:
-            return None
-        image = self.metadata['MAP_IMAGE_FILES'].get(int(ident))
-        return self.panel / 'static' / 'maps' / image
+        self.map(ident)
+        value = self._images.get(int(ident))
+        return value if isinstance(value, Path) else None
+
+    def image_data(self, ident):
+        self.map(ident)
+        value = self._images.get(int(ident))
+        if isinstance(value, bytes):
+            return value, 'image/png'
+        if not value or not value.is_file():
+            return None, None
+        return value.read_bytes(), {'.webp':'image/webp', '.jpg':'image/jpeg', '.jpeg':'image/jpeg'}.get(value.suffix.lower(), 'image/png')
 
     def catalog(self):
         items = []

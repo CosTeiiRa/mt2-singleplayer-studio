@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## beta-1.20.0
+
+- Read English map labels from the installed client and game translations; retain
+  original names under Sources & coverage without changing game files.
+- Prefer client dungeon atlas images and readable native navigation layouts.
+  Shared layouts require identical server navigation data; missing artwork is
+  labelled as a spawn diagram.
+- Cache map references and mining category artwork with the shared catalogue;
+  show distinct category icons when NPC or mining portraits do not exist.
+
+## beta-1.19.0
 
 - Keep atlas hover details beside the creature list without covering the map.
 - Add one-click mobs, bosses, Metins, mining ores and NPC filters with counts.

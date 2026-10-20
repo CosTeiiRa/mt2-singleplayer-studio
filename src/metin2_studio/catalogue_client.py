@@ -8,6 +8,7 @@ import struct
 import zlib
 
 from .installation import atomic_json
+from .game_maps import client_map_names
 
 
 def fingerprint(paths):
@@ -96,22 +97,22 @@ class ClientCatalogue:
         pack = self.root.parent / 'Klient/pack'
         self.reader = self.root / 'files/client_protos.py'
         self.paths = [self.reader] + [pack / (name + suffix) for name in ('gamedata', 'locale', 'icon') for suffix in ('.index', '.data')]
-        self.paths += [pack / ('patch_wiki' + suffix) for suffix in ('.index', '.data')]
+        self.paths += [pack / (name + suffix) for name in ('patch_wiki','root') for suffix in ('.index', '.data')]
 
     def load(self):
         before = fingerprint(self.paths)
         try:
             cached = json.loads(self.cache.read_text('utf-8'))
-            if (not isinstance(cached, dict) or cached.get('schema') not in (1,2,3) or cached.get('root') != str(self.root.resolve())
+            if (not isinstance(cached, dict) or cached.get('schema') not in (1,2,3,4) or cached.get('root') != str(self.root.resolve())
                     or any(not isinstance(cached.get(key), dict) for key in ('names','descriptions','mobs','proto','icons'))
-                    or any(not isinstance(cached.get(key, {}), dict) for key in ('mobIcons','mobBadges'))
-                    or any(value is not None and (not isinstance(value,str) or not re.fullmatch(r'[a-f0-9]{64}\.png',value)) for key in ('icons','mobIcons','mobBadges') for value in cached.get(key, {}).values())
-                    or any(not isinstance(value,str) for key in ('names','descriptions','mobs') for value in cached[key].values())
+                    or any(not isinstance(cached.get(key, {}), dict) for key in ('mobIcons','mobBadges','mapNames','mapImages'))
+                    or any(value is not None and (not isinstance(value,str) or not re.fullmatch(r'[a-f0-9]{64}\.png',value)) for key in ('icons','mobIcons','mobBadges','mapImages') for value in cached.get(key, {}).values())
+                    or any(not isinstance(value,str) for key in ('names','descriptions','mobs','mapNames') for value in cached.get(key, {}).values())
                     or any(not isinstance(value,dict) or not isinstance(value.get('name'),str) for value in cached['proto'].values())):
                 cached = None
         except (OSError, ValueError):
             cached = None
-        if cached and cached.get('schema')==3 and isinstance(cached.get('terms'),dict) and cached.get('fingerprint') == before and all(self.icon_path(name) for key in ('icons','mobIcons','mobBadges') for name in set(cached.get(key, {}).values()) if name):
+        if cached and cached.get('schema')==4 and isinstance(cached.get('terms'),dict) and cached.get('fingerprint') == before and all(self.icon_path(name) for key in ('icons','mobIcons','mobBadges','mapImages') for name in set(cached.get(key, {}).values()) if name):
             return cached, 'current'
         try:
             if any(value[1] is None for value in before[:7]):
@@ -187,11 +188,22 @@ class ClientCatalogue:
                 if match:
                     portraits[match[1]] = image(path, wiki)
             badges = {kind: image('ui/game/wiki/badges/' + kind + '.tga', wiki) for kind in ('boss','metin','monster')}
+            root = packs.get('root', {})
+            badges['ore'] = image('ui/flea/dt/ic_ore.tga', root)
+            map_names = client_map_names(entry(locale, 'locale/en/locale_game.txt'), entry(root, 'localeinfo.py'))
+            map_images = {}
+            for path in root:
+                match = re.fullmatch(r'ui/atlas/(?:season\d+/)?([\w-]+)/atlas\.tga', path)
+                if match:
+                    picture = image(path, root)
+                    if picture:
+                        map_images[match[1]] = picture
+
             if before != fingerprint(self.paths):
                 raise ValueError('Client files changed while reading')
-            result = {'schema': 3, 'root': str(self.root.resolve()), 'fingerprint': before,
+            result = {'schema': 4, 'root': str(self.root.resolve()), 'fingerprint': before,
                       'names': names, 'descriptions': descriptions, 'mobs': mobs, 'proto': proto, 'icons': icons,'terms':terms,
-                      'mobIcons': portraits, 'mobBadges': badges}
+                      'mobIcons': portraits, 'mobBadges': badges, 'mapNames': map_names, 'mapImages': map_images}
             atomic_json(self.cache, result)
             return result, 'current'
         except Exception:

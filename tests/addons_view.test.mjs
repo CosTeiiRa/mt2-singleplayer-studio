@@ -672,3 +672,13 @@ test('moving from a creature row into its preview preserves the details and map 
   listeners.get('pointerout').at(-1)({target:row,relatedTarget:null});
   assert.equal(inspection.hidden,true);
 });
+
+
+test('atlas distinguishes a navigation layout from missing terrain artwork',async()=>{
+  const ctx=context('atlas'),original=ctx.api;
+  ctx.api=path=>path.includes('/map?')?{map:{id:64,name:'Dungeon',image_source:'game-navigation',image_url:'/api/addons/map-image?map=64',regions:[]}}:original(path);
+  await views.mount(ctx);assert.match(root.innerHTML,/Navigation layout/);
+  assert.match(root.innerHTML,/opacity="1"/);
+  ctx.api=path=>path.includes('/map?')?{map:{id:64,name:'Dungeon',image_url:null,regions:[]}}:original(path);
+  await views.mount(ctx);assert.match(root.innerHTML,/Spawn diagram · no map image/);
+});

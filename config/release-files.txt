@@ -209,3 +209,4 @@ web/game_dashboard.js
 tests/test_game_dashboard.py
 tests/test_database.py
 tests/game_dashboard.test.js
+src/metin2_studio/game_maps.py

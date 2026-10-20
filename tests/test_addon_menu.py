@@ -1,4 +1,5 @@
 """In-game launcher API, widget lifecycle and ordinary package transactions."""
+from contextlib import ExitStack
 import copy
 import importlib.util
 from pathlib import Path
@@ -22,6 +23,8 @@ def module(name, path):
 
 class LauncherApiTests(unittest.TestCase):
     def setUp(self):
+        self.contexts = ExitStack()
+        self.addCleanup(self.contexts.close)
         self.client = module('menu_client', 'src/metin2_studio/addons/runtime/m2hub_client.py')
         self.events = []
         self.records = [dict(id=ident, name=name, enabled=enabled, capabilities=caps) for ident, name, enabled, caps in
@@ -29,7 +32,7 @@ class LauncherApiTests(unittest.TestCase):
                          ('atlas', 'Boss Atlas', True, ['atlas.overlay']), ('disabled', 'Disabled', False, []),
                          ('automatic', 'Automatic', True, []), ('broken', 'Broken', True, [])]]
         host = SimpleNamespace(_contexts=[SimpleNamespace(id=ident) for ident in ('menu', 'wiki', 'atlas', 'automatic')], _log=self.events.append)
-        self.enterContext(patch.dict(sys.modules, {'m2hub_config': SimpleNamespace(ADDONS=[], INSTALLED_ADDONS=self.records), 'm2hub_runtime': host}))
+        self.contexts.enter_context(patch.dict(sys.modules, {'m2hub_config': SimpleNamespace(ADDONS=[], INSTALLED_ADDONS=self.records), 'm2hub_runtime': host}))
         self.atlas_shown = False
         minimap = SimpleNamespace(ShowAtlas=self.show_atlas, AtlasWindow=SimpleNamespace(IsShow=lambda: self.atlas_shown))
         self.client._game = SimpleNamespace(interface=SimpleNamespace(wndMiniMap=minimap))
@@ -112,7 +115,9 @@ class Widget:
 
 class MenuWidgetTests(unittest.TestCase):
     def setUp(self):
-        self.enterContext(patch.dict(sys.modules, {'ui': SimpleNamespace(Bar=Widget, TextLine=Widget, BoardWithTitleBar=Widget),
+        self.contexts = ExitStack()
+        self.addCleanup(self.contexts.close)
+        self.contexts.enter_context(patch.dict(sys.modules, {'ui': SimpleNamespace(Bar=Widget, TextLine=Widget, BoardWithTitleBar=Widget),
                           'wndMgr': SimpleNamespace(GetScreenWidth=lambda: 640, GetScreenHeight=lambda: 480)}))
         self.payload = module('menu_widgets', 'src/metin2_studio/addons/catalog/community.addon-menu/payload/addon_menu.py')
         self.rows = [dict(id=ident, name=name, status='Enabled', enabled=True,

@@ -136,3 +136,8 @@ Remaining gaps can reflect unused game entries, absent assets, incomplete
 translations or ambiguous mappings. A placeholder in Studio alone does not prove
 the item is broken in game. Repairing or translating the game package is separate
 from this read-only catalogue display.
+
+Map labels, client atlas images and mining category artwork also use the private
+client cache. Root-pack changes invalidate these references. Native NPC portraits
+are often absent; Studio shows labelled category icons instead. Game files stay
+unchanged.

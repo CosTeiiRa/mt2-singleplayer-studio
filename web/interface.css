@@ -65,3 +65,5 @@
 nav>.nav-dashboard{display:flex;align-items:center;gap:12px;padding:12px 15px;border-radius:6px;color:var(--muted);font-size:12px;text-decoration:none;margin-bottom:2px}
 nav>.nav-dashboard:hover,nav>.nav-dashboard:focus-visible{background:#d8b47710;color:var(--text)}
 nav>.nav-dashboard .nav-icon{width:18px;text-align:center;font-size:17px}
+
+.mob-placeholder svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}

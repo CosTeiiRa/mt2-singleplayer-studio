@@ -28,6 +28,12 @@ Existing backups are included. A save touching several types appears under each;
 
 ## World atlas
 
+Map names use English client or game labels when available; original names are
+kept under **Sources & coverage**. Dark dungeon terrain may use the game’s
+walkable layout instead. Missing backgrounds are labelled **Spawn diagram**.
+NPC and mining icons can represent a category when no portrait exists. These
+display choices do not modify the game installation.
+
 Choose a map, then use **Mobs**, **Bosses**, **Metins** or **Mining ores** to narrow
 its creatures and zones. **All** and **NPCs** remain available; name/ID search
 combines with the quick filter. Counts show distinct creatures on this map.

@@ -25,8 +25,14 @@ does not save or deploy an editor's draft.
 Use `mobContent` / `mobHelpAttrs` for shared names, levels, portraits and hover
 help. Portraits and category badges are derived from the optional installed
 `patch_wiki` client pack and refreshed with the catalogue. Category badges are
-labelled as such; unavailable portraits use a neutral fallback. No game pixels
+labelled as such; absent portraits use distinct NPC, mining or creature category
+icons. Mining targets share the catalogue’s installed quest classification. No game pixels
 are included in the source or portable release.
+
+Atlas names prefer installed English client and game translations. Original
+labels stay under Sources & coverage. Client atlas images and native navigation
+drawings are read only; copies share a drawing only with identical navigation
+data. Missing artwork is labelled as a spawn diagram.
 
 The atlas groups configured zones by creature. Quick category buttons (mobs,
 bosses, Metins, mining ores and NPCs) combine with name/ID search.
