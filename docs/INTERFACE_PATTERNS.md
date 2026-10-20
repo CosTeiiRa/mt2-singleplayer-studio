@@ -28,14 +28,18 @@ help. Portraits and category badges are derived from the optional installed
 labelled as such; unavailable portraits use a neutral fallback. No game pixels
 are included in the source or portable release.
 
-The atlas groups configured zones by creature. Type and name/ID filters combine.
+The atlas groups configured zones by creature. Quick category buttons (mobs,
+bosses, Metins, mining ores and NPCs) combine with name/ID search.
 Pointer hover and keyboard focus isolate its zones without rebuilding the list
 or changing map bounds. Click (or Enter/Space) pins it; Escape or Show all zones
-clears the pin. The map card previews up to four configured drops through the
+clears the pin. The preview stays inside the creature-list panel, beside the hovered or focused
+row, and never covers the map. It remains open while moving into its controls.
+It previews up to four configured drops through the
 same cycle-safe sources used by the drop editor. Open View drops for all sources.
 Random groups show possible members, not simultaneous spawns or live positions.
 The map list includes regular spawns; existing in-game atlas exports retain their
-boss/Metin scope.
+boss/Metin scope. Mining targets come from installed mining handlers; the atlas
+also reads the game’s `ore_veins` build additions and avoids duplicate zones.
 
 ## Copy and dashboard links
 

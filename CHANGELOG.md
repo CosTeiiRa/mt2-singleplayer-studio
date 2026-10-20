@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Keep atlas hover details beside the creature list without covering the map.
+- Add one-click mobs, bosses, Metins, mining ores and NPC filters with counts.
+- Include installed mining spawn additions and prevent duplicate ore zones.
+
+## beta-1.18.0
+
 - Replace Studio’s Economy analytics with shortcuts to the game dashboard.
 - Remove the duplicate collector and disable old schedules; preserve existing
   history and notes with a read-only SQLite archive download.

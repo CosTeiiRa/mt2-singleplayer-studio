@@ -183,7 +183,7 @@ export function parseSettingValue(value,spec,label='Setting'){
 export function atlasSpecies(map, type='all', search='') {
   const species=new Map(),query=search.trim().toLocaleLowerCase();
   for(const region of mapRegions(map)){
-    if(type==='enemies'?region.type==='npc':type!=='all'&&region.type!==type)continue;
+    if(type==='enemies'?!['monster','boss','metin'].includes(region.type):type!=='all'&&region.type!==type)continue;
     if(query&&!`${region.name} ${region.mob_id} ${region.level??''}`.toLocaleLowerCase().includes(query))continue;
     const id=String(region.mob_id);
     if(!species.has(id))species.set(id,{...region,mob_id:id,zones:[]});

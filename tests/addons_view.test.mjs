@@ -634,3 +634,41 @@ test('atlas drop preview displays four items and retains the full configured cou
     assert.match(drops.innerHTML,/57 configured items/);assert.match(drops.innerHTML,/Showing 4/);
   }finally{document.querySelector=originalQuery;listeners.get('keydown').at(-1)({key:'Escape'});}
 });
+
+
+test('atlas category buttons filter both rows and zones, clear pins and keep preview in the list panel',async()=>{
+  const ctx=context('atlas'),original=ctx.api;
+  ctx.api=path=>path.includes('/map?')?{map:{id:64,name:'Test',regions:[
+    {mob_id:691,name:'Chief Orc',type:'boss',x:1,y:2},
+    {mob_id:20047,name:'Diamond vein',type:'ore',x:3,y:4}
+  ]}}:original(path);
+  root.querySelectorAll=()=>[];
+  await views.mount(ctx);
+  assert.match(root.innerHTML,/atlas-spawn-panel[\s\S]*atlas-inspection/);
+  assert.doesNotMatch(root.innerHTML,/atlas-map-panel(?:(?!atlas-spawn-panel)[\s\S])*atlas-inspection/);
+  for(const kind of ['monster','boss','metin','ore'])assert.match(root.innerHTML,new RegExp('data-atlas-filter="'+kind+'"'));
+  const inspection=new Element();inspection.id='atlas-inspection';
+  const row={dataset:{atlasCreature:'691'},closest:selector=>selector==='[data-atlas-creature]'?row:null};
+  listeners.get('click').at(-1)({target:row});assert.match(inspection.innerHTML,/Pinned/);
+  const filter={dataset:{atlasFilter:'ore'},closest:selector=>selector==='[data-atlas-filter]'?filter:null};
+  listeners.get('click').at(-1)({target:filter});
+  assert.match(root.innerHTML,/data-atlas-filter="ore" aria-pressed="true"/);
+  assert.match(root.innerHTML,/data-atlas-creature="20047" aria-pressed="false"/);
+  assert.doesNotMatch(root.innerHTML,/data-atlas-creature="691"/);
+  const all={dataset:{atlasFilter:'all'},closest:selector=>selector==='[data-atlas-filter]'?all:null};
+  listeners.get('click').at(-1)({target:all});
+  assert.match(root.innerHTML,/data-atlas-creature="691" aria-pressed="false"/);
+});
+
+test('moving from a creature row into its preview preserves the details and map isolation',async()=>{
+  await views.mount(context('atlas'));
+  const inspection=new Element();inspection.id='atlas-inspection';
+  const row={dataset:{atlasCreature:'691'},contains:()=>false,closest:selector=>selector==='[data-atlas-creature]'?row:null};
+  const inside={closest:selector=>selector==='#atlas-inspection'?inspection:null};
+  listeners.get('pointerover').at(-1)({target:row,relatedTarget:null});
+  assert.equal(inspection.hidden,false);
+  listeners.get('pointerout').at(-1)({target:row,relatedTarget:inside});
+  assert.equal(inspection.hidden,false);assert.match(inspection.innerHTML,/Chief Orc/);
+  listeners.get('pointerout').at(-1)({target:row,relatedTarget:null});
+  assert.equal(inspection.hidden,true);
+});

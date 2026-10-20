@@ -67,3 +67,38 @@ class MapDataTests(unittest.TestCase):
         self.assertTrue(rows[0]['random_group'])
         self.assertEqual(rows[0]['mob_id'], 2382)
         self.assertTrue(any('unresolved random group 51' in warning for warning in result['coverage']['omitted']))
+
+    def test_mining_targets_and_build_additions_are_separate_from_npcs_and_metins(self):
+        quest = self.locale / 'quest/quest/systems/mining.quest'
+        quest.parent.mkdir(parents=True)
+        quest.write_text('when 9001.click begin npc.open_shop() end\n'
+                         '-- when 9999.click begin pc.mining() end\n'
+                         'when 20047.click or 30301.click begin pc.mining() end\n')
+        folder = self.locale / 'map/test_map'
+        line = 'm 60 70 4 5 0 0 5m-10m 100 1 20047\n'
+        (folder / 'stone.txt').write_text(line)
+        (folder / 'npc.txt').write_text('m 10 20 1 1 0 0 1m 100 1 9001\n')
+        additions = self.root / 'linux-port/docker/game/ore_veins'
+        additions.mkdir()
+        (additions / 'test_map.txt').write_text(line + 'm 80 90 4 5 0 0 5m 100 1 30301\n')
+        mobs = {str(i): {'name': n, 'category': 'npc', 'level': 1}
+                for i, n in [(20047, 'Diamond vein'), (30301, 'Soul crystal vein'), (9001, 'Shopkeeper')]}
+        world = WorldData(self.root, mobs, include_monsters=True)
+        self.assertEqual(world.mining_ids, {20047, 30301})
+        rows = world.map(64)['regions']
+        ore = [r for r in rows if r['type'] == 'ore']
+        self.assertEqual([r['mob_id'] for r in ore], [20047, 30301])
+        self.assertEqual(ore[0]['respawn'], '5m-10m')
+        self.assertTrue(ore[1]['source'].endswith('/ore_veins/test_map.txt'))
+        self.assertEqual([r['mob_id'] for r in rows if r['type'] == 'npc'], [9001])
+        runtime = world.runtime_data()['test_map']['regions']
+        self.assertFalse(any('/ore_veins/' in r['source'] for r in runtime))
+
+    def test_mining_build_additions_work_without_optional_mining_quest(self):
+        additions = self.root / 'linux-port/docker/game/ore_veins'
+        additions.mkdir()
+        (additions / 'test_map.txt').write_text('m 10 20 1 2 0 0 5m 100 1 20047\n')
+        world = WorldData(self.root, include_monsters=True)
+        ore = [r for r in world.map(64)['regions'] if r['type'] == 'ore']
+        self.assertEqual(len(ore), 1)
+        self.assertEqual(ore[0]['mob_id'], 20047)

@@ -13,6 +13,7 @@ Installation and first launch: [setup guide](GETTING_STARTED.md). `<stateDir>` i
 | Economy | Shortcut to the game dashboard; download previous Studio history and notes |
 | Configuration | Submenus for gameplay settings, spawns/maps, fishing, alchemy and supported advanced files |
 | Change management | Drafts, named change sets, reviewable backups/rollbacks, pending Apply counts and custom-difference update protection |
+| World atlas | Quick creature and mining filters, list-side previews, configured spawn zones and drops |
 | Client add-ons | Discover, repositories, local import, reviewed install/update/settings/enable/disable/removal, pack backups and recovery |
 | Bundled in-game tools | Add-on Menu, Boss Atlas, Atlas Legend and Pocket Wiki; install the ones you want in your normal game client |
 
@@ -24,6 +25,18 @@ Use **Change type** to filter either view by Quests, Crafting, Drops, World sett
 Maps & spawns, Shops, Fishing, Alchemy, Items, Skills, Events or Other server files.
 Existing backups are included. A save touching several types appears under each;
 **Review rollback** still reviews the whole save. Select **All types** to clear the filter.
+
+## World atlas
+
+Choose a map, then use **Mobs**, **Bosses**, **Metins** or **Mining ores** to narrow
+its creatures and zones. **All** and **NPCs** remain available; name/ID search
+combines with the quick filter. Counts show distinct creatures on this map.
+
+Hover or focus a creature to isolate its zones. Its details appear in the list
+panel and stay open when you move into them. Click to pin; **Escape** or **Show
+all zones** clears the pin. The map remains visible. Ore deposits include the
+installed game’s build additions; random-group zones show possible members.
+These are configured zones and base intervals, rather than live spawn locations.
 
 ## Client add-ons
 

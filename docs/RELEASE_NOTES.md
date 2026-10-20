@@ -1,3 +1,14 @@
+# beta-1.19.0 — clearer atlas browsing
+
+Atlas previews stay beside the hovered creature inside the list panel, leaving
+map details visible and preserving the list’s scrolling height. Hover or keyboard
+focus previews; click pins; Escape or Show all zones clears the selection.
+
+Quick buttons filter mobs, bosses, Metins, mining ores and NPCs, with counts and
+name/ID search. Mining targets are read from installed quest handlers and the
+game’s ore spawn build additions; duplicate zones are excluded. These are
+configured zones and possible random-group members, not live positions or timers.
+
 # beta-1.18.0 — game dashboard economy
 
 Economy now opens the installed game dashboard from the sidebar and homepage.

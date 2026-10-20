@@ -44,15 +44,21 @@
 .m2addons .atlas-toolbar input{min-width:180px;flex:1}
 .m2addons .atlas-feature{cursor:crosshair}
 @media(max-width:950px){.m2addons .atlas-layout{grid-template-columns:1fr;height:auto}.m2addons .atlas-map-panel .atlas-canvas{min-height:400px;height:55vh;flex:auto}.m2addons .atlas-spawn-panel .atlas-list{min-height:420px;height:65vh;max-height:780px;flex:auto}}
-.m2addons .atlas-map-panel{position:relative}
-.m2addons .atlas-map-panel .atlas-inspection{position:absolute;left:12px;right:12px;bottom:12px;margin:0;background:#141b22f5;border:1px solid var(--line);border-radius:7px;padding:12px;z-index:1;max-height:45%;min-height:0;overflow:auto;box-shadow:0 8px 24px #0008}
-.m2addons .atlas-inspection:has(>p){width:fit-content;font-size:11px}
-.m2addons .atlas-inspection .atlas-creature-head{gap:8px;margin-bottom:8px}
+.m2addons .atlas-spawn-panel{position:relative}
+.m2addons .atlas-spawn-panel .atlas-inspection{position:absolute;left:8px;right:8px;margin:0;background:#141b22;border:1px solid #92794f;border-radius:7px;padding:12px;z-index:3;min-height:0;overflow:auto;overscroll-behavior:contain;box-shadow:0 8px 24px #0008}
+.m2addons .atlas-inspection[hidden]{display:none}
+.m2addons .atlas-filters{display:flex;gap:7px;flex-wrap:wrap;margin:-7px 0 18px}
+.m2addons .atlas-filters button{gap:9px;border-radius:20px}
+.m2addons .atlas-filters button[aria-pressed=true]{background:var(--goldbg);border-color:var(--gold);color:var(--gold)}
+.m2addons .atlas-filters button span{font-size:10px;color:var(--muted)}
+.m2addons .atlas-inspection .atlas-creature-head{display:block;margin-bottom:8px}
+.m2addons .atlas-creature-identity{display:flex;align-items:center;gap:8px;min-width:0}
+.m2addons .atlas-creature-identity .item-copy{flex:1;min-width:0}
+.m2addons .atlas-creature-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
 .m2addons .atlas-inspection .item-copy strong{font-size:12px}
 .m2addons .atlas-inspection .atlas-drop-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin:8px 0}
 .m2addons .atlas-inspection .item-reference{font-size:10px;padding:4px;gap:6px}
 .m2addons .atlas-inspection .item-reference .item-copy small{font-size:9px}
-.m2addons .atlas-map-panel .atlas-inspection:not(:has(>p)){top:64px;bottom:auto}
 .mob-reference{display:flex;align-items:center;gap:9px;min-width:190px;text-align:left}
 .mob-reference:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 

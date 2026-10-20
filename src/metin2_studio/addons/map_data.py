@@ -50,6 +50,19 @@ def _groups(path, all_members=False):
     return groups
 
 
+def _mining_ids(locale):
+    """Resolve mining targets from installed quest handlers, without running Lua."""
+    path = locale / 'quest' / 'quest' / 'systems' / 'mining.quest'
+    if not path.is_file():
+        return set()
+    source = re.sub(r'--\[\[.*?\]\]|--[^\n]*', '', _text(path), flags=re.S)
+    result = set()
+    for triggers, body in re.findall(r'\bwhen\s+(.*?)\bbegin\b(.*?)(?=\bwhen\b|\Z)', source, re.S):
+        if re.search(r'\bpc\s*\.\s*mining\s*\(', body):
+            result.update(int(ident) for ident in re.findall(r'\b(\d+)\s*\.\s*click\b', triggers))
+    return result
+
+
 class WorldData:
     def __init__(self, server_root, mobs=None, include_monsters=False):
         self.root = Path(server_root).resolve()
@@ -74,6 +87,7 @@ class WorldData:
                     self.random_groups[current].append(int(parts[1]))
         self.mobs = mobs or {}
         self.include_monsters = include_monsters
+        self.mining_ids = _mining_ids(self.locale) if include_monsters else set()
         self.names = {}
         names_file = self.panel / 'static' / 'mob_names_en.json'
         if mobs is not None:
@@ -107,11 +121,13 @@ class WorldData:
                 elif len(p) >= 3 and p[0] == 'BasePosition':
                     bx, by = int(p[1]), int(p[2])
         regions, omitted = [], []
-        sources = [('boss.txt', 'boss'), ('stone.txt', 'metin')]
+        sources = [(folder / 'boss.txt', 'boss'), (folder / 'stone.txt', 'metin')]
         if self.include_monsters:
-            sources += [('regen.txt', 'monster'), ('npc.txt', 'npc')]
-        for filename, category in sources:
-            path = folder / filename
+            sources += [(folder / 'regen.txt', 'monster'), (folder / 'npc.txt', 'npc'),
+                        (self.root / 'linux-port' / 'docker' / 'game' / 'ore_veins' / (directory + '.txt'), 'ore')]
+        seen = set()
+        for path, category in sources:
+            filename = path.name
             if not path.is_file():
                 continue
             for number, line in enumerate(_text(path).splitlines(), 1):
@@ -156,9 +172,14 @@ class WorldData:
                         members = random_members or (self.group_members.get(vnum, []) if spawn_type.startswith('g') else [mob])
                         for member in members:
                             metadata = self.mobs.get(str(member), {})
+                            kind = 'ore' if member in self.mining_ids or category == 'ore' else metadata.get('category', category)
+                            signature = (member, x, y, rx, ry, p[7], int(p[9]))
+                            if category == 'ore' and signature in seen:
+                                continue
+                            seen.add(signature)
                             regions.append({**base, 'id': base['id'] + '-' + str(member), 'mob_id': member,
                                             'name': metadata.get('name', self.names.get(str(member), 'Mob %s' % member)),
-                                            'level': metadata.get('level'), 'type': metadata.get('category', category),
+                                            'level': metadata.get('level'), 'type': kind,
                                             'group_spawn': spawn_type.startswith('g') or spawn_type == 'r',
                                             'random_group': spawn_type == 'r'})
                 except (ValueError, IndexError, OverflowError):
@@ -173,7 +194,7 @@ class WorldData:
                   'image_url': '/api/map-image?map=%s' % ident if has_image else None,
                   'source': {'path': folder.relative_to(self.root).as_posix(), 'kind': 'installed-configuration'},
                   'coverage': {'live': False, 'intervals': 'base configured intervals; server overrides are not applied',
-                               'scope': ('boss.txt, stone.txt, regen.txt and npc.txt' if self.include_monsters else 'boss.txt and stone.txt') + '; quest-spawned and dynamic dungeon encounters are excluded',
+                               'scope': ('boss.txt, stone.txt, regen.txt, npc.txt and ore_veins build additions' if self.include_monsters else 'boss.txt and stone.txt') + '; quest-spawned and dynamic dungeon encounters are excluded',
                                'omitted': omitted, 'bounds_verified': bool(width and height)}}
         self._cache[ident] = result
         return result
@@ -194,7 +215,7 @@ class WorldData:
                 items[-1].update(boss_count=sum(r['type'] == 'boss' for r in m['regions']),
                                  stone_count=sum(r['type'] == 'metin' for r in m['regions']), region='Configured world')
         return {'maps': items, 'source': {'kind': 'installed-configuration', 'path': str(self.maps_root)},
-                'coverage': {'live': False, 'scope': 'Configured boss and Metin zones; no live presence or precise timers'}}
+                'coverage': {'live': False, 'scope': ('Configured creatures and mining deposits' if self.include_monsters else 'Configured boss and Metin zones') + '; no live presence or precise timers'}}
 
     def runtime_data(self):
         if self.include_monsters:

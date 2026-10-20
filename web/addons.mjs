@@ -47,7 +47,7 @@ let host = null;
 const $ = selector => host?.root?.querySelector(selector) ?? document.querySelector(selector);
 const names = {overview:'Overview',discover:'Discover',installed:'Installed',atlas:'Boss atlas',activity:'Activity',settings:'Settings'};
 const store = {state:{installed:[]}, catalog:[], history:[], maps:[], mapsMeta:{}, map:null, diagnostics:null, csrf:'',repositories:[],releases:[],updates:[]};
-const ui = {page:'overview',query:'',category:'all',mapId:'',busy:false,loaded:false,error:'',atlasFilter:'enemies',atlasSearch:'',atlasPinned:'',atlasFocus:'',atlasHoverRequest:0,detailsId:null,plan:null,jobWatch:0};
+const ui = {page:'overview',query:'',category:'all',mapId:'',busy:false,loaded:false,error:'',atlasFilter:'all',atlasSearch:'',atlasPinned:'',atlasFocus:'',atlasHoverRequest:0,detailsId:null,plan:null,jobWatch:0};
 let integrityTimer,checkingIntegrity=false;
 const batchSelection=new Set();
 
@@ -307,13 +307,15 @@ function sourceMarkup(map) {
   return `<details class="source-box help-details"><summary>Sources & coverage</summary><p>${e(map?.coverage?.scope||'Installed spawn configuration.')}</p><p>Base intervals; no live presence or countdown. ${e(map?.coverage?.intervals||'')}</p><p class="mono">${e(sourceLabel(map?.source))}</p>${map?.coverage?.omitted?.length?`<p>${map.coverage.omitted.length} unsupported or malformed rows omitted.</p>`:''}</details>`;
 }
 const atlasDrops=new Map();
+const atlasTypes=[['all','All'],['monster','Mobs'],['boss','Bosses'],['metin','Metins'],['ore','Mining ores'],['npc','NPCs']];
 function atlas() {
   const map=store.map,species=atlasSpecies(map,ui.atlasFilter,ui.atlasSearch),regions=species.flatMap(m=>m.zones);
-  const label=m=>host.mobContent?host.mobContent(m.mob_id):`<span><strong>${e(m.name)}</strong><small>#${e(m.mob_id)} · Lv. ${e(m.level??'?')}</small></span>`;
+  const label=m=>host.mobContent?host.mobContent(m.mob_id,{detail:m.type==='ore'?'Mining deposit':undefined}):`<span><strong>${e(m.name)}</strong><small>#${e(m.mob_id)} · Lv. ${e(m.level??'?')}</small></span>`;
   return heading('KNOW THE WORLD','World atlas','Explore creatures, spawn zones and configured drops.')+banners()+
-    `<div class="atlas-toolbar"><select id="ah-map-select" aria-label="Map">${store.maps.map(m=>`<option value="${e(m.id)}" ${String(m.id)===String(ui.mapId)?'selected':''}>${e(m.name)}</option>`).join('')}</select><select id="ah-spawn-filter" aria-label="Spawn type">${[['enemies','All enemies'],['all','All creatures & NPCs'],['monster','Monsters'],['metin','Metins'],['boss','Bosses'],['npc','NPCs']].map(([id,name])=>`<option value="${id}" ${ui.atlasFilter===id?'selected':''}>${name}</option>`).join('')}</select><input id="ah-atlas-search" type="search" aria-label="Search atlas creatures" placeholder="Creature name or ID…" value="${e(ui.atlasSearch)}"><span>${species.length} creatures · ${regions.length} zones</span></div>`+
+    `<div class="atlas-toolbar"><select id="ah-map-select" aria-label="Map">${store.maps.map(m=>`<option value="${e(m.id)}" ${String(m.id)===String(ui.mapId)?'selected':''}>${e(m.name)}</option>`).join('')}</select><input id="ah-atlas-search" type="search" aria-label="Search atlas creatures" placeholder="Creature name or ID…" value="${e(ui.atlasSearch)}"><span>${species.length} creatures · ${regions.length} zones</span></div>`+
+    `<div class="atlas-filters" role="group" aria-label="Quick spawn filters">${atlasTypes.map(([id,name])=>`<button type="button" class="button small" data-atlas-filter="${id}" aria-pressed="${ui.atlasFilter===id}">${name}<span>${atlasSpecies(map,id,ui.atlasSearch).length}</span></button>`).join('')}</div>`+
     (ui.atlasError?`<div class="callout danger">${e(ui.atlasError)}<button data-action="reload-atlas" class="button">Retry</button></div>`:ui.atlasLoading?'<div class="loading">Loading map…</div>':map?
-      `<div class="atlas-layout"><section class="panel atlas-map-panel"><div class="panel-header"><h2>${e(map.name)}</h2><button class="button small ghost" id="atlas-clear-focus">Show all zones</button></div>${mapGraphic(map,regions)}<section class="atlas-inspection" id="atlas-inspection" aria-label="Creature details"><p>Hover a creature to see its level and drops.</p></section></section><section class="panel atlas-spawn-panel"><div class="panel-header"><h2>Creatures</h2><span>Hover to isolate · click to pin</span></div><div class="atlas-list">${species.map(m=>`<button type="button" class="spawn-row" data-atlas-creature="${e(m.mob_id)}" aria-pressed="${ui.atlasPinned===m.mob_id}">${label(m)}<span class="spawn-zone-count">${m.zones.length} ${m.zones.length===1?'zone':'zones'}</span></button>`).join('')||'<div class="empty">No creatures match these filters.</div>'}</div></section></div>`:'<div class="empty">No configured maps available.</div>')+sourceMarkup(map);
+      `<div class="atlas-layout"><section class="panel atlas-map-panel"><div class="panel-header"><h2>${e(map.name)}</h2><button class="button small ghost" id="atlas-clear-focus">Show all zones</button></div>${mapGraphic(map,regions)}</section><section class="panel atlas-spawn-panel"><div class="panel-header"><h2>Creatures</h2><span>Hover to isolate · click to pin</span></div><div class="atlas-list">${species.map(m=>`<button type="button" class="spawn-row" data-atlas-creature="${e(m.mob_id)}" aria-pressed="${ui.atlasPinned===m.mob_id}">${label(m)}<span class="spawn-zone-count">${m.zones.length} ${m.zones.length===1?'zone':'zones'}</span></button>`).join('')||'<div class="empty">No creatures match these filters.</div>'}</div><section class="atlas-inspection" id="atlas-inspection" aria-label="Creature details" hidden></section></section></div>`:'<div class="empty">No configured maps available.</div>')+sourceMarkup(map);
 }
 function mapGraphic(map,regions) {
   const {x,y,width,height}=mapBounds(map,mapRegions(map));
@@ -327,14 +329,17 @@ async function focusAtlas(id,pin=false){
   if(ui.page!=='atlas'||!host?.current())return;
   if(pin)ui.atlasPinned=ui.atlasPinned===id?'':id;
   const selected=pin?ui.atlasPinned:id||ui.atlasPinned;
+  if(!pin&&selected===ui.atlasFocus&&$('#atlas-inspection')?.hidden===!selected)return;
   ui.atlasFocus=selected;const request=++ui.atlasHoverRequest;
   host.root.querySelectorAll('[data-atlas-mob]').forEach(node=>{node.style.display=selected&&node.dataset.atlasMob!==selected?'none':''});
   host.root.querySelectorAll('button[data-atlas-creature]').forEach(node=>{node.classList.toggle('selected',node.dataset.atlasCreature===selected);node.setAttribute('aria-pressed',String(node.dataset.atlasCreature===ui.atlasPinned))});
   const detail=$('#atlas-inspection');if(!detail)return;
-  if(!selected){detail.innerHTML='<p>Hover or focus a creature to see its level and drops. Click to keep it selected.</p>';return;}
+  detail.hidden=!selected;
+  if(!selected){detail.innerHTML='';return;}
   const mob=atlasSpecies(store.map).find(m=>m.mob_id===selected);if(!mob)return;
-  detail.innerHTML=`<div class="atlas-creature-head">${host.mobContent?host.mobContent(selected):`<strong>${e(mob.name)}</strong>`}<span class="pill">${ui.atlasPinned===selected?'Pinned':'Preview'} · ${mob.zones.length} zones</span><button class="button small" data-action="open-drops" data-id="${e(selected)}">View drops in Studio ↗</button></div><div class="atlas-creature-drops" role="status">Loading configured drops…</div><details class="help-details"><summary>Spawn configuration</summary>${mob.zones.map(r=>`<p>X ${e(r.x)} · Y ${e(r.y)} · ${e(respawnLabel(r))}${r.random_group?' · possible random group':r.group_spawn?' · group spawn':''} <button class="subtle-link" data-action="open-map-source" data-path="${e(r.source)}">${e(r.source)}:${e(r.line)}</button></p>`).join('')}</details>`;
-  if(!host.mobSummary)return;
+  detail.innerHTML=`<div class="atlas-creature-head"><div class="atlas-creature-identity">${host.mobContent?host.mobContent(selected,{detail:mob.type==='ore'?'Mining deposit':undefined}):`<strong>${e(mob.name)}</strong>`}</div><div class="atlas-creature-actions"><span class="pill">${ui.atlasPinned===selected?'Pinned':'Preview'} · ${mob.zones.length} zones</span>${mob.type!=='ore'?`<button class="button small" data-action="open-drops" data-id="${e(selected)}">View drops in Studio ↗</button>`:''}</div></div><div class="atlas-creature-drops" role="status">${mob.type==='ore'?'Mining deposit · rewards come from the game’s mining system.':'Loading configured drops…'}</div><details class="help-details"><summary>Spawn configuration</summary>${mob.zones.map(r=>`<p>X ${e(r.x)} · Y ${e(r.y)} · ${e(respawnLabel(r))}${r.random_group?' · possible random group':r.group_spawn?' · group spawn':''} <button class="subtle-link" data-action="open-map-source" data-path="${e(r.source)}">${e(String(r.source??'').split('/').pop())}:${e(r.line)}</button></p>`).join('')}</details>`;
+  positionAtlasPreview(selected);
+  if(mob.type==='ore'||!host.mobSummary)return;
   try{
     let cached=atlasDrops.get(selected);
     if(!cached||Date.now()-cached.at>30000){cached={at:Date.now(),promise:host.mobSummary(selected)};atlasDrops.set(selected,cached);}
@@ -343,8 +348,22 @@ async function focusAtlas(id,pin=false){
     const target=$('.atlas-creature-drops');if(!target)return;
     const preview=data.drops.slice(0,4);
     target.innerHTML=`<strong>${data.dropCount} configured items</strong><div class="atlas-drop-grid">${preview.map(item=>host.itemReference(item)).join('')||'<span>No configured drops in Studio’s sources.</span>'}</div><small>${e(data.scope)}${data.dropCount>preview.length?' Showing '+preview.length+'; open View drops for all.':''}</small>`;
-    host.bindImages?.(detail);
+    host.bindImages?.(detail);positionAtlasPreview(selected);
   }catch{if(request===ui.atlasHoverRequest&&$('.atlas-creature-drops'))$('.atlas-creature-drops').textContent='Drop details unavailable. Hover again to retry.';atlasDrops.delete(selected);}
+}
+
+function positionAtlasPreview(id){
+  const panel=$('.atlas-spawn-panel'),detail=$('#atlas-inspection');
+  const row=host?.root?.querySelector(`button[data-atlas-creature="${id}"]`);
+  if(!panel?.getBoundingClientRect||!row?.getBoundingClientRect||!detail||detail.hidden)return;
+  const box=panel.getBoundingClientRect(),anchor=row.getBoundingClientRect();
+  const list=panel.querySelector('.atlas-list').getBoundingClientRect();
+  const top=Math.max(list.top,12),bottom=Math.min(box.bottom-12,window.innerHeight-12);
+  const below=bottom-anchor.bottom-6,above=anchor.top-top-6,placeBelow=below>=above;
+  detail.style.maxHeight=Math.max(120,Math.min(340,placeBelow?below:above))+'px';
+  const height=detail.getBoundingClientRect().height;
+  const preferred=placeBelow?anchor.bottom+6:anchor.top-height-6;
+  detail.style.top=Math.max(top,Math.min(preferred,bottom-height))-box.top+'px';
 }
 
 async function loadAtlas(force=false) {
@@ -555,7 +574,6 @@ document.addEventListener('change',async event=>{
   if(event.target.dataset.batchId){if(event.target.checked)batchSelection.add(event.target.dataset.batchId);else batchSelection.delete(event.target.dataset.batchId);render();}
   if(event.target.id==='ah-accept-source'){const button=$('#ah-download-confirm');button.dataset.blocked=String(!event.target.checked);button.disabled=ui.busy||jobActive(store.state.network_job)||!event.target.checked;}
   if(event.target.id==='ah-map-select'){ui.mapId=event.target.value;store.map=null;await loadAtlas();}
-  if(event.target.id==='ah-spawn-filter'){ui.atlasFilter=event.target.value;ui.atlasPinned='';render();}
 });
 
 function ensureDialogs(){
@@ -582,11 +600,17 @@ document.addEventListener('input',event=>{
   const replacement=$('#ah-atlas-search');replacement?.focus();replacement?.setSelectionRange(start,start);
 });
 document.addEventListener('pointerover',event=>{const row=event.target.closest?.('[data-atlas-creature]');if(row&&!row.contains(event.relatedTarget))focusAtlas(row.dataset.atlasCreature)});
-document.addEventListener('pointerout',event=>{const row=event.target.closest?.('[data-atlas-creature]');if(row&&!row.contains(event.relatedTarget))focusAtlas('')});
+document.addEventListener('pointerout',event=>{const row=event.target.closest?.('[data-atlas-creature]'),preview=event.target.closest?.('#atlas-inspection');if((row&&!row.contains(event.relatedTarget)||preview&&!preview.contains(event.relatedTarget))&&!event.relatedTarget?.closest?.('#atlas-inspection'))focusAtlas('')});
 document.addEventListener('focusin',event=>{const row=event.target.closest?.('button[data-atlas-creature]');if(row)focusAtlas(row.dataset.atlasCreature)});
-document.addEventListener('focusout',event=>{const row=event.target.closest?.('button[data-atlas-creature]');if(row&&!row.contains(event.relatedTarget))focusAtlas('')});
+document.addEventListener('focusout',event=>{const row=event.target.closest?.('button[data-atlas-creature]');if((row&&!row.contains(event.relatedTarget)||event.target.closest?.('#atlas-inspection'))&&!event.relatedTarget?.closest?.('#atlas-inspection'))focusAtlas('')});
 document.addEventListener('click',event=>{
+  const filter=event.target.closest?.('[data-atlas-filter]');
+  if(filter&&atlasTypes.some(([id])=>id===filter.dataset.atlasFilter)){ui.atlasFilter=filter.dataset.atlasFilter;ui.atlasPinned='';ui.atlasFocus='';ui.atlasHoverRequest++;render();host.root.querySelector(`[data-atlas-filter="${ui.atlasFilter}"]`)?.focus();return;}
   const row=event.target.closest?.('[data-atlas-creature]');if(row)focusAtlas(row.dataset.atlasCreature,true);
   if(event.target.closest?.('#atlas-clear-focus')){ui.atlasPinned='';focusAtlas('');}
 });
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ui.page==='atlas'){ui.atlasPinned='';focusAtlas('')}});
+
+document.addEventListener('scroll',event=>{if(ui.page==='atlas'&&ui.atlasFocus&&!event.target.closest?.('#atlas-inspection'))positionAtlasPreview(ui.atlasFocus)},true);
+window.addEventListener('resize',()=>{if(ui.page==='atlas'&&ui.atlasFocus)positionAtlasPreview(ui.atlasFocus)});
+document.addEventListener('toggle',event=>{if(ui.page==='atlas'&&ui.atlasFocus&&event.target.closest?.('#atlas-inspection'))positionAtlasPreview(ui.atlasFocus)},true);

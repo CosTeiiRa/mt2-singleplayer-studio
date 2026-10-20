@@ -154,3 +154,15 @@ test('atlas species groups repeated zones and combines type and text filters',as
   assert.equal(atlasSpecies(map,'metin','sorrow')[0].mob_id,'8001');
   assert.deepEqual(atlasSpecies(map,'all','missing'),[]);
 });
+
+
+test('atlas quick categories keep mining deposits separate from mobs and NPCs',async()=>{
+  const {atlasSpecies}=await import('../web/addon_helpers.mjs');
+  const map={regions:[['101','Wolf','monster'],['691','Chief Orc','boss'],['8001','Metin','metin'],['20047','Diamond vein','ore'],['9001','Shopkeeper','npc']].map(([mob_id,name,type])=>({mob_id,name,type,x:1,y:2}))};
+  assert.equal(atlasSpecies(map,'all').length,5);
+  assert.equal(atlasSpecies(map,'enemies').length,3);
+  assert.equal(atlasSpecies(map,'ore')[0].mob_id,'20047');
+  assert.equal(atlasSpecies(map,'npc')[0].mob_id,'9001');
+  assert.equal(atlasSpecies(map,'ore','diamond').length,1);
+  assert.equal(atlasSpecies(map,'monster','diamond').length,0);
+});
