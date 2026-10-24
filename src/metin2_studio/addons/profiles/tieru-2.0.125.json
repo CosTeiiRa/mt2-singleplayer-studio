@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "tieru-mt2009-client-2.0.125",
+  "client_version": "2.0.125",
+  "server_version_observed": "2.2.123",
+  "executable_sha256": "d3266c87cea858650dfd7ae50b95a3e5b56bf0a9e7202a96f3a958ab4043a4dc",
+  "root_pack_sha256_observed": {
+    "root.index": "7d600aaae0bb379897d15884ac2e2de0cb17410825638a21694f8ef9635fbcf3",
+    "root.data": "5cbe6d8a303c12420f7d2f2a75b202319d9e3b164677683c3d0935df32caae6e"
+  },
+  "validation_date": "2026-10-24",
+  "native_result_sha256": "b32366d9886194a5ec6054778b8d8e0a44f6097cbe964099946a3285e603dcbd",
+  "static_artifact_evidence_id": "ev_517eeabc9a034c5cb84e3552e47abd9e3e12aacd0721bd58cde5fa9a210c5b55",
+  "validation": {
+    "actual_pack_roundtrip": true,
+    "four_addon_coexistence": true,
+    "exact_uninstall_restoration": true,
+    "settings_disable_enable": true,
+    "native_startup_and_import": true,
+    "native_widget_construction": true,
+    "native_atlas_overlay_widgets": true,
+    "native_atlas_lifecycle": true,
+    "native_api_v2_windows": true,
+    "native_addon_menu": true,
+    "native_shortcut_dispatch": true,
+    "native_reference_navigation": true,
+    "native_wiki_deep_link": true,
+    "shipped_game_lifecycle_import": true,
+    "interactive_gameplay": false,
+    "boss_presence_telemetry": false
+  },
+  "limits": [
+    "Smoke-tested against server 2.2.123 with all four bundled default add-ons in an owned isolated fixture.",
+    "Atlas widget checks supply synthetic dimensions and use installed spawn configuration; they do not establish live boss presence.",
+    "API v2 windows, keyboard dispatch and lifecycle checks use an isolated startup harness, not a logged-in character.",
+    "No character login, server connection, independent human acceptance trial or interactive gameplay was performed.",
+    "Normal-client pack changes require a reviewed plan and a closed client.",
+    "The source executable and source root packs were hash-verified unchanged after the complete native and removal rehearsal."
+  ]
+}

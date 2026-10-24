@@ -1,31 +1,36 @@
-# beta-1.20.0 — readable maps and creature icons
+# beta-1.21.0 — simpler Apply and Legacy Mount Support
 
-Studio reads English map labels from the installed client and game translations.
-Original configured names remain under Sources & coverage. Names without an
-English source use readable directory labels where possible.
+Review saved server files and client add-ons together, then apply either group
+or both from one progress screen. Select all add-ons or choose individual ones;
+skipped add-ons retain their settings and pending reapply reminders. Apply now
+explains blockers directly, including an open game client and required server
+files. A successful server deployment remains recorded if the client step fails.
 
-Dungeon backgrounds prefer the client's atlas artwork. Monkey Dungeon uses the
-game's walkable navigation drawing because its terrain texture is almost black.
-Map copies share a drawing only when their navigation files match exactly. Areas
-without artwork are explicitly labelled as spawn diagrams.
+Game updates show a persistent notice when saved add-ons need reapplying. Review
+them against the updated game baseline before applying. Editor reviews also offer
+Save & apply, and build-only validation lives under Advanced.
 
-NPCs and mining deposits have distinct category icons when portraits are absent.
-Available mining artwork and client map images join the shared offline cache.
-Client and server assets are read only; no game files or engine behavior change.
-The release checks also fix Python 3.10 test-fixture compatibility and run every
-JavaScript test file.
+Legacy Mount Support is a new server/client extension in Discover. It coordinates
+legacy seal activation with narrowly owned model and seal-data corrections. It
+checks the exact engine and installed codec, preserves native/upstream fixes,
+refuses unavailable appearances, and supports reviewed reapply, disable and
+removal with recovery. Activation requires a server build and restart. Mounted
+combat is separate and is not included. No game assets, packs, keys or executables
+are distributed in the add-on.
 
-This beta also includes quick atlas category filters and list-side previews,
-custom crafting/quest filters, catalogue sync, and Economy shortcuts to the game
-dashboard in place of Studio's duplicate collector. Previous Studio economy
-history and notes remain available as an archive download.
+The inspected server 2.2.123/client 2.0.125 target has 98 usable legacy seals,
+15 seals refused for missing models, 21 untouched native seals and three needed
+client model mappings. Seal 71128 already supplies the data fix. Activation and
+cleanup quests compiled with the installed compiler in an isolated container;
+connected riding and expiry acceptance remain pending.
 
-The publication package uses GitHub noreply author identities, updated setup and
-support guides, and a source-only ZIP with a SHA-256 checksum. Earlier development
-changes remain in [CHANGELOG.md](../CHANGELOG.md); this is the only retained beta
-release.
+The exact client 2.0.125 executable is now supported after isolated startup,
+import, widgets, shortcuts and lifecycle checks for all four existing client
+add-ons, followed by exact copied-pack restoration. These checks do not establish
+logged-in gameplay. See [verification evidence](ADDON_TESTING.md).
 
-Start with [How to start](../README.md#how-to-start). This is an experimental beta
-for existing Windows/Linux-Docker game installations. Automated checks do not
-replace fresh-machine and logged-in gameplay acceptance; see
-[beta scope and testing](BETA_REVIEW.md).
+Download the portable source ZIP and SHA256SUMS.txt, extract into a permanent
+Studio folder outside the game, and follow [How to start](../README.md#how-to-start).
+Existing Studio data remains separate from the release files. This is an
+experimental beta; fresh-machine and independent gameplay acceptance are still
+open in the [beta checklist](BETA_REVIEW.md).

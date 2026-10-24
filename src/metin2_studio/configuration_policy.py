@@ -39,7 +39,7 @@ def check_change(studio, path, old, new):
             validate_document(json.loads(new))
         except (ValueError, KeyError, TypeError, AttributeError):
             raise ValueError('Use the guided native crafting editor to save a valid configuration.') from None
-    new_quest = path.parent == studio.game / 'custom-quests' and bool(re.fullmatch(r'studio_[a-z][a-z0-9_]{2,40}\.quest', path.name))
+    new_quest = (path.parent == studio.game / 'custom-quests' and bool(re.fullmatch(r'studio_[a-z][a-z0-9_]{2,40}\.quest', path.name))) or path == studio.game / 'quest/mounts_legacy.quest'
     if old is None and not new_quest and path not in (studio.game / 'custom-quests/studio-source-list.txt', studio.game / 'share-add/studio-crafting.json') and path not in {target for target, _, _ in studio.sources.values()}:
         raise ValueError('New files must be supported drop sources or Studio quest templates. Other new game files need a dedicated integration.')
     if path != studio.compose / '.env':

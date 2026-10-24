@@ -1,6 +1,6 @@
 # Add-on roadmap and acceptance status
 
-Current scope: **Studio beta-1.20.0**, an experimental beta. Implemented features
+Current scope: **Studio beta-1.21.0**, an experimental beta. Implemented features
 and automated/native checks are distinct from independent human acceptance.
 Hosted catalogs and community invitations are separate maintainer decisions.
 The [beta checklist](BETA_REVIEW.md) records release evidence and pending trials.
@@ -18,6 +18,7 @@ The [beta checklist](BETA_REVIEW.md) records release evidence and pending trials
 | Network work | Cancellable background jobs, progress, cached offline results and interrupted-job notices |
 | Runtime | API v1 atlas hooks and API v2 windows, shortcuts, local preferences, local reference data and launcher actions |
 | Default add-ons | Add-on Menu, Boss Atlas, Atlas Legend and Pocket Wiki, each independently managed |
+| Server/client extension | Legacy Mount Support coordinates inspected activation and client-data corrections; mounted combat remains separate |
 | Development | CLI scaffold/validation/deterministic packaging, local import, schema and API documentation |
 | Recovery | Journalled pack/state transactions, exact baseline restoration, stale-review/external-drift checks and private recovery files |
 

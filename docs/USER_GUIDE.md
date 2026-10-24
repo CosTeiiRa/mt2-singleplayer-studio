@@ -144,8 +144,8 @@ with the game offline. New Studio installations create no economy database.
 
 1. Edit a target, recipe, quest, setting or file.
 2. Select **Review changes** and inspect the exact diff.
-3. Select **Save changes**. Studio backs up every original file, checks that it has not changed since review, then replaces it atomically. Multi-file saves roll back completed writes if an ordinary write error occurs. An interrupted save is detected on startup and requires reviewed recovery before further saves or Apply.
-4. Select **Apply to server → Build & restart** when ready. This affects saved files only and disconnects players at the restart.
+3. Select **Save & apply…** to continue to the shared apply screen, or **Save for later**. Studio backs up every original file, checks that it has not changed since review, then replaces it atomically. Multi-file saves roll back completed writes if an ordinary write error occurs. An interrupted save is detected on startup and requires reviewed recovery before further saves or Apply.
+4. **Review & apply** lists saved server files and client add-ons together. Choose either group or both and apply once. Server files restart the server; add-on-only runs keep it running. Close the game client when applying add-ons. If the server succeeds but add-ons fail, only the add-ons need retrying.
 
 Follow the persistent operation panel for the current stage and elapsed time, even
 when moving to another tab. **View progress** opens the stage card and optional
@@ -206,7 +206,7 @@ second build from the game's launcher to bypass that guard.
 Keep backups and review the saved pending files. Before retrying Apply, the
 dialog requires **I checked the game launcher and confirmed that no previous
 build command is still running. Retry this interrupted deployment.** Select this
-only after doing that check, then deliberately choose **Build & restart**.
+only after doing that check, then deliberately choose **Apply & restart server**.
 The process guard cannot establish what unrelated/external commands are doing,
 so this confirmation is still required. If the game/database needs restoration, use its
 own backup tools. Do not clear a journal or pending record to make a status look
@@ -274,12 +274,12 @@ clear only after a verified Apply includes them; validation, failed builds and
 unverified runtime checks leave them pending. Accepting game values without
 rewriting files does not create extra deployment work.
 
-**Validate build only** checks image/quest compilation without restarting the game. Apply records source fingerprints, stage logs and actual game health. Runtime checks also compare saved Studio quest sources with the running image and require their compiled states, using the game account. A healthy Docker daemon alone does not mean the game is healthy. Configuration backups remain separate from database/world backups. All review tokens expire, and stale files are checked again before writes.
+**Advanced → Validate build only** checks image/quest compilation without restarting the game. Apply records source fingerprints, stage logs and actual game health. Runtime checks also compare saved Studio quest sources with the running image and require their compiled states, using the game account. A healthy Docker daemon alone does not mean the game is healthy. Configuration backups remain separate from database/world backups. All review tokens expire, and stale files are checked again before writes.
 
 The Apply dialog shows current pending changes first. Opening it puts earlier
 build results in a collapsed **Previous operation** section. A current validation
 result says explicitly that nothing was applied; pending changes require
-**Build & restart**. Reopening the dialog refreshes the pending list and resumes
+**Apply & restart server**. Reopening the dialog refreshes the pending list and resumes
 the progress display if an operation is still running.
 
 ## Additional editing tools

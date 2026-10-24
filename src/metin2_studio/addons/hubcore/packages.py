@@ -22,6 +22,7 @@ MAX_FILE_BYTES = 16 * 1024 * 1024
 MAX_PACKAGE_BYTES = 64 * 1024 * 1024
 MAX_FILES = 2048
 COMMON_INIT = "m2hub_addons/__init__.py"
+GAME_EXTENSION_FILES = {'server/mounts_legacy.quest.in', 'server/mounts.json'}
 
 
 class PackageError(ValueError):
@@ -126,14 +127,20 @@ def validate_manifest(manifest: Any) -> dict:
             raise PackageError("Manifest %s is too long." % field)
     if not ID_RE.fullmatch(manifest["id"]):
         raise PackageError("Add-on id must be lowercase namespace.name (letters, digits, underscores and hyphens).")
-    if manifest["kind"] != "client-python":
-        raise PackageError("Only client-python packages are supported by this alpha.")
+    extension = manifest["kind"] == 'game-extension'
+    if manifest["kind"] not in ('client-python', 'game-extension'):
+        raise PackageError("Only client-python and supported game-extension packages are supported.")
+    if extension and (manifest['entry'] != 'legacy-mount-support'
+                      or manifest['id'] != 'community.legacy-mount-support'):
+        raise PackageError('This game-extension adapter is not supported by this Studio version.')
     if type(manifest.get('api_version', 1)) is not int or manifest.get('api_version', 1) not in (1, 2):
         raise PackageError('This manager supports client add-on API versions 1 and 2 only.')
-    if not MODULE_RE.fullmatch(manifest["entry"]):
+    if not extension and not MODULE_RE.fullmatch(manifest["entry"]):
         raise PackageError("Entry must be a Python module below m2hub_addons.")
     for field in ("requires", "conflicts", "capabilities"):
         _strings(manifest.get(field), field, ids=field != "capabilities")
+    if extension and (manifest['requires'] or manifest['conflicts']):
+        raise PackageError('The built-in game-extension does not support package dependencies or declared conflicts.')
     if manifest["id"] in manifest["requires"] or manifest["id"] in manifest["conflicts"]:
         raise PackageError("An add-on cannot require or conflict with itself.")
     if set(manifest["requires"]) & set(manifest["conflicts"]):
@@ -147,7 +154,9 @@ def validate_manifest(manifest: Any) -> dict:
             raise PackageError("Every files entry must be an object.")
         logical_path(item.get("source"))
         target = logical_path(item.get("target"))
-        if not target.startswith("m2hub_addons/"):
+        if extension and target not in GAME_EXTENSION_FILES:
+            raise PackageError('Game-extension payload is not a supported declarative mount resource: ' + target)
+        if not extension and not target.startswith("m2hub_addons/"):
             raise PackageError("Add-ons may only write below m2hub_addons/: %s" % target)
         if target.casefold() in targets:
             raise PackageError("Duplicate target path (including Windows case collisions): %s" % target)
@@ -155,8 +164,10 @@ def validate_manifest(manifest: Any) -> dict:
         if not isinstance(item.get("sha256"), str) or not SHA_RE.fullmatch(item["sha256"]):
             raise PackageError("Each file needs a lowercase SHA-256 checksum: %s" % target)
     entry = manifest["entry"].replace(".", "/")
-    if entry + ".py" not in [f["target"] for f in files] and entry + "/__init__.py" not in [f["target"] for f in files]:
+    if not extension and entry + ".py" not in [f["target"] for f in files] and entry + "/__init__.py" not in [f["target"] for f in files]:
         raise PackageError("The entry module must be included in the package files.")
+    if extension and not {'server/mounts_legacy.quest.in', 'server/mounts.json'} <= targets:
+        raise PackageError('Legacy Mount Support needs its quest template and declared mount mappings.')
     for field in ("settings", "settings_schema", "compatibility"):
         if field in manifest and not isinstance(manifest[field], dict):
             raise PackageError("%s must be an object." % field)

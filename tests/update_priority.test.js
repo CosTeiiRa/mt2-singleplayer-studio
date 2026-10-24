@@ -25,10 +25,8 @@ test('game update review uses game values without custom restoration controls',a
   assert.match($('#update-report').innerHTML,/Game update takes priority/);
   assert.match($('#update-report').innerHTML,/&lt;game&gt;80&lt;\/game&gt;/);
   assert.doesNotMatch($('#update-report').innerHTML,/<select|Keep my custom value|Choose…/);
-  $('#install-reviewed-update').click();
-  assert.equal($('#update-install-dialog').open,true);
-  assert.match($('#update-install-summary').textContent,/retained for a later merge review/);
-  await $('#confirm-update-install').onclick();
+  await $('#install-reviewed-update').click();
+  assert.match($('#update-report').innerHTML,/Original and custom values/);
   assert.equal(requests.length,1);
   assert.equal(requests[0].path,'/api/updates/install');
   assert.equal(requests[0].body.id,'review');

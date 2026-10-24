@@ -19,7 +19,7 @@ change client packs. The package contains Studio code, not the game or its asset
 
 ## Install on a computer where the game already works
 
-1. Download the portable source ZIP and `SHA256SUMS.txt` from the [latest beta release](https://github.com/CosTeiiRa/mt2-singleplayer-studio/releases/tag/beta-1.20.0). Extract it fully into a permanent folder, for example `C:\Tools\Metin2Studio`. Do not run the files from inside the ZIP or place Studio inside `Serwer`.
+1. Download the portable source ZIP and `SHA256SUMS.txt` from the [latest beta release](https://github.com/CosTeiiRa/mt2-singleplayer-studio/releases/tag/beta-1.21.0). Extract it fully into a permanent folder, for example `C:\Tools\Metin2Studio`. Do not run the files from inside the ZIP or place Studio inside `Serwer`.
 2. Confirm Python is installed. If a terminal is available, `py -3 --version` or `python --version` should show Python 3.10 or newer.
 3. Double-click **Install Studio.bat**. Choose the **existing `Serwer` folder** in the folder picker. You can also select its `Metin2 Singleplayer` parent folder. Setup validates the package files, saves your choice locally and creates a desktop shortcut. It does not copy or replace game files, start Docker, build images or restart the game.
 4. Double-click **Start Studio.bat**, or the **Metin2 Studio** desktop shortcut. The dashboard opens at **http://127.0.0.1:8765**. Starting an already running matching instance reuses it.
@@ -51,8 +51,8 @@ For a terminal-only session, you can run `python studio.py serve --root "D:\Game
 1. Open **Drop editor**, **Quests**, **Crafting recipes** or a configuration submenu.
 2. Find items by name, ID, category or function. Hover to read descriptions; **Where used** shows existing references.
 3. Make a small edit and click **Review changes**. Check the before/after values and source diff.
-4. **Save changes** writes a backed-up configuration. A working change set stages it until that whole set is published. Unsaved drafts and staged changes are excluded from Apply.
-5. The top bar shows **Apply changes (N)** for pending saved files, plus a pending game package update if present. Click it to inspect the list and then choose **Build & restart**. **Players disconnect at the restart.** With zero pending changes the control is disabled. **Validate build only** compiles/builds without restarting or writing native crafting rows.
+4. Choose **Save & apply…** to save with a backup and continue to the shared apply screen, or **Save for later**. A working change set stages the edit until the whole set is saved.
+5. **Review & apply (N)** groups saved files, a pending game package build and add-ons that need reapplying. Choose either group or both, then apply once. **Players disconnect when server files are applied.** Add-on-only runs keep the server running. Unfinished drafts and staged changes are excluded. Optional **Advanced → Validate build only** checks compilation without deployment.
 
 The Apply dialog leads with the current pending changes. Earlier build/validation
 results appear under a collapsed **Previous operation** section. A successful

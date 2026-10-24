@@ -29,6 +29,16 @@ class WebAssetTests(unittest.TestCase):
 
 
 class ReleaseBoundaryTests(unittest.TestCase):
+    def test_checksummed_text_payloads_use_git_release_line_endings(self):
+        from metin2_studio.addons.hubcore.packages import discover_packages
+        packages, errors = discover_packages(ROOT / 'src/metin2_studio/addons/catalog')
+        self.assertFalse(errors)
+        for package in packages.values():
+            for name, content in package.files.items():
+                if Path(name).suffix in ('.py', '.json', '.in'):
+                    with self.subTest(package=package.manifest['id'], file=name):
+                        self.assertNotIn(b'\r\n', content)
+
     def test_private_state_credentials_and_game_dumps_are_not_release_paths(self):
         for path in ('data/worlds/id/workspace.sqlite','data/backups/id/0.before','.env','nested/.env.local','workspace.sqlite-wal','server.log','studio.pid','dist/release.zip','tests/__pycache__/cached.pyc','shortcut.lnk'):
             with self.subTest(path=path):
@@ -71,8 +81,11 @@ class PortableLayoutTests(unittest.TestCase):
         self.assertIn('--root', self.run_cli(project / 'studio.py', '--help'))
         self.assertIn('--server-root', self.run_cli(project / 'studio.py', 'setup', '--help'))
         packages = sorted((project / 'src/metin2_studio/addons/catalog').iterdir())
-        self.assertEqual(len(packages), 4)
+        self.assertEqual(len(packages), 5)
         output = self.run_cli(project / 'tools/validate_addon.py', *packages)
-        self.assertEqual(output.count('VALID community.'), 4)
+        self.assertEqual(output.count('VALID community.'), 5)
+        for name in ('game_extensions.py', 'mounts_activation.py', 'mounts_client.py'):
+            self.assertTrue((project / 'src/metin2_studio/addons' / name).is_file())
+        self.assertTrue((project / 'src/metin2_studio/apply_workflow.py').is_file())
         self.assertTrue((project / 'scripts/windows/Launch-Studio.ps1').is_file())
         self.assertFalse((project / 'data').exists())

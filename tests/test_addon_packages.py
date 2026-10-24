@@ -82,6 +82,24 @@ class PackageTests(unittest.TestCase):
             with self.subTest(requires=requires), self.assertRaises(PackageError):
                 validate_manifest(value)
 
+    def test_game_extension_allows_only_supported_adapter_and_resource_targets(self):
+        package = Path(__file__).resolve().parents[1] / 'src/metin2_studio/addons/catalog/community.legacy-mount-support'
+        value = load_package(package).manifest
+        self.assertEqual(validate_manifest(value)['kind'], 'game-extension')
+        for key, replacement in (('entry', 'arbitrary-installer'), ('id', 'demo.custom-extension')):
+            changed = dict(value, **{key: replacement})
+            with self.subTest(key=key), self.assertRaisesRegex(PackageError, 'adapter'):
+                validate_manifest(changed)
+        for target in ('bin/game', 'pack/root.data', 'install.py', 'client/fixes.json'):
+            changed = dict(value, files=[dict(row, target=target) if index == 0 else row
+                                        for index, row in enumerate(value['files'])])
+            with self.subTest(target=target), self.assertRaisesRegex(PackageError, 'resource'):
+                validate_manifest(changed)
+        with self.assertRaisesRegex(PackageError, 'template'):
+            validate_manifest(dict(value, files=value['files'][:1]))
+        with self.assertRaisesRegex(PackageError, 'dependencies'):
+            validate_manifest(dict(value, requires=['demo.base']))
+
     def test_common_namespace_rejects_executable_content(self):
         content = b"import os\n"
         (self.package / "payload" / "__init__.py").write_bytes(content)

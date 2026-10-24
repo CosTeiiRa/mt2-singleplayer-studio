@@ -111,11 +111,20 @@ class Studio:
         interrupted = self.workspace.interrupt_deployments()
         if interrupted:
             self.job = interrupted
+        else:
+            operation = self.workspace.preference('lastApplyOperation', {})
+            if operation:
+                if operation.get('status') == 'running':
+                    operation.update(status='interrupted', finished=time.time())
+                    operation.setdefault('lines', []).append('Studio closed before the add-on result was verified. Check installed add-ons before retrying.')
+                    self.workspace.set_preference('lastApplyOperation', operation)
+                self.job = operation
         retire_collection(self.workspace)
         from metin2_studio.native_crafting import NativeCrafting
         self.native_crafting = NativeCrafting(self)
         self.updates = ProtectedUpdates(self)
         self._addons = None
+        self._apply_workflow = None
 
     @contextmanager
     def mutation_request(self):
@@ -147,6 +156,14 @@ class Studio:
                     or network and network.get('status') in ('queued', 'running')):
                 raise ValueError('Studio is busy saving, applying or updating. Wait for the operation to finish, or cancel its download and wait, before stopping Studio. The game has not been stopped by this request.')
             self._stopping = True
+
+    @property
+    def apply_workflow(self):
+        with self.lock:
+            if getattr(self, '_apply_workflow', None) is None:
+                from metin2_studio.apply_workflow import ApplyWorkflow
+                self._apply_workflow = ApplyWorkflow(self)
+            return self._apply_workflow
 
     @property
     def addons(self):
@@ -822,14 +839,14 @@ class Studio:
             return {'ready': True, 'external': True}
         return {}
 
-    def apply(self, validate_only=False, acknowledge_interrupted=None):
+    def apply(self, validate_only=False, acknowledge_interrupted=None, addon_plan_id=None):
         context = ACTIVE_CHANGESET.set(None)
         try:
-            return self._apply_saved(validate_only, acknowledge_interrupted)
+            return self._apply_saved(validate_only, acknowledge_interrupted, addon_plan_id)
         finally:
             ACTIVE_CHANGESET.reset(context)
 
-    def _apply_saved(self, validate_only=False, acknowledge_interrupted=None):
+    def _apply_saved(self, validate_only=False, acknowledge_interrupted=None, addon_plan_id=None):
         with self.lock:
             self.require_running()
             self.save_recovery.require_clear()
@@ -842,6 +859,8 @@ class Studio:
                     raise ValueError('Inspect the game launcher and previous build commands, then acknowledge the interrupted deployment in Apply before retrying.')
             if self.server_busy():
                 raise ValueError("An apply is already running.")
+            if self.updates.job.get('status') == 'running':
+                raise ValueError('Wait for the game package update to finish before applying.')
             if self.workspace.scan(include_deferred=False)['affectedFiles']:
                 raise ValueError('Review the affected custom changes in Update protection before applying.')
             pending = self.native_pending()
@@ -854,12 +873,14 @@ class Studio:
             if not self.docker_status()["available"]:
                 raise ValueError("Start Docker Desktop first, wait for Engine running, then apply again.")
             self.job = {"status": "running", "kind": 'validation' if validate_only else 'apply', "lines": ["Building and compiling without a game restart." if validate_only else "Building game files and compiling quests. The game will restart after a successful build."], "started": time.time(), 'id': secrets.token_hex(12), 'files': self.build_fingerprints()}
+            if addon_plan_id:
+                self.job.update(kind='combined', addons={'status': 'pending'})
             self.workspace.deployment(self.job['id'], 'running', {'kind': self.job['kind'], 'files': self.job['files']})
-            self._apply_thread = threading.Thread(target=self.run_apply, args=(validate_only,), daemon=False)
+            self._apply_thread = threading.Thread(target=self.run_apply, args=(validate_only, addon_plan_id) if addon_plan_id else (validate_only,), daemon=False)
             self._apply_thread.start()
         return self.job
 
-    def run_apply(self, validate_only=False):
+    def run_apply(self, validate_only=False, addon_plan_id=None):
         job = self.job
         commands = [["docker", "compose", "build", "game"], ["docker", "compose", "up", "-d", "--wait", "--wait-timeout", "120", "mariadb"], ["docker", "compose", "stop", "game"], ["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", "playerbot-migrate"], ["docker", "compose", "wait", "playerbot-migrate"], ["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", "game"]]
         native_pending = {}
@@ -951,8 +972,17 @@ class Studio:
             job["lines"].append(str(e))
         finally:
             deployment_progress.finish(job)
+            if addon_plan_id:
+                job['serverStatus'] = job['status']
             if job.get('id'):
                 self.workspace.deployment(job['id'], job['status'], {'kind': job.get('kind'), 'files': job.get('files', {}), 'lines': job['lines'][-80:], 'health': job.get('health'), 'runtime': job.get('runtime'), 'progress': job.get('progress')})
+                self.apply_workflow.record(job)
+        if addon_plan_id:
+            if job['status'] == 'succeeded':
+                self.apply_workflow.apply_addons(job, addon_plan_id)
+            else:
+                job['addons'] = {'status': 'pending'}
+                job['lines'].append('Add-ons were not applied. Resolve the server operation, then review again.')
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1208,6 +1238,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(s.save_recovery.preview(b['id']))
             if path == '/api/validate':
                 return self.send(s.apply(validate_only=True))
+            if path == '/api/apply/review':
+                ACTIVE_CHANGESET.set(None)
+                return self.send(s.apply_workflow.review(b.get('addonPlanId'), b.get('addonIds'), b.get('reviewId')))
+            if path == '/api/apply' and b.get('reviewId'):
+                ACTIVE_CHANGESET.set(None)
+                return self.send(s.apply_workflow.start(b))
             if path == '/api/preview/bulk-drops':
                 return self.send(bulk_drop_plan(s, b))
             if path == '/api/preview/table':

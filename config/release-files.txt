@@ -210,3 +210,15 @@ tests/test_game_dashboard.py
 tests/test_database.py
 tests/game_dashboard.test.js
 src/metin2_studio/game_maps.py
+src/metin2_studio/apply_workflow.py
+src/metin2_studio/addons/game_extensions.py
+src/metin2_studio/addons/mounts_activation.py
+src/metin2_studio/addons/mounts_client.py
+src/metin2_studio/addons/profiles/tieru-2.0.125.json
+tests/test_apply_workflow.py
+tests/test_game_extensions.py
+tests/test_mounts_activation.py
+tests/test_mounts_client.py
+src/metin2_studio/addons/catalog/community.legacy-mount-support/addon.json
+src/metin2_studio/addons/catalog/community.legacy-mount-support/payload/server/mounts.json
+src/metin2_studio/addons/catalog/community.legacy-mount-support/payload/server/mounts_legacy.quest.in

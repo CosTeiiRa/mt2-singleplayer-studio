@@ -90,7 +90,7 @@ class Manager:
     def __init__(self, state_dir: str | Path, catalog_dir: str | Path, backend_factory, catalog_provider=None):
         self.state_dir = Path(state_dir).resolve()
         self.catalog_dir = Path(catalog_dir).resolve()
-        self.catalog_provider = catalog_provider or (lambda: discover_packages(self.catalog_dir))
+        self.catalog_provider = catalog_provider or self._client_packages
         self.backend_factory = backend_factory
         self._lock = threading.RLock()
         self._backend = None
@@ -104,6 +104,11 @@ class Manager:
                 self._select(connection["path"])
             except Exception as exc:
                 self._connection_error = "Previous installation could not be opened: %s" % exc
+
+    def _client_packages(self):
+        packages, errors = discover_packages(self.catalog_dir)
+        return {ident: package for ident, package in packages.items()
+                if package.manifest['kind'] == 'client-python'}, errors
 
     def _select(self, path: str | Path) -> None:
         backend = self.backend_factory(str(Path(path).resolve()))
@@ -136,6 +141,10 @@ class Manager:
                                           "baseline_physical": None, "logical_hashes": None, "physical_hashes": None})
         if state.get("schema_version") != 1 or not isinstance(state.get("installed"), dict):
             raise ValueError("Unsupported or corrupt installation state; preserve the Hub state directory for recovery.")
+        deferred = state.setdefault('deferred_addon_ids', [])
+        if (not isinstance(deferred, list) or any(not isinstance(ident, str) or ident not in state['installed'] for ident in deferred)
+                or len(set(deferred)) != len(deferred)):
+            raise ValueError('Unsupported or corrupt pending add-on state; preserve the Hub state directory for recovery.')
         return state
 
     def _invalidate(self) -> None:
@@ -191,6 +200,7 @@ class Manager:
             public_installed = self._installed_public(installed, installation)
             for item in public_installed:
                 item['integrity'] = integrity['addons'].get(item['id'], {})
+                item['reapply_pending'] = item['integrity'].get('status') == 'missing'
             return {"version": VERSION, "installation": installation,
                     "reference": copy.deepcopy(stored.get('reference')) if self._backend is not None else None,
                     "installed": public_installed, "integrity": integrity,
@@ -489,7 +499,7 @@ class Manager:
         """Inspect current bytes independently of saved enabled/installed preferences."""
         result = {'status': 'healthy', 'message': 'Installed add-on files match the last successful apply.',
                   'repair_available': False, 'repair_action': None, 'addons': {},
-                  'missing_files': [], 'changed_files': []}
+                  'missing_files': [], 'changed_files': [], 'pending_addon_ids': []}
         installed = stored['installed']
         if not installed:
             result.update(status='empty', message='No add-ons are installed on this client.')
@@ -524,6 +534,10 @@ class Manager:
             except (ValueError, OSError) as error:
                 result.update(status='unavailable', message='Client packs could not be verified. Repair or finish updating the game client, then check again.',
                               detail=str(error))
+        deferred = set(stored.get('deferred_addon_ids', []))
+        if deferred and result['status'] == 'healthy':
+            result.update(status='missing', repair_available=True, repair_action='reapply',
+                          message='%d saved add-ons are still waiting to be applied. Their settings are retained.' % len(deferred))
         payloads = {name for record in installed.values() for name in record['file_hashes']}
         shared = {name for name, value in (expected or {}).items()
                   if value != (stored.get('baseline') or {}).get(name) and name not in payloads}
@@ -533,7 +547,10 @@ class Manager:
             required = set(record['file_hashes']) | shared
             absent, modified = sorted(required & missing), sorted(required & changed)
             status = result['status'] if result['status'] in ('unavailable', 'unverified') else 'missing' if absent or modified and result['status'] == 'missing' else 'changed' if modified else 'healthy'
+            if addon_id in deferred and result['status'] not in ('unavailable', 'unverified'):
+                status = 'missing'
             result['addons'][addon_id] = {'status': status, 'missing_files': absent, 'changed_files': modified}
+        result['pending_addon_ids'] = sorted(ident for ident, item in result['addons'].items() if item['status'] == 'missing')
         return result
 
     def plan_batch(self, addon_ids: list[str]) -> dict:
@@ -552,9 +569,12 @@ class Manager:
                 raise ValueError("Unsupported action: %s" % action)
             if not isinstance(addon_id, str):
                 raise ValueError("addon_id must be a string.")
+            if addon_ids is not None and action not in ("batch", "reapply", "repair"):
+                raise ValueError("Multiple add-on selections are only supported for batch install or reapply.")
             packages, errors = self.catalog_provider()
             stored = self._stored()
             desired = copy.deepcopy(stored["installed"])
+            deferred = set(stored.get("deferred_addon_ids", []))
             new_packages: dict[str, Package] = {}
             batch = []
             if action == 'batch':
@@ -612,13 +632,34 @@ class Manager:
             logical = _snapshot(backend.snapshot(), "snapshot")
             physical = _snapshot(backend.physical_snapshot(), "physical_snapshot")
             game_update = self._game_update(stored, logical, physical)
-            if action == 'reapply' and not game_update:
+            if action == 'reapply' and not game_update and not stored.get('deferred_addon_ids'):
                 raise ValueError('No clean game-client update is awaiting an add-on review.')
-            if action == 'repair' and (game_update or not self._repairable(stored, logical)):
+            if action == 'repair' and (game_update or not (self._repairable(stored, logical) or stored.get('deferred_addon_ids') and not self._drift(stored, logical, physical))):
                 raise ValueError('This client needs a fresh installation check. Only missing owned add-on files and reverted loading hooks can be repaired here.')
+            if game_update:
+                # A new clean game baseline contains none of the saved add-ons.
+                deferred = set(desired)
+            elif self._repairable(stored, logical):
+                deferred.update(ident for ident, item in self._integrity(stored)['addons'].items() if item['status'] == 'missing')
+            if action in ('reapply', 'repair'):
+                selection = addon_ids if addon_ids is not None else sorted(deferred or desired)
+                if (not isinstance(selection, list) or not 1 <= len(selection) <= 100
+                        or any(not isinstance(ident, str) or ident not in desired for ident in selection)
+                        or len(set(selection)) != len(selection)):
+                    raise ValueError('Select between 1 and 100 distinct saved add-ons to reapply.')
+                deferred.difference_update(selection)
+            elif action == 'batch':
+                selection = addon_ids
+                deferred.difference_update(selection)
+            else:
+                selection = [addon_id]
+                if action != 'disable':
+                    deferred.discard(addon_id)
+            deferred.intersection_update(desired)
+            active_desired = {ident: record for ident, record in desired.items() if ident not in deferred}
             baseline = dict(logical) if game_update else self._baseline(stored, logical)
             profile = backend.profile()
-            conflicts, warnings = self._desired_valid(desired, profile)
+            conflicts, warnings = self._desired_valid(active_desired, profile)
             if game_update:
                 warnings.append(game_update['message'])
             elif action != 'repair' and not (action == 'batch' and self._repairable(stored, logical)):
@@ -628,7 +669,7 @@ class Manager:
             blockers = getattr(backend, 'mutation_blockers', None)
             if profile.get('writable') and callable(blockers):
                 conflicts.extend(blockers())
-            composed, ownership_conflicts = self._compose(baseline, desired, new_packages)
+            composed, ownership_conflicts = self._compose(baseline, active_desired, new_packages)
             conflicts.extend(ownership_conflicts)
             preview = getattr(backend, "preview", None)
             reviewed_files = _snapshot(preview(dict(composed)), "snapshot") if callable(preview) else composed
@@ -652,7 +693,8 @@ class Manager:
                 raise ValueError('The selected add-ons already match this client. There are no installation changes to apply.')
             public = {"id": uuid.uuid4().hex, "action": action, "addon_id": addon_id, "changes": changes,
                       "reference": copy.deepcopy(getattr(backend, 'reference_metadata', None)),
-                      "game_update": game_update,
+                      "game_update": game_update, "selected_addon_ids": list(selection),
+                      "deferred_addon_ids": sorted(deferred),
                       "warnings": sorted(set(warnings)), "conflicts": sorted(set(conflicts)),
                       "can_apply": not conflicts, "summary": ('Reinstall add-ons: %d logical file changes' % len(changes)) if action == 'repair' else ('Reapply add-ons to the updated game: %d logical file changes' % len(changes)) if action == 'reapply' else "%s %s: %d logical file changes" % (action.capitalize(), addon_id, len(changes)),
                       "installed": self._installed_public(desired, profile), "desired_state": self._installed_public(desired, profile),
@@ -660,7 +702,8 @@ class Manager:
                       "created_at": _now(), "physical_changes": "Pack files are built and validated in staging during apply."}
             if action == 'batch':
                 public.update(batch=batch, summary='Install/update %d selected add-ons together: %d logical file changes' % (len(batch), len(changes)))
-            self._pending = {"public": public, "desired": desired, "new_packages": new_packages,
+            self._pending = {"public": public, "desired": desired, "active_desired": active_desired,
+                             "deferred_addon_ids": sorted(deferred), "new_packages": new_packages,
                              "baseline": baseline, "composed": composed, "generation": self._generation,
                              "reviewed_logical_hashes": _hashes(reviewed_files) if callable(preview) else None,
                              "logical_hashes": _hashes(logical), "physical_hashes": _hashes(physical),
@@ -706,7 +749,8 @@ class Manager:
                     events.append({"action": "diagnostic", "status": "warning", "message": "An incomplete activity-log entry was ignored."})
             return list(reversed(events[-200:]))
 
-    def apply(self, plan_id: str) -> dict:
+    def check_plan(self, plan_id: str):
+        """Recheck a review without staging or changing client files."""
         with self._lock:
             backend = self._require()
             if self._journal_path.exists():
@@ -722,7 +766,7 @@ class Manager:
             if self._compatibility_target(profile) != plan['compatibility_target']:
                 self._invalidate()
                 raise ValueError('Game/client version or profile changed since review. Review the current compatibility information again.')
-            compatibility_conflicts, _ = self._desired_valid(plan["desired"], profile)
+            compatibility_conflicts, _ = self._desired_valid(plan.get("active_desired", plan["desired"]), profile)
             if compatibility_conflicts:
                 self._invalidate()
                 raise ValueError("Compatibility changed after review: %s" % "; ".join(compatibility_conflicts))
@@ -744,6 +788,12 @@ class Manager:
                 if not callable(preview) or _hashes(_snapshot(preview(dict(plan["composed"])), "snapshot")) != plan["reviewed_logical_hashes"]:
                     self._invalidate()
                     raise ValueError("Generated framework or source data changed after review. Create a new plan.")
+            return backend, stored, logical, physical
+
+    def apply(self, plan_id: str) -> dict:
+        with self._lock:
+            backend, stored, logical, physical = self.check_plan(plan_id)
+            plan = self._pending
             transaction_id = uuid.uuid4().hex
             transaction_dir = self._target_dir / "transactions" / transaction_id
             staging = transaction_dir / "staging"
@@ -755,7 +805,7 @@ class Manager:
                 original_physical = {name: self._read_object(digest) for name, digest in baseline_physical.items()}
             else:
                 original_physical = None
-            if not plan['desired'] and original_physical is not None:
+            if not plan.get('active_desired', plan['desired']) and original_physical is not None:
                 outputs = dict(original_physical)
             else:
                 outputs = _snapshot(backend.prepare(dict(plan["composed"]), staging), "prepare")
@@ -816,7 +866,8 @@ class Manager:
                 observed_logical = _snapshot(backend.snapshot(), "snapshot")
                 if plan.get("reviewed_logical_hashes") is not None and _hashes(observed_logical) != plan["reviewed_logical_hashes"]:
                     raise ValueError("Installed logical files do not match the reviewed generated preview.")
-                new_state = {"schema_version": 1, "installed": plan["desired"], "baseline": baseline_hashes,
+                new_state = {"schema_version": 1, "installed": plan["desired"],
+                             "deferred_addon_ids": plan.get("deferred_addon_ids", []), "baseline": baseline_hashes,
                              "baseline_physical": baseline_physical,
                              "reference": copy.deepcopy(plan['public'].get('reference')),
                              "logical_hashes": _hashes(observed_logical), "physical_hashes": _hashes(outputs),

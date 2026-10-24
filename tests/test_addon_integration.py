@@ -115,6 +115,94 @@ class AddonIntegrationTests(unittest.TestCase):
         self.assertFalse(self.service.state()['sandbox_targets'])
         self.assertTrue(self.service.manager._stored()['baseline_physical'])
 
+    def test_extension_is_catalogued_separately_and_cannot_enter_client_pack_batches(self):
+        self.supported_client()
+        self.studio.game = self.studio.root / 'linux-port/docker/game'
+        catalog = self.service.get('catalog', {})['catalog']['items']
+        mount = next(row for row in catalog if row['id'] == 'community.legacy-mount-support')
+        self.assertEqual(mount['kind'], 'game-extension')
+        self.assertFalse(any(row['kind'] == 'game-extension' for row in self.service.manager.catalog()['items']))
+        with self.assertRaisesRegex(ValueError, 'separately'):
+            self.service.post('plan/batch', {'addon_ids': ['community.boss-atlas', mount['id']]})
+        review = self.service.post('plan', {'addon_id': mount['id']})['plan']
+        self.assertEqual(review['kind'], 'game-extension')
+        self.assertFalse(review['can_apply'])  # synthetic world has no supported engine/gamedata
+        self.assertTrue(review['conflicts'])
+        self.assertFalse(self.service.extensions.state_path.exists())
+
+    def test_combined_review_reapplies_real_packs_over_updated_baseline(self):
+        self.supported_client()
+        self.apply('community.boss-atlas')
+        self.apply('community.boss-atlas', 'configure', settings={'show_metins': True})
+        # A clean replacement models the launcher overwriting managed packs.
+        backend = self.service.manager._require()
+        updated = backend.pack().build({'uiminimap.py': b'class AtlasWindow(object):\n def OnUpdate(self): pass\n def SetMapName(self, mapName): pass\n def Destroy(self): pass\n# Updated game baseline\n'})
+        for name, raw in zip(('root.index', 'root.data'), updated):
+            (self.client / 'pack' / name).write_bytes(raw)
+        self.studio.build_fingerprints = lambda: {}
+        self.studio.native_pending = lambda: {}
+        self.studio.native_crafting = SimpleNamespace(config=lambda: {'recipes': {}}, pending=lambda: False)
+        preferences = {}
+        self.studio.workspace = SimpleNamespace(summary=lambda: {'pending': [], 'drafts': []}, signature=lambda: 'fixture',
+            set_preference=lambda key, value: preferences.update({key: value}))
+        self.studio.save_recovery = SimpleNamespace(require_clear=lambda: None)
+        workflow = self.studio.apply_workflow
+        review = workflow.review()
+        self.assertFalse(review['server'])
+        self.assertEqual(review['addons']['action'], 'reapply')
+        job = workflow.start({'reviewId': review['id']})
+        self.studio._apply_thread.join(10)
+        self.assertFalse(self.studio._apply_thread.is_alive())
+        self.assertEqual(job['status'], 'succeeded', job['lines'])
+        state = self.service.state()
+        self.assertEqual(state['integrity']['status'], 'healthy')
+        self.assertTrue(state['installed'][0]['settings']['show_metins'])
+        self.apply('community.boss-atlas', 'remove')
+        for name, raw in zip(('root.index', 'root.data'), updated):
+            self.assertEqual((self.client / 'pack' / name).read_bytes(), raw)
+
+    def test_shared_review_reapplies_selected_real_addons_and_retains_skipped_preferences(self):
+        self.supported_client()
+        self.apply('community.boss-atlas')
+        self.apply('community.map-legend')
+        self.apply('community.boss-atlas', 'configure', settings={'show_metins': True})
+        backend = self.service.manager._require()
+        updated = backend.pack().build({'uiminimap.py': b'class AtlasWindow(object):\n def OnUpdate(self): pass\n def SetMapName(self, mapName): pass\n def Destroy(self): pass\n# New game version\n'})
+        for name, raw in zip(('root.index', 'root.data'), updated):
+            (self.client / 'pack' / name).write_bytes(raw)
+        self.studio.build_fingerprints = lambda: {}
+        self.studio.native_pending = lambda: {}
+        self.studio.native_crafting = SimpleNamespace(config=lambda: {'recipes': {}}, pending=lambda: False)
+        self.studio.workspace = SimpleNamespace(summary=lambda: {'pending': [], 'drafts': []}, signature=lambda: 'fixture',
+                                               set_preference=lambda key, value: None)
+        self.studio.save_recovery = SimpleNamespace(require_clear=lambda: None)
+        workflow = self.studio.apply_workflow
+        initial = workflow.review()
+        self.assertEqual(len(initial['selectableAddons']), 2)
+        selected = workflow.review(addon_ids=['community.boss-atlas'], review_id=initial['id'])
+        job = workflow.start({'reviewId': selected['id']})
+        self.studio._apply_thread.join(10)
+        self.assertFalse(self.studio._apply_thread.is_alive())
+        self.assertEqual(job['status'], 'succeeded', job['lines'])
+        state = self.service.state()
+        records = {row['id']: row for row in state['installed']}
+        self.assertEqual(state['integrity']['pending_addon_ids'], ['community.map-legend'])
+        self.assertEqual(records['community.boss-atlas']['integrity']['status'], 'healthy')
+        self.assertTrue(records['community.boss-atlas']['settings']['show_metins'])
+        config = {}
+        exec(backend.snapshot()['m2hub_config.py'], config)
+        self.assertEqual([row['id'] for row in config['INSTALLED_ADDONS']], ['community.boss-atlas'])
+        remaining = workflow.review()
+        self.assertEqual(remaining['selectedAddonIds'], ['community.map-legend'])
+        job = workflow.start({'reviewId': remaining['id']})
+        self.studio._apply_thread.join(10)
+        self.assertEqual(job['status'], 'succeeded', job['lines'])
+        self.assertEqual(self.service.state()['integrity']['status'], 'healthy')
+        self.apply('community.boss-atlas', 'remove')
+        self.apply('community.map-legend', 'remove')
+        for name, raw in zip(('root.index', 'root.data'), updated):
+            self.assertEqual((self.client / 'pack' / name).read_bytes(), raw)
+
     def test_running_normal_client_blocks_review_and_apply_without_writes(self):
         running = self.supported_client()
         running.return_value = True
@@ -323,7 +411,7 @@ class AddonIntegrationTests(unittest.TestCase):
             world_map = self.service.get('map', {'map': '64'})['map']
             self.assertEqual(world_map['regions'][0]['drop_target_id'], '691')
             self.assertEqual(world_map['regions'][0]['source'], 'linux-port/docker/game/share/locale/poland/map/map_n_threeway/boss.txt')
-            self.assertEqual(len(self.service.get('catalog', {})['catalog']['items']), 4)
+        self.assertEqual(len(self.service.get('catalog', {})['catalog']['items']), 5)
 
     def test_addon_mutation_is_blocked_during_server_deployment(self):
         self.studio.job['status'] = 'running'
@@ -542,7 +630,7 @@ class AddonIntegrationTests(unittest.TestCase):
                 with urllib.request.urlopen(base + '/' + script, timeout=10) as response:
                     self.assertIn('javascript', response.headers['Content-Type'])
                     self.assertTrue(response.read())
-            self.assertEqual(request('/api/addons/catalog')['catalog']['count'], 4)
+                self.assertEqual(request('/api/addons/catalog')['catalog']['count'], 5)
             with self.assertRaises(urllib.error.HTTPError):
                 request('/api/addons/sandbox', {}, {'X-Hub-Token': self.studio.token})
             result = request('/api/addons/sandbox', {}, {'X-Studio-Token': self.studio.token})

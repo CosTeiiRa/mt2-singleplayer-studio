@@ -92,7 +92,7 @@ class RepositoryJobTests(unittest.TestCase):
         self.assertTrue(self.studio.lock.acquire(timeout=.2))
         self.studio.lock.release()
         self.assertFalse(self.service.get('repositories', {})['repositories'])
-        self.assertEqual(len(self.service.get('catalog', {})['catalog']['items']), 4)
+        self.assertEqual(len(self.service.get('catalog', {})['catalog']['items']), 5)
         self.assertEqual(self.service.get('state', {})['state']['network_job']['status'], 'running')
         for route, data in [('connect', {'path': 'unused'}), ('jobs/start', {'operation': 'repositories/add', 'data': {'url': URL}}), ('repositories/remove', {'repository_id': 'unused'})]:
             with self.assertRaisesRegex(ValueError, 'job is running'):

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {escapeHtml,descriptionSummary,descriptionMarkup,unwrap,filterCatalog,installedRecord,addonStatus,compatibilityStatus,formatTime,changeRows,mapRegions,mapBounds,respawnLabel,sourceLabel,booleanSettings,settingFields,parseSettingValue} from '../web/addon_helpers.mjs';
+import {escapeHtml,descriptionSummary,descriptionMarkup,unwrap,filterCatalog,installedRecord,addonStatus,compatibilityStatus,formatTime,changeRows,mapRegions,mapBounds,respawnLabel,sourceLabel,booleanSettings,settingFields,parseSettingValue,componentRows} from '../web/addon_helpers.mjs';
 
 test('sectioned descriptions show headings and lists while cards keep a short summary',()=>{
   const description='## What it does\n\nFind useful items.\n\n## How to use\n\n1. Open the game.\n2. Click the button.\n\n## Shortcuts\n\n- Ctrl+U: toggle.';
@@ -73,19 +73,28 @@ test('file integrity takes precedence over saved enabled preferences',()=>{
   assert.equal(addonStatus({id:item.id},[{id:item.id,enabled:true}]).label,'Files not checked');
 });
 
+test('extension components distinguish game-provided activation from pending client fixes',()=>{
+  const rows=componentRows({activation:{status:'provided'},'client-data':{status:'needs-reapply',message:'Update replaced the pack.'}});
+  assert.deepEqual(rows.map(row=>[row.name,row.label]),[['Mount activation','Provided by game'],['Client-data fixes','Needs reapply']]);
+  const item={id:'community.legacy-mount-support',kind:'game-extension'};
+  assert.equal(addonStatus(item,[{id:item.id,integrity:{status:'missing'}}]).label,'Needs reapply');
+  assert.equal(componentRows([null,{id:'activation',status:'ready'}]).length,1);
+});
+
 test('the main Studio notice checks local files and clears after a successful reinstall',async()=>{
   const source=fs.readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
   const notice={hidden:true,innerHTML:''},requests=[];
-  let response={state:{integrity:{status:'missing',repair_available:true,message:'Missing <file>'}}},fail=false;
-  const context={$:()=>notice,document:{hidden:false},esc:escapeHtml,api:async path=>{requests.push(path);if(fail)throw Error('offline');return response;}};
+  let response={state:{installed:[{id:'example'}],integrity:{status:'missing',repair_available:true,message:'Missing <file>'}}},fail=false;
+  const nodes=new Map([['#addon-installation-notice',notice]]);
+  const context={ApplyUI:{},refreshApplyControl:()=>{},$:key=>{if(!nodes.has(key))nodes.set(key,{});return nodes.get(key);},document:{hidden:false},esc:escapeHtml,api:async path=>{requests.push(path);if(fail)throw Error('offline');return response;}};
   vm.createContext(context);
   vm.runInContext(source.slice(source.indexOf('let addonNoticeBusy='),source.indexOf('async function updateStatus(')),context);
   await context.refreshAddonNotice(true);
   assert.equal(notice.hidden,false);
-  assert.match(notice.innerHTML,/Add-ons need reinstalling/);
+  assert.match(notice.innerHTML,/1 add-on needs to be applied again/);
   assert.match(notice.innerHTML,/Missing &lt;file&gt;/);
-  assert.match(notice.innerHTML,/href="#installed">Review reinstall/);
-  response={state:{integrity:{status:'healthy'}}};
+  assert.match(notice.innerHTML,/Review &amp; apply together/);
+  response={state:{installed:[{id:'example'}],integrity:{status:'healthy'}}};
   await context.refreshAddonNotice(true);
   assert.equal(notice.hidden,true);
   fail=true;await context.refreshAddonNotice(true);

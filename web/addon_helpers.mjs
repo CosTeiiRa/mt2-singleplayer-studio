@@ -48,12 +48,31 @@ export function installedRecord(item, installed = []) {
   return asArray(installed).find(record => record.id === item.id || record.addon_id === item.id) || (item.installed && typeof item.installed === 'object' ? item.installed : item.installed ? {id: item.id, enabled: item.enabled !== false, version: item.version} : null);
 }
 
+export function isGameExtension(item) {
+  return item?.kind === 'game-extension';
+}
+
+export function componentRows(value) {
+  const labels={activation:'Mount activation','client-data':'Client-data fixes',client_fixes:'Client-data fixes',combat:'Mounted combat'};
+  const states={provided:['Provided by game','success'],'already-provided':['Provided by game','success'],
+    'game-provided':['Provided by game','success'],game_provided:['Provided by game','success'],already_present:['Provided by game','success'],
+    installed:['Installed','success'],healthy:['Verified','success'],active:['Active','success'],
+    ready:['Ready to apply','muted'],needed:['Ready to apply','muted'],'changes-needed':['Ready to apply','muted'],
+    missing:['Needs reapply','copper'],reapply:['Needs reapply','copper'],'needs-reapply':['Needs reapply','copper'],
+    unavailable:['Unavailable','danger'],unsupported:['Unsupported','danger'],conflict:['Needs attention','danger'],blocked:['Blocked','danger'],
+    disabled:['Disabled','muted'],cleanup:['Cleanup on removal','copper']};
+  return asArray(value).filter(row=>row&&typeof row==='object').map(row=>{
+    const state=states[row.status]??[row.status?humanize(row.status):'Checked during review','muted'];
+    return {...row,name:row.name??labels[row.id]??humanize(row.id??'Component'),label:state[0],tone:state[1]};
+  });
+}
+
 export function addonStatus(item, installed) {
   const record = installedRecord(item, installed);
   if (item.error || item.valid === false || item.validation_errors?.length || item.status === 'invalid') return {label: 'Package issue', tone: 'danger'};
   if (record) {
     const integrity=record.integrity??item.integrity;
-    if(integrity?.status==='missing')return {label:'Needs reinstall',tone:'danger'};
+    if(integrity?.status==='missing')return {label:isGameExtension(record)||isGameExtension(item)?'Needs reapply':'Needs reinstall',tone:'danger'};
     if(integrity?.status==='changed')return {label:'Files changed',tone:'copper'};
     if(integrity?.status==='unavailable')return {label:'Cannot verify files',tone:'danger'};
     if(integrity?.status!=='healthy')return {label:'Files not checked',tone:'muted'};

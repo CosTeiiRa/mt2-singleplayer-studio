@@ -33,7 +33,9 @@ priority when updates and customisations conflict.
 - **Save:** write the reviewed configuration files with backups. A named change set holds edits in Studio until you publish that set. Saving does not restart the game; native crafting changes remain in a Studio-owned JSON configuration until Apply.
 - **Server Apply:** build the saved configuration, compile custom quests, run the required settings migration and recreate the game container. Native crafting customisations are written to MariaDB in a guarded transaction while the game is stopped. Unsaved drafts and unpublished change sets are excluded. Connected players disconnect when the game restarts.
 
-**Add-on workflow — Review → Apply:** validate the selected packages/settings,
+**Shared Apply review:** saved server files and client add-on plans appear on one screen. Either group or both can be selected. A combined operation verifies and records the server deployment before applying the reviewed client packs. Add-on failure retains that successful server receipt; stale source, pack or policy changes require another review. The worker continues if the browser closes, and its result is retained across Studio restarts.
+
+**Add-on transaction:** validate the selected packages/settings,
 compose them over the current game baseline, back up affected pack files, rebuild
 and verify the packs. Close the selected client first, then launch it normally
 afterwards. The server can stay running; unfinished transactions have a recovery

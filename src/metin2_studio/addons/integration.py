@@ -31,12 +31,31 @@ class AddonService:
         except (ValueError, OSError):
             self.warning = 'No sibling Klient root packs were found. The atlas and server editors remain available.'
         self.repositories = RepositoryStore(self.state_dir, PACKAGE / 'catalog')
-        self.manager = Manager(self.state_dir, PACKAGE / 'catalog', self._backend, catalog_provider=self.repositories.packages)
+        self.manager = Manager(self.state_dir, PACKAGE / 'catalog', self._backend, catalog_provider=self._client_packages)
+        from .game_extensions import GameExtensions
+        self.extensions = GameExtensions(self)
         self._review_tokens = {}
         self._reference_cache = None
         self.jobs = RepositoryJobs(self.state_dir / 'repository-jobs.json', self.repositories, self._finish_network_job)
         if not self.manager.state()['installation'] and self.source:
             self.manager.connect(self.source)
+
+    def _client_packages(self):
+        packages, errors = self.repositories.packages()
+        return {ident: package for ident, package in packages.items()
+                if package.manifest['kind'] == 'client-python'}, errors
+
+    def catalog(self):
+        catalog = self.manager.catalog()
+        packages, _ = self.repositories.packages()
+        catalog['items'] += self.extensions.catalog(packages)
+        catalog['count'] = len(catalog['items'])
+        return catalog
+
+    def _invalidate(self):
+        self.manager.catalog_changed()
+        self.extensions.invalidate()
+        self._review_tokens.clear()
 
     def _backend(self, path):
         backend = ClientAdapter(path, self.state_dir)
@@ -70,6 +89,20 @@ class AddonService:
     def state(self):
         from .client_pack import lzokay, np
         result = self.manager.state()
+        extension = self.extensions.state()
+        result['installed'] += extension['installed']
+        result['warnings'] += extension['warnings']
+        result['recovery'] = result.get('recovery') or extension['recovery']
+        if extension['pending_plan']:
+            result['pending_plan'] = extension['pending_plan']
+        integrity = result.get('integrity')
+        if integrity:
+            for item in extension['installed']:
+                integrity['addons'][item['id']] = item['integrity']
+                if item['reapply_pending']:
+                    integrity.setdefault('pending_addon_ids', []).append(item['id'])
+                    integrity.update(status='missing', repair_available=True, repair_action='reapply',
+                                     message='Saved add-ons need review after game files changed.')
         catalogue_revision = self.studio.catalogue_status().get('revision') if hasattr(self.studio, 'catalogue') else None
         if result.get('reference') and catalogue_revision:
             result['reference']['catalogue_current'] = result['reference'].get('catalogue_revision') == catalogue_revision
@@ -91,8 +124,7 @@ class AddonService:
             try:
                 self.jobs.finish(row, working, expected, result, error)
             finally:
-                self.manager.catalog_changed()
-                self._review_tokens.clear()
+                self._invalidate()
 
     def targets(self):
         import json
@@ -150,11 +182,43 @@ class AddonService:
         if self.studio.server_busy() or getattr(self.studio.updates, 'job', {}).get('status') == 'running':
             raise ValueError('Wait for the server build or package update to finish before changing add-ons.')
 
+    def check_review(self, plan_id, *, check_files=True):
+        """Shared preflight for standalone and combined Apply operations."""
+        with self.lock:
+            self.jobs.assert_idle()
+            if self._review_tokens.get(plan_id) != self.repositories.fingerprint():
+                raise ValueError('Repository policy changed or this review expired. Review a new installation plan.')
+            if check_files:
+                if plan_id.startswith('extension-'):
+                    self.extensions.check_plan(plan_id)
+                else:
+                    self.manager.check_plan(plan_id)
+
+    def apply_reviewed(self, plan_id):
+        # The combined worker already owns Studio's operation slot. Public POSTs
+        # still pass _check_idle; only this internal continuation bypasses it.
+        with self.lock:
+            self.check_review(plan_id, check_files=False)
+            return self.extensions.apply(plan_id) if plan_id.startswith('extension-') else self.manager.apply(plan_id)
+
+    def stage_reviewed(self, plan_id):
+        with self.lock:
+            self.check_review(plan_id)
+            if plan_id.startswith('extension-'):
+                return self.extensions.stage_server(plan_id)
+
+    def server_applied(self, plan_id):
+        with self.lock:
+            if plan_id.startswith('extension-'):
+                self.extensions.server_applied(plan_id)
+
     def import_archive(self, stream, length, filename):
         from .artifacts import MAX_ARCHIVE_BYTES
         with self.lock:
             self._check_idle()
             self.jobs.assert_idle()
+            if self.extensions.journal_path.exists() and route != 'recover':
+                raise ValueError('Recover the unfinished mount add-on transaction before changing add-ons.')
             if not 0 < length <= MAX_ARCHIVE_BYTES:
                 raise ValueError('Choose a nonempty add-on ZIP no larger than 66 MiB.')
             raw = bytearray()
@@ -166,8 +230,7 @@ class AddonService:
             try:
                 return self.repositories.import_archive(bytes(raw), filename)
             finally:
-                self.manager.catalog_changed()
-                self._review_tokens.clear()
+                self._invalidate()
 
     def world(self, fresh=False):
         # Always read the saved selected-world configuration, not an active draft.
@@ -196,17 +259,17 @@ class AddonService:
             if route == 'state':
                 return {'state': self.state()}
             if route == 'catalog':
-                catalog = self.manager.catalog()
+                catalog = self.catalog()
                 self.repositories.annotate(catalog['items'])
                 return {'catalog': catalog}
             if route == 'repositories':
                 return {'repositories': self.repositories.list()}
             if route == 'releases':
-                return {'releases': self.repositories.offers(self.manager.state()['installed'])}
+                return {'releases': self.repositories.offers(self.state()['installed'])}
             if route == 'updates':
-                installed = self.manager.state()['installed']
+                installed = self.state()['installed']
                 return {'policy': 'manual', 'updates': update_notices(installed, self.repositories.offers(installed),
-                                                                    self.manager.catalog()['items'])}
+                                                                    self.catalog()['items'])}
             if route == 'history':
                 import json
                 rows = []
@@ -216,6 +279,7 @@ class AddonService:
                         row['target_id'] = history.parent.name
                         rows.append(row)
                 legacy = self.studio.state / 'legacy-addon-history.json'
+                rows += self.extensions.stored().get('history', [])
                 if legacy.is_file():
                     recorded = json.loads(legacy.read_text('utf-8'))
                     if Path(recorded['server_root']).resolve() == self.studio.root.resolve():
@@ -239,11 +303,15 @@ class AddonService:
             self.jobs.assert_idle()
             if route == 'jobs/start':
                 job = self.jobs.start(data.get('operation'), data.get('data'))
-                self.manager.catalog_changed()
-                self._review_tokens.clear()
+                self._invalidate()
                 return {'job': job}
             if route == 'connect':
-                return {'state': self.manager.connect(data['path'])}
+                if self.extensions.journal_path.exists():
+                    raise ValueError('Recover the unfinished mount add-on transaction before changing targets.')
+                self.manager.connect(data['path'])
+                self.extensions.invalidate()
+                self._review_tokens.clear()
+                return {'state': self.state()}
             if route == 'sandbox':
                 if not self.source:
                     raise ValueError('This world has no sibling Klient packs to copy.')
@@ -260,23 +328,40 @@ class AddonService:
                     raise ValueError('Select between 1 and 100 add-ons for this batch.')
                 catalog = {item['id']: item for item in self.manager.catalog()['items'] if item.get('valid', True)}
                 for ident in ids:
+                    if ident == 'community.legacy-mount-support':
+                        raise ValueError('Review Legacy Mount Support separately because it also deploys server quests.')
                     item = catalog.get(ident, {})
                     action = 'update' if item.get('update_available') else 'reapply' if item.get('installed') else 'install'
                     self.repositories.policy_check(ident, action)
+                self.extensions.invalidate()
                 plan = self.manager.plan_batch(ids)
                 self._review_tokens = {plan['id']: self.repositories.fingerprint()}
                 return {'plan': plan}
             if route == 'plan':
-                self.repositories.policy_check(data['addon_id'], data.get('action', 'install'))
-                plan = self.manager.plan(data['addon_id'], data.get('action', 'install'), settings=data.get('settings'))
+                ids = data.get('addon_ids')
+                if ids is not None and data.get('action', 'install') not in ('reapply', 'repair'):
+                    raise ValueError('Multiple saved add-on selections require a reapply or repair plan.')
+                if ids is not None and (not isinstance(ids, list) or not 1 <= len(ids) <= 100
+                        or any(not isinstance(ident, str) for ident in ids)):
+                    raise ValueError('Select between 1 and 100 saved add-ons.')
+                for ident in ids or [data['addon_id']]:
+                    self.repositories.policy_check(ident, data.get('action', 'install'))
+                if data['addon_id'] == 'community.legacy-mount-support':
+                    if ids is not None and ids != [data['addon_id']]:
+                        raise ValueError('Review Legacy Mount Support separately from client add-ons.')
+                    self.manager.catalog_changed()
+                    plan = self.extensions.plan(data['addon_id'], data.get('action', 'install'))
+                else:
+                    if ids and 'community.legacy-mount-support' in ids:
+                        raise ValueError('Review Legacy Mount Support separately from client add-ons.')
+                    self.extensions.invalidate()
+                    plan = self.manager.plan(data['addon_id'], data.get('action', 'install'), settings=data.get('settings'), addon_ids=ids)
                 self._review_tokens = {plan['id']: self.repositories.fingerprint()}
                 return {'plan': plan}
             if route == 'apply':
                 if type(data.get('launch_client', False)) is not bool:
                     raise ValueError('Choose whether to open the game client after installation.')
-                if self._review_tokens.get(data['plan_id']) != self.repositories.fingerprint():
-                    raise ValueError('Repository policy changed or this review expired. Review a new installation plan.')
-                result = self.manager.apply(data['plan_id'])
+                result = self.apply_reviewed(data['plan_id'])
                 if data.get('launch_client'):
                     try:
                         result['client_launch'] = self.manager._require().launch_client()
@@ -284,14 +369,15 @@ class AddonService:
                         result['client_launch'] = {'status': 'failed', 'message': str(error)}
                 return result
             if route == 'recover':
+                if self.extensions.journal_path.exists():
+                    return self.extensions.recover()
                 return self.manager.recover()
             if route == 'releases/review':
                 try:
                     return {'review': self.repositories.review(data['repository_id'], data['addon_id'], data['version'])}
                 finally:
                     if any(row['id'] == data['repository_id'] and row['kind'] == 'github' for row in self.repositories.list()):
-                        self.manager.catalog_changed()
-                        self._review_tokens.clear()
+                        self._invalidate()
             if route.startswith('repositories/') or route in ('releases/download', 'packages/forget'):
                 try:
                     if route == 'repositories/add':
@@ -310,6 +396,5 @@ class AddonService:
                         raise ValueError('Unknown repository operation.')
                     return {'repositories': self.repositories.list()}
                 finally:
-                    self.manager.catalog_changed()
-                    self._review_tokens.clear()
+                    self._invalidate()
         raise ValueError('Unknown add-on endpoint.')

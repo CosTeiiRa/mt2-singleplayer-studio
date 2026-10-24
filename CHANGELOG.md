@@ -1,5 +1,30 @@
 # Changelog
 
+## beta-1.21.0
+
+- Add Legacy Mount Support to the catalog with coordinated server activation
+  and narrowly owned client-data fixes. Detect native fixes and unavailable
+  appearances; support reviewed reapply, disable and removal with crash recovery.
+  Mounted combat remains a separate option and is not included.
+- Explain disabled Apply buttons directly in the review, including required
+  server files for extensions.
+
+- Select individual add-ons, use Select all/Clear, and see Apply all or Apply
+  selected with the selected count. Skipped add-ons retain their settings and
+  reapply reminders; later installs preserve those choices.
+- Enable the exact client 2.0.125 executable after isolated native checks for all
+  four bundled add-ons, settings, shortcuts, widgets and exact pack restoration.
+
+- Use one Review & apply screen for saved server files and client add-ons, with
+  one progress view. Apply either group or both; add-on-only runs keep the server running.
+- Show a persistent reapply notice, add-on count and direct action after game updates
+  replace client packs. Reapply saved settings over the updated game baseline.
+- Add Save & apply from editor reviews and move build validation under Advanced.
+  Install game update files directly from their verified review, then continue to
+  the shared apply screen without a second package confirmation.
+- Preserve a verified server deployment when a later add-on step fails, and retain
+  operation results across Studio restarts.
+
 ## beta-1.20.0
 
 - Prepare a single beta release with cleaned Git author metadata, refreshed

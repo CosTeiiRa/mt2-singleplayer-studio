@@ -25,9 +25,59 @@ setup/start/reuse/stop and private-state retention passed on a disposable server
 fixture. This is historical evidence; the [current validation record](BETA_REVIEW.md#validation)
 records the latest checks and remaining acceptance work.
 
-### Client 2.0.114 evidence — 18 October 2026
+### Client 2.0.125 evidence — 24 October 2026
 
 The current recorded profile is
+[`src/metin2_studio/addons/profiles/tieru-2.0.125.json`](../src/metin2_studio/addons/profiles/tieru-2.0.125.json),
+observed with server **2.2.123**. Exact executable SHA-256, source-pack hashes and
+the native result digest are recorded there. Static artifact identity was
+observed by REA evidence `ev_517eeabc9a034c5cb84e3552e47abd9e3e12aacd0721bd58cde5fa9a210c5b55`;
+resource inspection alone does not establish runtime compatibility.
+
+An isolated copied client exited successfully after registering all four bundled
+add-ons and exercising native windows, Add-on Menu, Ctrl+U, Pocket Wiki navigation
+and deep links, shipped game/atlas hooks, and close/reopen lifecycle. Atlas checks
+constructed/disposed 12 Boss Atlas widgets and one Atlas Legend widget. Actual
+pack installs, settings, disable/enable and complete removal passed, with exact
+original copied-pack restoration. The live source executable and root packs were
+hash-verified unchanged throughout. Reports remain private under `data/` and
+`.test-tmp/`. No character login, server connection or interactive gameplay was
+performed; atlas geometry remains synthetic in the smoke harness.
+
+Partial-reapply fixtures separately verify individual selection, skipped settings
+and enabled preferences, pending-only reminders across restart, exact updated
+baseline restoration, dependencies and external-edit blocking.
+
+### Legacy Mount Support UI coverage — 24 October 2026
+
+JavaScript helper and DOM boundary
+fixtures cover separate activation/client-data statuses, game-provided activation,
+escaped component messages, individual extension reviews, and exclusion from the
+client-only install batch. Shared Apply fixtures require server selection when
+activation needs a build and check that a blocked Apply shows an actionable
+reason. A fallback-dialog fixture refuses a server-required apply outside the
+coordinated Studio flow. All 156 JavaScript tests passed after these UI changes.
+
+These are code and DOM-fixture checks. No new live game write, connected riding,
+seal-expiry, mounted combat or browser visual acceptance was performed for this
+extension. The client-profile smoke evidence above concerns the existing client
+interface add-ons and does not verify Legacy Mount Support gameplay.
+
+Activation and client-data fixtures cover exact engine/codec identities,
+native/upstream handler coexistence, unavailable assets, source adoption,
+absolute-expiry preservation, idempotent reapply and narrow inverse corrections.
+Coordinator fixtures cover server-before-client ordering, interrupted disable,
+pack-pair crashes, recovery conflicts, receipt-write failures and removal over a
+newer game baseline. Read-only inspection of the selected 2.2.123/2.0.125 files
+found 98 usable legacy seals, 15 refused for missing models, 21 untouched native
+seals and three needed client mappings; item 71128 already supplies the fixes.
+Both generated activation and cleanup quests compiled with the installed `qc`
+in a disposable network-disabled container. This was an isolated compile;
+no live deployment or game-server restart was performed.
+
+### Client 2.0.114 evidence — 18 October 2026
+
+The recorded profile for this earlier release is
 [`src/metin2_studio/addons/profiles/tieru-2.0.114.json`](../src/metin2_studio/addons/profiles/tieru-2.0.114.json),
 id **tieru-mt2009-client-2.0.114**, observed with server **2.2.110**. Its exact
 executable SHA-256 and observed source-pack fingerprints are recorded there.

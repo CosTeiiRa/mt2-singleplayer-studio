@@ -1,4 +1,4 @@
-# Beta readiness — beta-1.20.0
+# Beta readiness — beta-1.21.0
 
 An experimental beta for a small group using an existing working game. Start with
 5–10 testers, including a fresh installer and an independent add-on creator.
@@ -10,29 +10,32 @@ Fresh-machine setup and independent logged-in gameplay acceptance remain open.
 | --- | --- |
 | Host | Windows 10/11; primary local target is 64-bit Python 3.13 |
 | Base Studio | Python 3.10+ standard library; optional client-pack wheels need 64-bit Python 3.11+ |
-| Latest dashboard/catalogue observations | Server 2.2.111 / client 2.0.115 |
-| Recorded add-on adapter verification | Client 2.0.114 / server 2.2.110; exact executable identity and pack hooks are checked before writes |
+| Latest dashboard/catalogue observations | Server 2.2.123 / client 2.0.125 |
+| Recorded add-on adapter verification | Client 2.0.125 / server 2.2.123; exact executable identity and pack hooks are checked before writes; older recorded profiles remain available |
+| Legacy Mount Support | Inspected activation and narrow client-data corrections, isolated quest compilation and recovery fixtures; connected riding/expiry acceptance pending; combat excluded |
 | Ownership | One local owner; loopback only |
 | Human acceptance still pending | Fresh machine, independent logged-in gameplay, broader resolutions/languages, independent creator trial |
 
 Version observations are not guarantees for other distributions or updates.
 Publisher compatibility declarations remain separate from adapter/integrity
-checks. The [recorded client evidence](ADDON_TESTING.md#client-20114-evidence--18-october-2026)
+checks. The [recorded client evidence](ADDON_TESTING.md#client-20125-evidence--24-october-2026)
 covers isolated pack roundtrip, four-add-on coexistence, settings, removal and
 native widget/lifecycle checks; it does not establish logged-in gameplay.
 
 ## Validation
 
-On 20 October 2026 the local regression run reported 468 Python tests: 467 passed
-and one Windows symlink-permission skip. All 136 JavaScript tests passed. Release
-CI passed on Windows/Linux with Python 3.10/3.13, plus JavaScript checks and
-portable ZIP construction. Game-dependent suites need the configured local game
+On 24 October 2026 the local release regression run reported 550 Python tests:
+549 passed and one Windows symlink-permission skip. All 156 JavaScript tests,
+syntax checks and Windows launcher parsing passed. GitHub Actions runs the
+release checks on Windows/Linux with Python 3.10/3.13 and builds the portable ZIP.
+Game-dependent suites need the configured local game
 and optional codecs; CI skips unavailable integrations instead of claiming to
 exercise a complete game installation.
 
 The portable release is built from the reviewed allowlist and supplied with
 `SHA256SUMS.txt`. Packaging checks extract it outside the development directory,
-run entry points and validate the four bundled add-ons. Private settings,
+run entry points and validate all five bundled packages (four client add-ons and
+Legacy Mount Support). Private settings,
 databases, game packs, caches, logs, test artifacts and optional wheels are excluded.
 
 Earlier disposable-fixture rehearsals covered setup/start/reuse/stop, retained
@@ -40,9 +43,9 @@ state, conflicting Studio instances, interrupted saves, external edits during
 recovery, incomplete deployments and pack restoration. Repeat those rehearsals
 when their implementation changes; do not force failures against a real world.
 
-The latest atlas work was checked against 422 monitored game files without any
-changes. Publication cleanup changes Studio documentation and Git metadata; it
-does not apply server changes, reinstall add-ons or restart the game.
+The earlier atlas work was checked against 422 monitored game files without any
+changes. The mount review and isolated compilation also retained all nine watched
+live server/client files. Preparing this release does not deploy game changes.
 
 ## Tester checklist
 
@@ -74,8 +77,9 @@ CI log archives. One older CI log was unavailable. No embedded credentials,
 personal installation paths, player records, databases or game packs were found.
 Personal names and a Gmail address were present in commit/tag metadata and are
 removed from the rewritten published history using a GitHub noreply identity.
-Only beta-1.20.0 is retained as a release and tag. A local recovery bundle remains
-private under ignored data; never upload the working folder wholesale.
+At that publication, beta-1.20.0 was the only retained release and tag. A local
+recovery bundle remains private under ignored data; never upload the working
+folder wholesale.
 
 Before changing visibility, verify the rewritten remote history, tag, current ZIP
 and checksum. GitHub or existing clones may retain older commit objects; a history

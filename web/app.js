@@ -9,7 +9,7 @@ let addonModule;
 async function loadAddonTools(page,current){
   addonModule=await import('/addons.mjs');
   if(!current())return;
-  await addonModule.mount({page,root:$('#content'),api,toast,current,onState:renderAddonNotice,openDrops:openAtlasDrops,openMapSource:openAtlasSource,mobContent,itemReference,bindImages,mobSummary:id=>api('/api/mob-summary?id='+encodeURIComponent(id)),
+  await addonModule.mount({page,root:$('#content'),api,toast,current,onState:renderAddonNotice,reviewApply:openApplyDialog,openDrops:openAtlasDrops,openMapSource:openAtlasSource,mobContent,itemReference,bindImages,mobSummary:id=>api('/api/mob-summary?id='+encodeURIComponent(id)),
     importPackage:file=>api('/api/addons/packages/import',file,{'Content-Type':'application/zip','X-Addon-Filename':encodeURIComponent(file.name)})});
 }
 async function openAtlasDrops(id){
@@ -38,7 +38,7 @@ async function renderAddonOverview(){
     const updateCount=updatesResult.status==='fulfilled'?(updatesResult.value.updates??[]).length:0;
     if(S.page!=='overview'||S.navigation!==navigation)return;
     const profile=state.installation;
-    section.innerHTML=`<h2>Client add-ons &amp; world atlas</h2><p>${state.installed.length} installed in the selected ${profile?.kind==='sandbox'?'pack sandbox':profile?.kind==='test-client'?'playable test copy':profile?'game client':'world'}. Server changes and add-on installs have separate reviews. Updates are manual.</p><div class="work-actions">${updateCount?`<button class="button primary" data-go="installed">${updateCount} add-on ${updateCount===1?'update':'updates'} available · Read changelog</button>`:''}<button class="button" data-go="addons">Discover add-ons ↗</button><button class="button" data-go="atlas">World atlas ↗</button><button class="button" data-go="addonsettings">${profile?.kind==='sandbox'?'Manage sandbox':'Manage client'} ↗</button></div>`;
+    section.innerHTML=`<h2>Client add-ons &amp; world atlas</h2><p>${state.installed.length} installed in the selected ${profile?.kind==='sandbox'?'pack sandbox':profile?.kind==='test-client'?'playable test copy':profile?'game client':'world'}. Use Review &amp; apply to load saved files and add-ons together. Updates are manual.</p><div class="work-actions">${updateCount?`<button class="button primary" data-go="installed">${updateCount} add-on ${updateCount===1?'update':'updates'} available · Read changelog</button>`:''}<button class="button" data-go="addons">Discover add-ons ↗</button><button class="button" data-go="atlas">World atlas ↗</button><button class="button" data-go="addonsettings">${profile?.kind==='sandbox'?'Manage sandbox':'Manage client'} ↗</button></div>`;
     $$('[data-go]',section).forEach(button=>button.addEventListener('click',()=>navigate(button.dataset.go)));
   }catch(error){if(S.page==='overview'&&S.navigation===navigation){section.innerHTML='<h2>Client add-ons &amp; world atlas</h2><p></p>';section.querySelector('p').textContent=error.message;}}
 }
@@ -513,47 +513,68 @@ function renderHistory(history){
 async function preview(path,body){await attempt(async()=>{
   const plan=await api(path,body);S.plan=plan;
   $('#commit-button').textContent=plan.changeset?'Stage in change set':plan.confirmLabel||'Save changes';
+  $('#commit-and-apply').hidden=!!plan.changeset||!plan.files.length||path==='/api/recovery/preview';
+  if(!$('#commit-and-apply').hidden)$('#commit-button').textContent='Save for later';
   $('#review-title').textContent=plan.title;
   $('#review-body').innerHTML=`<p class="notice info">${esc(plan.hint)}</p>${plan.summary?.length?`<div class="table-wrap"><table><thead><tr><th>Configuration</th><th>Before</th><th>After</th></tr></thead><tbody>${plan.summary.map(row=>`<tr><th>${esc(row.field)}</th><td>${esc(row.before)}</td><td>${esc(row.after)}</td></tr>`).join('')}</tbody></table></div>`:''}${plan.files.map(f=>`<div class="diff-file"><strong>${esc(f.path)}</strong><pre class="code">${f.diff.split('\n').map(l=>`<span class="${l.startsWith('+')?'diff-added':l.startsWith('-')?'diff-removed':''}">${esc(l)}</span>`).join('\n')}</pre></div>`).join('')}`;
   if(plan.keptGameFiles?.length)$('#review-body').insertAdjacentHTML('afterbegin',`<div class="notice info"><strong>Newer game files will be kept</strong>${plan.keptGameFiles.map(path=>`<p class="path">${esc(path)}</p>`).join('')}</div>`);
   $('#review').showModal();
 })}
-async function commit(){const button=$('#commit-button');button.disabled=true;try{
+async function commit(andApply=false){const button=$('#commit-button');button.disabled=true;$('#commit-and-apply').disabled=true;try{
   const result=await api('/api/commit',{id:S.plan.id});$('#review').close();await workspaceForget();dirty(false);if(result.publishedSet===WUI.activeSet){WUI.activeSet=null;localStorage.removeItem(wPrefix()+'active-set')}await workspaceRefresh();S.data.groups=(await api('/api/bootstrap')).groups;toast(result.staged||result.recovered?result.hint:'Saved with a backup. Use Apply to server to load the changes.');
   if(S.page==='drops'){S.dropSearch='';renderDrops()}
   else if(S.page==='quests'){QuestUI.search='';QuestUI.origin='all';QuestUI.kind='all';QuestUI.limit=40;await renderQuestLibrary()}
   else navigate(S.route||S.page,{reload:true});
-}catch(e){toast(e.message,true)}finally{button.disabled=false}}
+  if(andApply&&!result.staged&&!result.recovered)openApplyDialog();
+}catch(e){toast(e.message,true)}finally{button.disabled=false;$('#commit-and-apply').disabled=false}}
 function openApplyDialog(options={}){
-  const pending=(WUI.info?.pending.length||0)+Number(!!WUI.info?.preferences.nativeUpdatePending);
+  const pending=(WUI.info?.pending.length||0)+Number(!!WUI.info?.preferences.nativeUpdatePending)+Number(!!options.addonPlanId)+Number(!!ApplyUI.addonState?.integrity?.repair_available);
   ApplyUI.jobId=options.jobId||(!pending?operationJob().id:null)||null;ApplyUI.error='';ApplyUI.loading=true;ApplyUI.connectionFailed=false;ApplyUI.progressSignature='';
+  ApplyUI.review=null;ApplyUI.addonSelection=null;ApplyUI.selectionPending=false;ApplyUI.selectionError=false;ApplyUI.selectionVersion=0;
+  const request=ApplyUI.reviewRequest=(ApplyUI.reviewRequest||0)+1;
+  ApplyUI.reviewLoading=!options.jobId&&S.status?.job.status!=='running'&&!ApplyUI.starting;
   $('#apply-previous').open=false;
   $('#apply-interrupted-ack').checked=false;
-  $('#apply-dialog').showModal();
+  if(!$('#apply-dialog').open)$('#apply-dialog').showModal();
   refreshApplyControl();
-  updateStatus();
+  Promise.resolve(updateStatus()).then(async()=>{
+    if(!ApplyUI.reviewLoading||request!==ApplyUI.reviewRequest)return;
+    try{const review=await api('/api/apply/review',options.addonPlanId?{addonPlanId:options.addonPlanId}:{});if(request===ApplyUI.reviewRequest){ApplyUI.review=review;ApplyUI.addonSelection=Array.isArray(review.selectedAddonIds)?[...review.selectedAddonIds]:null;if(review.server||review.addons)ApplyUI.jobId=null;}}
+    catch(error){if(request===ApplyUI.reviewRequest)ApplyUI.error=error.message;}
+    finally{if(request===ApplyUI.reviewRequest){ApplyUI.reviewLoading=false;refreshApplyControl();}}
+  });
 }
 async function runServerOperation(validateOnly){
-  if(ApplyUI.starting||S.status?.job.status==='running')return;
+  if(ApplyUI.starting||S.status?.job.status==='running'||ApplyUI.selectionPending||ApplyUI.selectionError)return;
+  if(!validateOnly&&(!ApplyUI.review||!applySelection().any||applySelection().serverRequired&&!applySelection().server||applySelection().addons&&ApplyUI.review.addons?.can_apply===false))return;
   statusRequest++;ApplyUI.startedAt=Date.now()/1000;
   ApplyUI.starting=validateOnly?'validation':'apply';ApplyUI.error='';ApplyUI.jobId=null;
   refreshApplyControl();
   try{
     const interrupted=WUI.info?.interruptedDeployment;
     const body=!validateOnly&&interrupted&&$('#apply-interrupted-ack').checked?{acknowledgeInterrupted:interrupted.id}:{};
+    if(!validateOnly){const selection=applySelection();Object.assign(body,{reviewId:ApplyUI.review.id,includeServer:selection.server,includeAddons:selection.addons});}
     const job=await api(validateOnly?'/api/validate':'/api/apply',body);
     ApplyUI.jobId=job.id;
     S.status={...S.status,job};
+    if(!validateOnly)ApplyUI.review=null;
   }catch(error){ApplyUI.error=error.message;toast(error.message,true);}
-  finally{ApplyUI.starting='';await updateStatus();}
+  finally{ApplyUI.starting='';await updateStatus();refreshAddonNotice(true);}
 }
 let applyTimer;
 let addonNoticeBusy=false,addonNoticeChecked=0;
 function renderAddonNotice(state){
   const notice=$('#addon-installation-notice'),integrity=state?.integrity;
   if(!notice)return;
+  ApplyUI.addonState=state;
+  const badge=$('#addon-reapply-count'),count=integrity?.repair_available?(Array.isArray(integrity.pending_addon_ids)?integrity.pending_addon_ids.length:state.installed.filter(row=>row.reapply_pending||row.integrity?.status==='missing').length||state.installed.length):0;
+  if(badge){badge.hidden=!count;badge.textContent=count?`${count} to reapply`:'';}
   notice.hidden=!integrity||['healthy','empty'].includes(integrity.status);
-  if(!notice.hidden)notice.innerHTML=`<strong>${integrity.status==='missing'?'Add-ons need reinstalling.':'Add-on files need attention.'}</strong> ${esc(integrity.message)} <a href="#installed">${integrity.repair_available?'Review reinstall':'Check installed add-ons'} →</a>`;
+  if(!notice.hidden){
+    notice.innerHTML=`<strong>${integrity.status==='missing'?`${count||state.installed.length} ${(count||state.installed.length)===1?'add-on needs':'add-ons need'} to be applied again.`:'Add-on files need attention.'}</strong> ${esc(integrity.message)} ${integrity.repair_available?'<button class="button small" id="notice-apply-all">Review &amp; apply together</button>':'<a href="#installed">Check installed add-ons →</a>'}`;
+    if(integrity.repair_available)$('#notice-apply-all').onclick=()=>openApplyDialog();
+  }
+  refreshApplyControl();
 }
 async function refreshAddonNotice(force=false){
   const notice=$('#addon-installation-notice');
@@ -562,7 +583,10 @@ async function refreshAddonNotice(force=false){
   try{
     const data=await api('/api/addons/state');renderAddonNotice(data.state);
   }catch{
+    ApplyUI.addonState=null;
     notice.hidden=false;notice.innerHTML='Add-on files could not be checked. <a href="#installed">Check installed add-ons →</a>';
+    const badge=$('#addon-reapply-count');if(badge)badge.hidden=true;
+    refreshApplyControl();
   }finally{addonNoticeBusy=false;}
 }
 let catalogueRefreshBusy=false;
@@ -596,7 +620,8 @@ async function updateStatus(){
   const request=++statusRequest;
   refreshAddonNotice();
   try{
-    const data=await api('/api/status');if(request!==statusRequest)return;S.status=data;
+    const data=await api('/api/status');if(request!==statusRequest)return;
+    const justFinished=S.status?.job.status==='running'&&data.job.status!=='running';S.status=data;
     S.data.gameDashboard=data.gameDashboard;bindGameDashboardLinks();
     await refreshCatalogue(data.catalogue);
     if(request!==statusRequest)return;
@@ -605,6 +630,7 @@ async function updateStatus(){
     badge.classList.toggle('good',data.job.status!=='running'&&!!data.health?.gameHealthy);badge.classList.toggle('neutral',data.job.status==='running'||!data.docker.available);
     await workspaceRefresh();
     if(request!==statusRequest)return;
+    if(justFinished)await refreshAddonNotice(true);
     ApplyUI.loading=false;ApplyUI.connectionFailed=false;
     refreshApplyControl();
     if(data.job.status==='running'&&!applyTimer)applyTimer=setInterval(updateStatus,4000);
@@ -652,13 +678,15 @@ document.addEventListener('DOMContentLoaded',async()=>{
   $('#picker-more').addEventListener('click',()=>{const firstNew=S.picker.limit;S.picker.limit+=100;renderPicker();$(`[data-pick="${firstNew}"]`)?.focus()});
   $('#picker-search').addEventListener('keydown',e=>{if(e.key==='ArrowDown'){$('.pick-result')?.focus();e.preventDefault()}if(e.key==='Enter'){$('.pick-result')?.click();e.preventDefault()}});
   $('#picker-results').addEventListener('keydown',e=>{const list=$$('.pick-result'),i=list.indexOf(document.activeElement);if(e.key==='ArrowDown'){list[Math.min(i+1,list.length-1)]?.focus();e.preventDefault()}if(e.key==='ArrowUp'){if(i===0)$('#picker-search').focus();else list[i-1]?.focus();e.preventDefault()}});
-  $('#commit-button').addEventListener('click',commit);
+  $('#commit-button').addEventListener('click',()=>commit());
+  $('#commit-and-apply').addEventListener('click',()=>commit(true));
   $('#discard-draft').addEventListener('click',()=>attempt(async()=>{await workspaceForget();dirty(false);navigate(S.route||S.page,{reload:true})}));
   $('#connection-info').addEventListener('click',()=>toast('Connected server folder:\n'+S.data.root));
   window.addEventListener('focus',()=>refreshAddonNotice(true));
   $('#apply-button').addEventListener('click',openApplyDialog);
   $('#run-validate').addEventListener('click',()=>runServerOperation(true));
   $('#run-apply').addEventListener('click',()=>runServerOperation(false));
+  $('#refresh-apply-review').addEventListener('click',()=>openApplyDialog());
   $('#apply-interrupted-ack').addEventListener('change',refreshApplyControl);
   try{S.data=await api('/api/bootstrap');bindGameDashboardLinks();renderCatalogueStatus(S.data.catalogue);S.itemMap=Object.fromEntries(S.data.items.map(e=>[e.id,e]));S.mobMap=Object.fromEntries(S.data.mobs.map(e=>[e.id,e]));await initWorkspace();initSidebarNavigation();if(WUI.activeSet)S.data.groups=(await api('/api/bootstrap')).groups;$('#version').textContent='Game '+S.data.version+' · Connected';$('#studio-version').textContent='METIN2 STUDIO '+(S.data.studioVersion||'');await navigate(location.hash.slice(1)||'overview');updateStatus();setInterval(()=>{if(!applyTimer)updateStatus()},30000)}catch(e){$('#content').innerHTML='<div class="empty">Studio could not read the installation.<p></p></div>';$('#content .empty p').textContent=e.message}
 });

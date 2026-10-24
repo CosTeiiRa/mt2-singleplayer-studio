@@ -24,12 +24,21 @@ After an external launcher update, **Scan installed files / pending merges** com
 
 Native crafting has its own conflict review. A pending native game-package build
 does not reapply Studio crafting overrides; review them separately against the
-updated database. Server Build/Apply remains a separate step.
+updated database. Use Review & apply when the saved changes are ready.
 
 **Client add-ons after a game update:** when the managed packs are replaced with
-clean game files, Studio offers **Review reinstall**. It proposes composing the
+clean game files, Studio shows a persistent notice and count of add-ons to reapply.
+**Review & apply together** opens one review for saved server files and the saved
+add-ons. You can apply both groups in one operation or select either group.
+Choose individual add-ons, **Select all**, or **Clear** before confirming. A
+partial reapply preserves skipped add-ons and their settings as pending work;
+the next review offers only the add-ons still waiting to be applied.
+It proposes composing the
 installed add-on code and saved settings over the new game baseline. Review and
-Apply explicitly; removing the last add-on then restores that updated baseline.
+apply once; removing the last add-on then restores that updated baseline.
+Server files are verified first, followed by the reviewed add-on packs. If only
+add-ons fail, the verified server deployment remains applied; review the remaining
+add-ons to retry. Add-on-only runs need no Docker build or server restart.
 Mixed external changes that still contain Hub files remain conflicts for
 inspection. Studio does not restore an old game pack over the update.
 

@@ -1,6 +1,6 @@
 'use strict';
 const WUI={info:null,activeSet:null,cache:new Map(),timers:new Map(),pending:new Map(),restoring:false,report:null,updatePoll:null};
-const ApplyUI={jobId:null,starting:'',loading:false,connectionFailed:false,error:''};
+const ApplyUI={jobId:null,starting:'',loading:false,connectionFailed:false,error:'',review:null,reviewLoading:false,reviewRequest:0,addonState:null,addonSelection:null,selectionPending:false,selectionError:false,selectionVersion:0,selectionWorker:null};
 const OperationUI={dismissed:null,scope:null,timer:null,signature:''};
 function operationJob(){
   const job=S.status?.job;
@@ -126,12 +126,12 @@ async function workspaceRefresh(){
 }
 function refreshApplyControl(){
   const info=WUI.info,running=S.status?.job.status==='running'||!!ApplyUI.starting;
-  const files=info?.pending.length||0,packageUpdate=!!info?.preferences.nativeUpdatePending,count=files+Number(packageUpdate);
+  const files=info?.pending.length||0,packageUpdate=!!info?.preferences.nativeUpdatePending,addons=ApplyUI.addonState?.integrity?.repair_available?(Array.isArray(ApplyUI.addonState.integrity.pending_addon_ids)?ApplyUI.addonState.integrity.pending_addon_ids.length:ApplyUI.addonState.installed.filter(row=>row.reapply_pending||row.integrity?.status==='missing').length||ApplyUI.addonState.installed.length):0,count=files+Number(packageUpdate)+addons;
   const button=$('#apply-button');
   const recovering=!!info?.saveRecovery?.length;
   const lastJob=operationJob();
   button.disabled=!info||(!count&&!running&&!lastJob.id);
-  button.textContent=running?(ApplyUI.starting==='validation'||!ApplyUI.starting&&S.status?.job.kind==='validation'?'Validating build…':'Applying server changes…'):count?`Apply to server (${count})`:'No server changes (0)';
+  button.textContent=running?(ApplyUI.starting==='validation'||!ApplyUI.starting&&S.status?.job.kind==='validation'?'Validating build…':'Applying changes…'):count?`Review & apply (${count})`:'All changes applied';
   if(recovering){button.disabled=false;button.textContent='Save recovery required';}
   else if(running&&ApplyUI.connectionFailed)button.textContent='Check operation status';
   else if(!count&&!running&&lastJob.id)button.textContent='View last operation';
@@ -142,21 +142,130 @@ function refreshApplyControl(){
     warning.innerHTML=recovering?'<strong>Interrupted save recovery required.</strong> Open <button class="button small" id="open-save-recovery">Drafts &amp; changes</button> to review recovery. Further saves and Apply are paused.':interrupted?'<strong>Deployment interrupted.</strong> Inspect the game launcher and any running build commands before retrying Apply. Saved changes remain pending; Studio did not restart the game automatically.':'';
     const link=$('#open-save-recovery');if(link)link.onclick=()=>navigate('changes');
   }
-  button.title=count?`${files} saved ${files===1?'file':'files'}${packageUpdate?' and 1 game package update':''} awaiting Apply. Review before restarting.`:info?.deploymentKnown?'All saved changes match the last verified deployment. Drafts are excluded.':'No saved changes await Apply. Studio has not verified a deployment for this installation yet. Drafts are excluded.';
+  button.title=count?`${files} saved ${files===1?'file':'files'}${packageUpdate?' and 1 game package update':''}${addons?` and ${addons} add-ons to reapply`:''}. Review and apply together.`:info?.deploymentKnown?'All saved changes match the last verified deployment. Drafts are excluded.':'No saved changes await Apply. Studio has not verified a deployment for this installation yet. Drafts are excluded.';
   if($('#apply-dialog').open){
-    $('#apply-pending').innerHTML=`<p><strong>${count} pending ${count===1?'change':'changes'}</strong> · ${files} saved ${files===1?'file':'files'}${packageUpdate?' + 1 game package update':''}. ${info?.drafts.length||0} preserved drafts are excluded.</p>${packageUpdate?'<p>The game package update uses the native full-stack build.</p>':''}${!count?'<p>Nothing to apply. The server will not be restarted.</p>':''}${(info?.pending||[]).map(row=>`<div class="path">${esc(row.path)}</div>`).join('')}`;
+    renderApplyReview();
     renderApplyDialog();
   }
   renderOperationStatus();
 }
 
+function applyAddonChoices(review=ApplyUI.review){
+  return Array.isArray(review?.selectableAddons)?review.selectableAddons:[];
+}
+function applyAddonIds(review=ApplyUI.review){
+  return Array.isArray(ApplyUI.addonSelection)?ApplyUI.addonSelection:Array.isArray(review?.selectedAddonIds)?review.selectedAddonIds:[];
+}
+function applySelection(){
+  const review=ApplyUI.review,plan=review?.addons,choices=applyAddonChoices(review);
+  const server=!!review?.server&&$('#apply-include-server').checked;
+  const addonIds=applyAddonIds(review);
+  const addons=choices.length?addonIds.length>0&&!!plan:!!plan&&$('#apply-include-addons').checked;
+  const addonCount=choices.length?addonIds.length:addons?(plan.batch?.length??(['reapply','repair'].includes(plan.action)?(plan.desired_state??plan.installed??[]).length:1)):0;
+  const serverCount=server?Math.max(1,(review.files?.length||0)+Number(!!review.package)):0;
+  const all=(!review?.server||server)&&(!choices.length||addonIds.length===choices.length)&&(!plan||addons);
+  return {server,addons,addonIds,addonCount,count:serverCount+addonCount,all,any:server||addons,
+    serverRequired:!!addons&&!!plan?.server_required};
+}
+function syncApplyAddonControls(){
+  const review=ApplyUI.review,choices=applyAddonChoices(review);if(!choices.length)return;
+  const selected=new Set(applyAddonIds(review));
+  const locked=!!ApplyUI.starting||S.status?.job.status==='running';
+  for(const input of $$('[data-apply-addon]')){input.checked=selected.has(input.dataset.applyAddon);input.disabled=locked;}
+  const master=$('#apply-include-addons');
+  master.checked=selected.size===choices.length;master.indeterminate=selected.size>0&&selected.size<choices.length;master.disabled=locked;
+  $('#apply-addons-count').textContent=`${selected.size} of ${choices.length} selected`;
+  $('#apply-addons-all').disabled=locked||selected.size===choices.length;
+  $('#apply-addons-clear').disabled=locked||!selected.size;
+  const status=$('#apply-selection-status');
+  status.hidden=!ApplyUI.selectionPending;status.textContent=ApplyUI.selectionPending?'Preparing the selected add-ons…':'';
+  $('#apply-addon-plan').hidden=!!ApplyUI.selectionPending;
+}
+function sameApplyAddonIds(left,right){
+  return left.length===right.length&&left.every((id,index)=>id===right[index]);
+}
+function setApplyAddonSelection(ids){
+  const choices=applyAddonChoices();if(!choices.length||ApplyUI.starting||S.status?.job.status==='running')return;
+  const included=new Set(ids),wanted=choices.filter(row=>included.has(row.id)).map(row=>row.id);
+  if(sameApplyAddonIds(wanted,applyAddonIds())&&!ApplyUI.selectionError)return;
+  ApplyUI.addonSelection=wanted;ApplyUI.selectionVersion=(ApplyUI.selectionVersion||0)+1;
+  ApplyUI.selectionPending=true;ApplyUI.selectionError=false;ApplyUI.error='';
+  syncApplyAddonControls();renderApplyDialog();
+  return refreshApplyAddonSelection();
+}
+async function refreshApplyAddonSelection(){
+  const epoch=ApplyUI.reviewRequest;
+  if(ApplyUI.selectionWorker?.epoch===epoch)return ApplyUI.selectionWorker.promise;
+  const worker={epoch};ApplyUI.selectionWorker=worker;
+  worker.promise=(async()=>{
+    try{
+      while(epoch===ApplyUI.reviewRequest){
+        const wanted=[...applyAddonIds()],reviewed=ApplyUI.review?.selectedAddonIds??[];
+        if(sameApplyAddonIds(wanted,reviewed))break;
+        const version=ApplyUI.selectionVersion;
+        const review=await api('/api/apply/review',{reviewId:ApplyUI.review.id,addonIds:wanted});
+        if(epoch!==ApplyUI.reviewRequest)return;
+        ApplyUI.review=review;
+        if(version===ApplyUI.selectionVersion)ApplyUI.addonSelection=[...(review.selectedAddonIds??wanted)];
+        renderApplyReview();
+      }
+    }catch(error){if(epoch===ApplyUI.reviewRequest){ApplyUI.selectionError=true;ApplyUI.error=error.message;}}
+    finally{
+      if(epoch===ApplyUI.reviewRequest){ApplyUI.selectionPending=false;syncApplyAddonControls();renderApplyDialog();}
+      if(ApplyUI.selectionWorker===worker)ApplyUI.selectionWorker=null;
+    }
+  })();
+  return worker.promise;
+}
+function applyAddonPlanMarkup(review){
+  const plan=review.addons;
+  if(!plan)return '<p class="work-help">No add-ons selected. Skipped add-ons keep their saved settings for later.</p>';
+  const extension=plan.kind==='game-extension';
+  const labels={provided:'Provided by game','already-provided':'Provided by game','game-provided':'Provided by game',game_provided:'Provided by game',already_present:'Provided by game',
+    ready:'Ready to apply',needed:'Ready to apply','changes-needed':'Ready to apply',installed:'Installed',healthy:'Verified',active:'Active',missing:'Needs reapply',reapply:'Needs reapply','needs-reapply':'Needs reapply',disabled:'Disabled',
+    unavailable:'Unavailable',unsupported:'Unsupported',blocked:'Blocked',conflict:'Needs attention',cleanup:'Cleanup on removal'};
+  const components=(Array.isArray(plan.components)?plan.components:Object.entries(plan.components??{}).map(([id,row])=>({id,...row}))).filter(row=>row&&typeof row==='object');
+  return `${extension?`<section class="apply-extension-components"><h3>Server &amp; client components</h3>${components.map(row=>`<div class="apply-extension-component"><div><strong>${esc(row.name??row.id)}</strong>${row.message?`<p>${esc(row.message)}</p>`:''}</div><span class="status">${esc(labels[row.status]??row.status??'Checked during review')}</span></div>`).join('')}<p class="work-help">Mounted combat remains a separate option.</p></section>`:''}<p class="work-help">Close the game client before applying. Reopen it after completion.${plan.server_required?' The server files must be selected to build and restart activation changes.':''}</p>${plan.conflicts?.length?`<div class="notice" role="alert"><strong>Add-ons need attention</strong>${plan.conflicts.map(note=>`<p>${esc(note)}</p>`).join('')}</div>`:''}<details class="help-details"><summary>Add-on file changes & notes</summary>${(plan.warnings??[]).map(note=>`<p>${esc(note)}</p>`).join('')}${(plan.changes??[]).map(row=>`<p class="path">${esc(row.action)} · ${esc(row.path)}</p>`).join('')}</details>`;
+}
+function renderApplyReview(){
+  const review=ApplyUI.review,node=$('#apply-pending');
+  if(!review){node.innerHTML=ApplyUI.reviewLoading?'<p>Preparing your files and add-ons for one review…</p>':'';if(node.dataset){delete node.dataset.reviewId;delete node.dataset.reviewStructure;}return;}
+  // Status polls never recreate checkboxes. Selection previews update only their
+  // summary and notes, retaining focus, open details and the dialog scroll.
+  if(node.dataset?.reviewId===review.id)return;
+  const plan=review.addons,choices=applyAddonChoices(review),selected=new Set(applyAddonIds(review));
+  const rows=plan?(plan.batch??(['reapply','repair'].includes(plan.action)?plan.desired_state??plan.installed??[]:(plan.desired_state??plan.installed??[]).filter(row=>row.id===plan.addon_id))):[];
+  const structure=JSON.stringify([review.server,review.files,review.package,review.crafting,choices,choices.length?null:plan?.id]);
+  const sameStructure=node.dataset?.reviewStructure===structure;
+  if(sameStructure&&choices.length){
+    const notes=$('#apply-addon-plan'),expanded=notes.querySelector?.('details')?.open;
+    const scrolling=$('#apply-dialog .dialog-content'),scrollTop=scrolling?.scrollTop;
+    $('#apply-addon-summary').textContent=plan?.summary||'Select the add-ons you want to apply.';
+    notes.innerHTML=applyAddonPlanMarkup(review);
+    if(expanded){const details=notes.querySelector?.('details');if(details)details.open=true;}
+    if(Number.isFinite(scrollTop))scrolling.scrollTop=scrollTop;
+  }else{
+    const serverChecked=node.dataset?.reviewId?$('#apply-include-server')?.checked!==false:true;
+    node.innerHTML=`<div class="apply-bundle">${review.server?`<section><label class="apply-choice"><input id="apply-include-server" type="checkbox" ${serverChecked?'checked':''}><span><strong>Server files${review.package?' & game update':''}</strong><small>${review.files.length} saved files${review.crafting?' · crafting changes':''} · builds and restarts the game server</small></span></label><details class="help-details"><summary>Files to apply</summary>${review.files.map(row=>`<p class="path">${esc(row.path)}</p>`).join('')}${review.package?'<p>The game launcher will build the updated services.</p>':''}</details></section>`:''}${choices.length||plan?`<section><label class="apply-choice"><input id="apply-include-addons" type="checkbox" ${choices.length?selected.size===choices.length?'checked':'':plan.can_apply?'checked':'disabled'}><span><strong>${plan?.kind==='game-extension'?'Server &amp; client add-on':!plan||['reapply','repair'].includes(plan.action)?'Reapply saved add-ons':'Client add-ons'}</strong><small id="apply-addon-summary">${esc(plan?.summary||'Select the add-ons you want to apply.')}</small></span></label>${choices.length?`<div class="apply-selection-tools"><strong id="apply-addons-count" role="status" aria-live="polite">${selected.size} of ${choices.length} selected</strong><div><button id="apply-addons-all" type="button" class="button small">Select all</button><button id="apply-addons-clear" type="button" class="button small ghost">Clear</button></div></div><ul class="apply-addon-selection" aria-label="Add-ons to apply">${choices.map((row,index)=>`<li><label class="apply-addon-option"><input id="apply-addon-${index}" type="checkbox" data-apply-addon="${esc(row.id)}" ${selected.has(row.id)?'checked':''} aria-label="Apply ${esc(row.name??row.id)}"><span><strong>${esc(row.name??row.id)}</strong><small>${esc(row.version)}${row.enabled===false?' · stays disabled':''}</small></span></label></li>`).join('')}</ul><p id="apply-selection-status" class="work-help" role="status" aria-live="polite" hidden></p>`:rows.length?`<ul class="apply-addon-list">${rows.map(row=>`<li>${esc(row.name??row.addon_id)} · ${esc(row.version)}${row.enabled===false?' · stays disabled':''}</li>`).join('')}</ul>`:''}<div id="apply-addon-plan">${applyAddonPlanMarkup(review)}</div></section>`:''}</div>${review.addonError?`<p class="notice">Add-ons could not be prepared: ${esc(review.addonError)} <a href="#installed" data-close="apply-dialog">Check add-ons</a></p>`:''}${!review.server&&!plan&&!choices.length?'<p>Everything is up to date. There are no saved changes to apply.</p>':''}<p class="work-help">${review.drafts} unfinished drafts stay saved for later.</p>`;
+    $('#apply-include-server')?.addEventListener?.('change',renderApplyDialog);
+    $('#apply-include-addons')?.addEventListener?.('change',event=>{if(choices.length)setApplyAddonSelection(event.target.checked?choices.map(row=>row.id):[]);else renderApplyDialog();});
+    for(const input of $$('[data-apply-addon]'))input.addEventListener('change',()=>setApplyAddonSelection($$('[data-apply-addon]').filter(row=>row.checked).map(row=>row.dataset.applyAddon)));
+    $('#apply-addons-all')?.addEventListener?.('click',()=>setApplyAddonSelection(choices.map(row=>row.id)));
+    $('#apply-addons-clear')?.addEventListener?.('click',()=>setApplyAddonSelection([]));
+  }
+  if(node.dataset){node.dataset.reviewId=review.id;node.dataset.reviewStructure=structure;}
+  syncApplyAddonControls();
+}
+
 function applyOperationTitle(job){
-  const kind=job.kind==='validation'||job.status==='validated'?'Validation':'Apply';
+  const kind=job.kind==='validation'||job.status==='validated'?'Validation':job.kind==='addons'?'Add-on Apply':job.kind==='combined'?'Files & add-ons':'Apply';
   const result={running:'in progress',validated:'passed (validation only)',succeeded:'completed',unverified:'needs verification',failed:'failed',interrupted:'interrupted'}[job.status]??job.status;
   return `${kind} · ${result}`;
 }
 
 function applyOperationMessage(job){
+  if(job.serverStatus==='succeeded'&&job.addons?.status!=='succeeded'&&job.status!=='running')return 'Server files were applied successfully. Client add-ons still need attention; check their files and review them again.';
+  if(job.kind==='addons')return job.status==='succeeded'?'Client add-ons were applied and verified. You can reopen the game client.':job.status==='running'?'Rebuilding and verifying client add-ons. The game server keeps running.':'Client add-ons still need attention. Check the installed files and operation log before retrying.';
   if(job.status==='interrupted')return 'Studio closed before this operation finished. Inspect the game launcher and any running build commands before retrying. Deployment is unverified and saved changes remain pending; no automatic restart or retry was performed.';
   if(job.kind==='validation'||job.status==='validated')return job.status==='validated'?'Build and compilation passed. Validation did not apply changes or restart the game.':job.status==='running'?'Checking the build without applying changes or restarting the game.':'Validation did not deploy changes. Inspect its log.';
   if(job.status==='succeeded')return 'This Apply completed and was verified. Check the current pending changes above for any newer saves.';
@@ -169,7 +278,9 @@ function renderApplyDialog(){
   if(!$('#apply-dialog').open)return;
   const latest=operationJob();
   const info=WUI.info,job=latest.id&&latest.id===ApplyUI.jobId?latest:S.status?.job??{},running=job.status==='running';
-  const count=(info?.pending.length??0)+Number(!!info?.preferences.nativeUpdatePending);
+  const selection=applySelection(),serverCount=(info?.pending.length??0)+Number(!!info?.preferences.nativeUpdatePending);
+  const plan=ApplyUI.review?.addons,addonCount=selection.addonCount;
+  const count=serverCount+addonCount;
   const validation=ApplyUI.starting==='validation'||!ApplyUI.starting&&job.kind==='validation';
   const interrupted=info?.interruptedDeployment;
   const acknowledgement=$('#apply-interrupted-ack');
@@ -177,21 +288,25 @@ function renderApplyDialog(){
   $('#apply-interrupted-check').hidden=!interrupted;
   if(running)ApplyUI.jobId=job.id;
   let title=count?`${count} ${count===1?'change is':'changes are'} still not applied`:'No saved changes awaiting Apply';
-  let text=count?'Use Build & restart to load these saved changes. Validate build only checks compilation and leaves them pending.':'There are no saved changes waiting to be applied. Validation is optional and does not deploy anything.';
-  if(ApplyUI.loading){title='Checking saved changes…';text='Refreshing the pending list and server status.';}
+  let text=selection.server&&selection.addons?'Server files are built first, then client add-ons are applied and verified.':selection.server?'Build the saved files and restart the server.':selection.addons?'Rebuild and verify client add-ons. The game server keeps running.':'Select the changes you want to apply.';
+  if(ApplyUI.loading||ApplyUI.reviewLoading){title='Preparing review…';text='Checking saved files and preparing the add-on preview.';}
+  else if(ApplyUI.selectionPending){title='Preparing selected add-ons…';text='Checking the selected add-ons before Apply becomes available.';}
   else if(ApplyUI.starting){title=validation?'Starting validation only…':'Starting Apply…';text=validation?'This will check the build. Saved changes will remain pending.':'Waiting for the server operation to start.';}
   else if(running){title=validation?'Validation in progress — changes are not being applied':'Applying saved changes…';text=applyOperationMessage(job);}
   else if(info?.saveRecovery?.length){title='Interrupted save recovery required';text='Open Drafts & changes and Review recovery. Saving, validation and Apply are paused until the incomplete save is resolved.';}
   else if(job.status==='interrupted'){title='Previous deployment was interrupted';text=applyOperationMessage(job);}
   else if(ApplyUI.connectionFailed)text='Server status could not be refreshed. Reopen this dialog to check before starting an operation.';
-  else if(!S.status?.docker.available)text+=' Start Docker Desktop before running either operation.';
+  else if(selection.server&&!S.status?.docker.available)text+=' Start Docker Desktop to apply server files.';
+  if(job.serverStatus==='succeeded'&&job.addons?.status!=='succeeded'&&!running)text='Server files were applied successfully. Only the add-ons still need attention; review them again to retry.';
   if(interrupted&&job.status!=='interrupted'&&!running)text+=' A previous interrupted deployment still needs a verified Apply. Inspect its game/build state before acknowledging a retry below.';
   $('#apply-current-title').textContent=title;
   $('#apply-current').className='notice apply-current '+(count?'apply-current-pending':'apply-current-clean');
   $('#apply-explanation').textContent=text;
   $('#apply-error').hidden=!ApplyUI.error;
   $('#apply-error').textContent=ApplyUI.error;
-  const current=!ApplyUI.loading&&!ApplyUI.starting&&(running||job.id&&job.id===ApplyUI.jobId);
+  const current=!ApplyUI.loading&&!ApplyUI.reviewLoading&&!ApplyUI.starting&&(running||job.id&&job.id===ApplyUI.jobId);
+  $('#apply-current').hidden=!!current;
+  $('#apply-dialog-title').textContent=running||ApplyUI.starting?'Applying changes…':current?'Apply result':'Review & apply';
   $('#apply-operation').hidden=!current;
   $('#apply-operation-title').textContent=current?applyOperationTitle(job):'';
   $('#apply-operation-result').textContent=current?applyOperationMessage(job):'';
@@ -218,9 +333,30 @@ function renderApplyDialog(){
   $('#apply-previous-title').textContent=historical?`Previous ${applyOperationTitle(historical).toLowerCase()} · ${wDate(historical.finished??historical.started)}`:'';
   $('#apply-previous-note').textContent=historical?'This is an earlier operation. Its result does not mean newer saved changes have been applied. '+applyOperationMessage(historical):'';
   $('#apply-previous-log').textContent=historical?(historical.lines??[]).join('\n'):'';
-  const blocked=ApplyUI.loading||ApplyUI.connectionFailed||!!ApplyUI.starting||running||!info||!S.status?.docker.available||!!info?.saveRecovery?.length;
-  $('#run-apply').disabled=blocked||!count||!!interrupted&&!acknowledgement.checked;
-  $('#run-validate').disabled=blocked;
+  const blocked=ApplyUI.loading||ApplyUI.reviewLoading||ApplyUI.selectionPending||ApplyUI.selectionError||ApplyUI.connectionFailed||!!ApplyUI.starting||running||!info||!!info?.saveRecovery?.length;
+  const missingServer=selection.serverRequired&&!selection.server;
+  $('#run-apply').disabled=blocked||!selection.any||missingServer||selection.addons&&plan?.can_apply===false||selection.server&&(!S.status?.docker.available||!!interrupted&&!acknowledgement.checked);
+  let reason='';
+  if(ApplyUI.loading||ApplyUI.reviewLoading)reason='Preparing the review. Apply will be available after the file checks finish.';
+  else if(ApplyUI.selectionPending)reason='Preparing the selected add-ons. Apply will be available when their plan is ready.';
+  else if(ApplyUI.starting||running)reason='An operation is in progress. Wait for it to finish before applying again.';
+  else if(info?.saveRecovery?.length)reason='Resolve the interrupted save in Drafts & changes before applying.';
+  else if(ApplyUI.selectionError)reason=ApplyUI.error||'The selection could not be reviewed. Refresh the review and try again.';
+  else if(ApplyUI.connectionFailed)reason='Studio could not refresh its status. Refresh the review to reconnect.';
+  else if(!info)reason='Waiting for the workspace status.';
+  else if(!ApplyUI.review)reason=ApplyUI.error||'Open a fresh review to apply the remaining changes.';
+  else if(!selection.any)reason='Select server files or an add-on to apply.';
+  else if(missingServer)reason='Select Server files to apply this add-on’s activation changes.';
+  else if(selection.addons&&plan?.can_apply===false)reason=plan.conflicts?.[0]||'Resolve the selected add-on conflicts before applying.';
+  else if(selection.server&&!S.status?.docker.available)reason='Start Docker Desktop before applying server files.';
+  else if(selection.server&&interrupted&&!acknowledgement.checked)reason='Check the previous build and acknowledge the interrupted deployment before retrying.';
+  const blocker=$('#apply-blocker');if(blocker){blocker.hidden=!reason;blocker.textContent=reason;}
+  $('#run-apply').title=reason||'Apply the selected, reviewed changes.';
+  $('#run-apply').textContent=Array.isArray(ApplyUI.review?.selectableAddons)?`${selection.all&&selection.any?'Apply all':'Apply selected'} (${selection.count})`:selection.server&&selection.addons?'Apply files & add-ons':selection.addons?'Apply add-ons':selection.server?'Apply & restart server':'Apply all';
+  syncApplyAddonControls();
+  $('#run-validate').disabled=blocked||!S.status?.docker.available;
+  $('#apply-restart-note').hidden=!selection.server;
+  $('#refresh-apply-review').hidden=ApplyUI.loading||ApplyUI.reviewLoading||ApplyUI.selectionPending||running||!!ApplyUI.starting||!!ApplyUI.review&&!ApplyUI.error;
 }
 async function initWorkspace(){
   try{WUI.activeSet=localStorage.getItem(wPrefix()+'active-set')||null}catch(error){}
@@ -276,20 +412,20 @@ function renderUpdateReport(report){
   const pack=report.package;
   const gameFirst=report.priority==='game';
   $('#update-report').innerHTML=`<div class="work-report-heading"><div><h2>${pack?'Package '+esc(pack.version):'Installed file changes'}</h2><p>${report.affectedFiles} affected files · ${report.conflicts} conflicting custom changes · ${report.trackedFiles} tracked files</p></div><button class="button small" id="update-export">Download report</button></div>${pack?`<p class="notice ${pack.verified?'info':''}">${pack.files} package files · ${pack.verified?'SHA-256 matched the supplied release checksum':'Preview only: import with the published SHA-256 to enable installation'} · ${esc(pack.kind)} package</p>`:''}
-    <p class="work-help">${esc(report.scope)}</p>${report.files.map(file=>`<section class="work-conflict-file"><h3>${esc(file.path)}${file.deferred?' · pending merge':''}</h3>${file.choices.map(row=>customMergeMarkup(row,file,report)).join('')||`<p class="work-help">${gameFirst?'This game file will be installed first. Original and custom values are preserved for later review.':'The current game already contains these custom values. Review the merge to accept the game as the new baseline.'}</p>`}</section>`).join('')||'<div class="empty">No incoming changes affect tracked custom entries. Unrelated update changes need no individual approval.</div>'}
-    <div class="work-actions work-report-actions">${pack?`<button id="install-reviewed-update" class="button primary" ${pack.verified?'':'disabled'}>Review game package installation</button>`:`<button id="reconcile-custom" class="button primary" ${report.affectedFiles?'':'disabled'}>Review selected merge</button>${report.kind==='installed'?`<button id="defer-custom-merge" class="button" ${report.affectedFiles?'':'disabled'}>Keep game; decide later</button>`:''}`}</div>`;
+    ${pack?'<p class="notice info">Game values are installed first. Original and custom values are retained for a later merge review. The native updater creates its normal backups. After installation, review and apply saved files and add-ons together.</p>':''}<p class="work-help">${esc(report.scope)}</p>${report.files.map(file=>`<section class="work-conflict-file"><h3>${esc(file.path)}${file.deferred?' · pending merge':''}</h3>${file.choices.map(row=>customMergeMarkup(row,file,report)).join('')||`<p class="work-help">${gameFirst?'This game file will be installed first. Original and custom values are preserved for later review.':'The current game already contains these custom values. Review the merge to accept the game as the new baseline.'}</p>`}</section>`).join('')||'<div class="empty">No incoming changes affect tracked custom entries. Unrelated update changes need no individual approval.</div>'}
+    <div class="work-actions work-report-actions">${pack?`<button id="install-reviewed-update" class="button primary" ${pack.verified?'':'disabled'}>Install game update files</button>`:`<button id="reconcile-custom" class="button primary" ${report.affectedFiles?'':'disabled'}>Review selected merge</button>${report.kind==='installed'?`<button id="defer-custom-merge" class="button" ${report.affectedFiles?'':'disabled'}>Keep game; decide later</button>`:''}`}</div>`;
   $('#update-export').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({...report,decisions:updateChoices()},null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download=`metin2-custom-update-review-${Date.now()}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)});
   $('#reconcile-custom')?.addEventListener('click',()=>preview('/api/customisations/preview',{id:report.id,decisions:updateChoices()}));
   $('#defer-custom-merge')?.addEventListener('click',()=>preview('/api/customisations/defer',{id:report.id}));
-  $('#install-reviewed-update')?.addEventListener('click',()=>{
-    if($$('[data-custom-choice]').some(select=>!select.value))return toast('Choose Keep custom or Use update for each conflict.',true);
-    const dialog=$('#update-install-dialog');$('#update-install-summary').textContent=`Install ${pack.version}: ${pack.files} package files, ${report.affectedFiles} tracked custom files supplied by the package. Game values are installed first. Original and custom values are archived and retained for a later merge review; no custom merge is applied automatically. The native updater creates its normal backups. Build/Apply is separate.`;
-    $('#confirm-update-install').onclick=()=>attempt(async()=>{const result=await api('/api/updates/install',{id:report.id,decisions:updateChoices()});dialog.close();$('#update-operation').textContent=result.message;pollUpdateOperation()});dialog.showModal();
-  });
+  $('#install-reviewed-update')?.addEventListener('click',()=>attempt(async()=>{
+    const button=$('#install-reviewed-update');button.disabled=true;
+    try{const result=await api('/api/updates/install',{id:report.id,decisions:updateChoices()});$('#update-operation').textContent=result.message;pollUpdateOperation();}
+    finally{button.disabled=false;}
+  }));
 }
 async function pollUpdateOperation(){
   clearTimeout(WUI.updatePoll);
-  try{const job=await api('/api/updates/status');if(S.page!=='updates')return;$('#update-operation').textContent=job.message||'No update operation running.';if(job.report)renderUpdateReport(job.report);if(job.status==='running')WUI.updatePoll=setTimeout(pollUpdateOperation,2000);if(job.requiresReload){$('#update-operation').insertAdjacentHTML('beforeend',' <button class="button small" id="reload-after-package">Reload Studio catalog</button>');$('#reload-after-package').onclick=()=>attempt(async()=>{await api('/api/catalog/reload',{});location.reload()})}}catch(error){if($('#update-operation'))$('#update-operation').textContent=error.message}
+  try{const job=await api('/api/updates/status');if(S.page!=='updates')return;$('#update-operation').textContent=job.message||'No update operation running.';if(job.report)renderUpdateReport(job.report);if(job.status==='running')WUI.updatePoll=setTimeout(pollUpdateOperation,2000);if(job.requiresReload){$('#update-operation').insertAdjacentHTML('beforeend',' <button class="button small primary" id="apply-after-package">Review &amp; apply files and add-ons</button>');$('#apply-after-package').onclick=()=>attempt(async()=>{await api('/api/catalog/reload',{});await refreshAddonNotice(true);openApplyDialog()})}}catch(error){if($('#update-operation'))$('#update-operation').textContent=error.message}
 }
 async function renderUpdates(){
   await workspaceRefresh();

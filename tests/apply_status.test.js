@@ -10,16 +10,16 @@ const app=fs.readFileSync(path.join(__dirname,'../web/app.js'),'utf8');
 function setup(job={id:'previous',kind:'apply',status:'succeeded',started:1,lines:['Old success log']}){
   const nodes=new Map(),requests=[];
   const $=id=>{
-    if(!nodes.has(id))nodes.set(id,{open:id==='#apply-dialog',hidden:false,disabled:false,textContent:'',innerHTML:'',showModal(){this.open=true;}});
+    if(!nodes.has(id))nodes.set(id,{open:id==='#apply-dialog',hidden:false,disabled:false,checked:id==='#apply-include-server',dataset:{},textContent:'',innerHTML:'',showModal(){this.open=true;}});
     return nodes.get(id);
   };
   const storage=new Map();
   const context={$,S:{data:{root:'test-world'},status:{docker:{available:true},job}},WUI:{info:{pending:[{path:'custom-quests/new.quest'}],preferences:{},drafts:[],deploymentKnown:true}},
-    ApplyUI:{jobId:null,starting:'',loading:false,connectionFailed:false,error:''},
+    ApplyUI:{jobId:null,starting:'',loading:false,connectionFailed:false,error:'',review:{id:'review',server:true,files:[{path:'custom-quests/new.quest'}],drafts:0}},
     OperationUI:{scope:null,dismissed:null,signature:'',timer:null},StudioOperations:require('../web/operations.js'),statusRequest:0,
     $$:()=>[],setInterval:()=>1,clearInterval(){},sessionStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},
-    esc:String,wDate:at=>'date:'+at,api:async url=>{requests.push(url);return {id:'new-job',kind:url.endsWith('validate')?'validation':'apply',status:'running',lines:['New operation']};},
-    updateStatus:async()=>context.refreshApplyControl(),toast:()=>{}};
+    esc:String,wDate:at=>'date:'+at,api:async url=>{requests.push(url);return url.endsWith('/review')?{id:'refreshed',server:true,files:[],drafts:0}:{id:'new-job',kind:url.endsWith('validate')?'validation':'apply',status:'running',lines:['New operation']};},
+    refreshAddonNotice:()=>{},updateStatus:async()=>context.refreshApplyControl(),toast:()=>{}};
   vm.createContext(context);
   vm.runInContext(workspace.slice(workspace.indexOf('function operationJob('),workspace.indexOf('const wDate=')),context);
   vm.runInContext(workspace.slice(workspace.indexOf('function refreshApplyControl('),workspace.indexOf('async function initWorkspace(')),context);
@@ -77,7 +77,7 @@ test('a running validation is resumed on reopen and blocks both actions',()=>{
 });
 
 test('a successful current Apply shows completion and disables Apply when no changes remain',()=>{
-  const {context,$}=setup();context.ApplyUI.jobId='previous';context.WUI.info.pending=[];
+  const {context,$}=setup();context.ApplyUI.jobId='previous';context.WUI.info.pending=[];context.ApplyUI.review=null;
   context.refreshApplyControl();
   assert.equal($('#apply-current-title').textContent,'No saved changes awaiting Apply');
   assert.match($('#apply-operation-title').textContent,/Apply · completed/);
@@ -182,4 +182,212 @@ test('the elapsed clock does not continue timing an older completed receipt with
   const {context}=setup();const node={dataset:{started:'100',finished:'0',status:'succeeded'}};
   context.$$=()=>[node];context.updateOperationElapsed();assert.equal(node.textContent,'');
   node.dataset.finished='180';context.updateOperationElapsed();assert.equal(node.textContent,'1m 20s');
+});
+
+test('add-ons can be applied without Docker or a server restart',()=>{
+  const {context,$}=setup();context.WUI.info.pending=[];context.S.status.docker.available=false;
+  context.ApplyUI.review={id:'addons',server:false,files:[],drafts:0,addons:{action:'reapply',can_apply:true,summary:'Reapply 4 add-ons',installed:[]}};
+  $('#apply-include-addons').checked=true;context.refreshApplyControl();
+  assert.equal($('#run-apply').disabled,false);
+  assert.equal($('#run-apply').textContent,'Apply add-ons');
+  assert.equal($('#apply-restart-note').hidden,true);
+});
+
+test('extension activation requires server selection and explains the blocked Apply',async()=>{
+  const {context,$,requests}=setup();
+  context.ApplyUI.review.addons={kind:'game-extension',addon_id:'community.legacy-mount-support',action:'install',can_apply:true,server_required:true,components:[{id:'activation',name:'Mount activation',status:'provided'},{id:'client-data',name:'Client-data fixes',status:'ready'}],changes:[]};
+  $('#apply-include-addons').checked=true;$('#apply-include-server').checked=false;context.refreshApplyControl();
+  assert.match($('#apply-pending').innerHTML,/Server &amp; client add-on/);
+  assert.match($('#apply-pending').innerHTML,/Provided by game/);
+  assert.match($('#apply-pending').innerHTML,/Mounted combat remains a separate option/);
+  assert.equal($('#run-apply').disabled,true);
+  assert.equal($('#apply-blocker').hidden,false);
+  assert.match($('#apply-blocker').textContent,/Select Server files/);
+  await context.runServerOperation(false);assert.equal(requests.length,0);
+  $('#apply-include-server').checked=true;context.renderApplyDialog();
+  assert.equal($('#run-apply').disabled,false);
+  assert.equal($('#apply-blocker').hidden,true);
+  context.S.status.docker.available=false;context.renderApplyDialog();
+  assert.equal($('#run-apply').disabled,true);
+  assert.match($('#apply-blocker').textContent,/Start Docker Desktop/);
+});
+
+test('an extension whose activation is already provided can apply client fixes alone',()=>{
+  const {context,$}=setup();context.S.status.docker.available=false;
+  context.ApplyUI.review={id:'client-fixes',server:false,files:[],drafts:0,addons:{kind:'game-extension',action:'reapply',can_apply:true,server_required:false,components:[{id:'activation',status:'provided'}]}};
+  $('#apply-include-addons').checked=true;context.refreshApplyControl();
+  assert.equal($('#run-apply').disabled,false);
+  assert.equal($('#apply-restart-note').hidden,true);
+  assert.equal($('#apply-blocker').hidden,true);
+});
+
+test('an add-on-only review cannot present an earlier server result as its own',()=>{
+  const {context,$}=setup();context.WUI.info.pending=[];
+  context.ApplyUI.addonState={installed:[{id:'example'}],integrity:{repair_available:true}};
+  context.openApplyDialog();
+  assert.equal(context.ApplyUI.jobId,null);
+  assert.equal($('#apply-operation').hidden,true);
+});
+
+test('the combined confirmation sends the reviewed ID and selected scopes',async()=>{
+  const {context,$}=setup();const calls=[];
+  context.ApplyUI.review.addons={can_apply:true,action:'reapply',summary:'Reapply saved add-ons',installed:[]};
+  $('#apply-include-addons').checked=true;
+  context.api=async(url,body)=>{calls.push({url,...body});return {id:'combined',kind:'combined',status:'running'};};
+  context.refreshApplyControl();assert.equal($('#run-apply').textContent,'Apply files & add-ons');
+  await context.runServerOperation(false);
+  assert.deepEqual(calls,[{url:'/api/apply',reviewId:'review',includeServer:true,includeAddons:true}]);
+  assert.equal(context.ApplyUI.review,null);
+});
+
+test('status polling preserves the scope choices in an existing review',()=>{
+  const {context,$}=setup();context.refreshApplyControl();
+  $('#apply-include-server').checked=false;context.refreshApplyControl();
+  assert.equal($('#apply-include-server').checked,false);
+  assert.equal($('#run-apply').disabled,true);
+});
+
+test('an add-on failure after server success only asks to retry add-ons',()=>{
+  const {context,$}=setup({id:'combined',kind:'combined',status:'failed',serverStatus:'succeeded',addons:{status:'failed'},lines:[]});
+  context.WUI.info.pending=[];context.ApplyUI.review=null;context.refreshApplyControl();
+  assert.match($('#apply-explanation').textContent,/Only the add-ons still need attention/);
+  assert.equal($('#refresh-apply-review').hidden,false);
+});
+
+test('reapply notification and navigation count persist until client files are healthy',()=>{
+  const {context,$}=setup();
+  vm.runInContext(app.slice(app.indexOf('function renderAddonNotice('),app.indexOf('async function refreshAddonNotice(')),context);
+  context.renderAddonNotice({installed:[{id:'one'},{id:'two'}],integrity:{status:'missing',repair_available:true,message:'Game update replaced client packs.'}});
+  assert.equal($('#addon-installation-notice').hidden,false);
+  assert.match($('#addon-installation-notice').innerHTML,/2 add-ons need to be applied again/);
+  assert.match($('#addon-installation-notice').innerHTML,/Review &amp; apply together/);
+  assert.equal($('#addon-reapply-count').textContent,'2 to reapply');
+  assert.equal($('#apply-button').textContent,'Review & apply (3)');
+  context.renderAddonNotice({installed:[{id:'one'},{id:'two'}],integrity:{status:'healthy',repair_available:false}});
+  assert.equal($('#addon-installation-notice').hidden,true);
+  assert.equal($('#addon-reapply-count').hidden,true);
+  assert.equal($('#apply-button').textContent,'Review & apply (1)');
+});
+
+function selectableReview(ids=['one','two'],id='selection-review'){
+  const choices=[{id:'one',name:'Boss Atlas',version:'1.0',enabled:true},{id:'two',name:'Pocket Wiki',version:'1.0',enabled:false}];
+  return {id,server:true,files:[{path:'drops.txt'}],drafts:0,selectableAddons:choices,selectedAddonIds:ids,
+    addons:ids.length?{id:'packs-'+id,action:'reapply',can_apply:true,summary:`Reapply ${ids.length} add-ons`,installed:choices.filter(row=>ids.includes(row.id)),conflicts:[],changes:[]}:null};
+}
+function setupSelection(){
+  const result=setup(),{context}=result;
+  context.ApplyUI.review=selectableReview();context.ApplyUI.addonSelection=['one','two'];context.ApplyUI.reviewRequest=1;
+  const controls=context.ApplyUI.review.selectableAddons.map(row=>({dataset:{applyAddon:row.id},checked:true,disabled:false,addEventListener(){}}));
+  context.$$=selector=>selector==='[data-apply-addon]'?controls:[];
+  context.refreshApplyControl();
+  return {...result,controls};
+}
+
+test('add-on selection exposes individual choices, Select all, Clear and the selected count',()=>{
+  const {context,$,controls}=setupSelection();
+  assert.match($('#apply-pending').innerHTML,/data-apply-addon="one"/);
+  assert.match($('#apply-pending').innerHTML,/data-apply-addon="two"/);
+  assert.match($('#apply-pending').innerHTML,/Select all/);
+  assert.match($('#apply-pending').innerHTML,/>Clear</);
+  assert.equal($('#apply-addons-count').textContent,'2 of 2 selected');
+  assert.equal($('#run-apply').textContent,'Apply all (3)');
+  $('#apply-include-server').checked=false;context.renderApplyDialog();
+  assert.equal($('#run-apply').textContent,'Apply selected (2)');
+  assert.ok(controls.every(row=>!row.disabled));
+});
+
+test('changing a subset disables Apply until its exact new plan is ready',async()=>{
+  const {context,$,controls}=setupSelection(),calls=[];let reply;
+  context.api=(url,body)=>{calls.push({url,...JSON.parse(JSON.stringify(body))});return new Promise(resolve=>{reply=resolve;});};
+  const selected=context.setApplyAddonSelection(['two']);
+  assert.deepEqual(calls,[{url:'/api/apply/review',reviewId:'selection-review',addonIds:['two']}]);
+  assert.equal(context.ApplyUI.selectionPending,true);
+  assert.equal($('#apply-addon-plan').hidden,true);
+  assert.equal($('#run-apply').disabled,true);
+  assert.equal($('#apply-addons-count').textContent,'1 of 2 selected');
+  assert.equal($('#apply-include-addons').indeterminate,true);
+  assert.equal(controls[0].checked,false);assert.equal(controls[1].checked,true);
+  await context.runServerOperation(false);assert.equal(calls.length,1);
+  reply(selectableReview(['two'],'subset-ready'));await selected;
+  assert.equal(context.ApplyUI.selectionPending,false);
+  assert.equal($('#apply-addon-plan').hidden,false);
+  assert.equal($('#run-apply').disabled,false);
+  assert.equal($('#run-apply').textContent,'Apply selected (2)');
+  assert.equal(context.ApplyUI.review.id,'subset-ready');
+});
+
+test('rapid checkbox changes serialize requests and coalesce to the latest selection',async()=>{
+  const {context,$}=setupSelection(),calls=[],replies=[];
+  context.api=(url,body)=>{calls.push(JSON.parse(JSON.stringify(body)));return new Promise(resolve=>replies.push(resolve));};
+  const pending=context.setApplyAddonSelection(['one']);
+  context.setApplyAddonSelection(['two']);
+  context.setApplyAddonSelection(['one','two']);
+  assert.equal(calls.length,1);
+  replies[0](selectableReview(['one'],'first-preview'));
+  await new Promise(setImmediate);
+  assert.deepEqual(calls[1],{reviewId:'first-preview',addonIds:['one','two']});
+  assert.equal($('#run-apply').disabled,true);
+  replies[1](selectableReview(['one','two'],'latest-preview'));await pending;
+  assert.deepEqual(Array.from(context.ApplyUI.addonSelection),['one','two']);
+  assert.equal(context.ApplyUI.review.id,'latest-preview');
+  assert.equal($('#run-apply').disabled,false);
+  assert.equal($('#run-apply').textContent,'Apply all (3)');
+});
+
+test('Clear retains the full choice list so Select all can restore it',async()=>{
+  const {context,$}=setupSelection(),calls=[];
+  context.api=async(url,body)=>{calls.push(JSON.parse(JSON.stringify(body)));return selectableReview(body.addonIds,'selection-'+calls.length);};
+  await context.setApplyAddonSelection([]);
+  assert.equal(context.ApplyUI.review.addons,null);
+  assert.equal(context.ApplyUI.review.selectableAddons.length,2);
+  assert.equal($('#apply-addons-count').textContent,'0 of 2 selected');
+  assert.equal($('#run-apply').textContent,'Apply selected (1)');
+  $('#apply-include-server').checked=false;context.renderApplyDialog();
+  assert.equal($('#run-apply').disabled,true);
+  await context.setApplyAddonSelection(['one','two']);
+  assert.deepEqual(calls[1],{reviewId:'selection-1',addonIds:['one','two']});
+  assert.equal($('#apply-include-server').checked,false);
+  assert.equal($('#run-apply').textContent,'Apply selected (2)');
+  assert.equal($('#run-apply').disabled,false);
+});
+
+test('selection failures block stale Apply but keep checkbox choices editable',async()=>{
+  const {context,$,controls}=setupSelection();
+  context.api=async()=>{throw Error('Review expired. Refresh the review.');};
+  await context.setApplyAddonSelection(['one']);
+  assert.equal(context.ApplyUI.selectionError,true);
+  assert.equal($('#run-apply').disabled,true);
+  assert.equal($('#refresh-apply-review').hidden,false);
+  assert.match($('#apply-error').textContent,/Review expired/);
+  assert.ok(controls.every(row=>!row.disabled));
+});
+
+test('a conflicting selection keeps individual choices usable and cannot silently skip add-ons',()=>{
+  const {context,$,controls}=setupSelection();
+  context.ApplyUI.review.addons.can_apply=false;context.renderApplyDialog();
+  assert.equal(context.applySelection().addons,true);
+  assert.equal($('#run-apply').disabled,true);
+  assert.equal($('#apply-include-addons').disabled,false);
+  assert.ok(controls.every(row=>!row.disabled));
+});
+
+test('a late selection response cannot overwrite a newly opened review',async()=>{
+  const {context}=setupSelection();let reply;
+  context.api=()=>new Promise(resolve=>{reply=resolve;});
+  const pending=context.setApplyAddonSelection(['one']);
+  context.ApplyUI.reviewRequest=2;context.ApplyUI.review=selectableReview(['two'],'new-dialog');
+  context.ApplyUI.addonSelection=['two'];context.ApplyUI.selectionPending=false;
+  reply(selectableReview(['one'],'old-dialog'));await pending;
+  assert.equal(context.ApplyUI.review.id,'new-dialog');
+  assert.deepEqual(Array.from(context.ApplyUI.addonSelection),['two']);
+});
+
+test('partial completion counts only skipped add-ons in the notice and top bar',()=>{
+  const {context,$}=setup();
+  vm.runInContext(app.slice(app.indexOf('function renderAddonNotice('),app.indexOf('async function refreshAddonNotice(')),context);
+  context.renderAddonNotice({installed:[{id:'one',integrity:{status:'healthy'}},{id:'two',reapply_pending:true,integrity:{status:'missing'}}],
+    integrity:{status:'missing',repair_available:true,pending_addon_ids:['two'],message:'One saved add-on is still pending.'}});
+  assert.equal($('#addon-reapply-count').textContent,'1 to reapply');
+  assert.match($('#addon-installation-notice').innerHTML,/1 add-on needs to be applied again/);
+  assert.equal($('#apply-button').textContent,'Review & apply (2)');
 });

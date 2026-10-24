@@ -3,8 +3,9 @@
 [Back to the overview](../README.md#see-what-you-can-do) · [All documentation](README.md)
 
 This guide covers installing, configuring, updating and removing
-client add-ons, plus creating and sharing your own. Choose authors and sources
-you trust; add-ons run with the game client's permissions.
+client add-ons and supported server/client extensions, plus creating and sharing
+your own. Choose authors and sources you trust; client code runs with the game
+client's permissions.
 
 For players: [bundled add-ons](#bundled-add-ons) · [install and manage](#install-and-manage) · [GitHub sources](#install-from-github) · [updates](#see-updates-and-read-the-changelog).
 
@@ -18,7 +19,7 @@ For creators: [package requirements](#developer-package-requirements) · [API v2
 
 ## How add-ons work
 
-An add-on extends the game's client interface with Python modules, a manifest and
+A client-interface add-on extends the game with Python modules, a manifest and
 declared files. Studio checks the package, shows the proposed changes, and installs
 its files and shared runtime integration into the client's root packs. The game
 loads that code when you launch it. **Installed add-ons work with Studio closed**;
@@ -44,6 +45,43 @@ zones clears the selection. The tall creature list scrolls independently. Random
 groups show possible members. View drops opens the shared editor; Spawn
 configuration opens the saved source. In-game atlas add-ons are installed separately.
 
+## Legacy Mount Support
+
+**Initial alpha, included with Studio beta-1.21.0.**
+
+Importing its ZIP requires a Studio build containing the built-in Legacy Mount
+Support adapter. Earlier releases that accept only `client-python` add-ons
+cannot install this server/client extension. The current inspected target is
+server 2.2.123 with client 2.0.125; exact engine and installed codec hashes are
+checked independently of those version labels.
+
+**Legacy Mount Support** (`community.legacy-mount-support`) is a server/client
+extension with two reviewed components: legacy seal activation and client-data
+fixes. It reuses the locally installed game assets. The package contains its
+activation quest and mapping recipe; game models, packs and executables are not
+redistributed. It adds no in-game add-on window.
+
+Activation checks the inspected engine API, existing quest sources and compiled
+handlers before proposing changes. If the game already supplies activation, the
+review reports **Provided by game**. Client fixes are limited to the inspected
+model mappings for races 20110–20112 and seal 71128's client item fields. Unknown
+engine or data layouts, conflicting handlers, missing model assets and unexpected
+manual edits need review; a version label alone does not authorize a change.
+**Mounted combat is separate and is not included in this package.**
+
+Choose its individual **Review install**, **Review reapply**, update or removal
+control. The combined review shows each component's status and files. When
+activation changes require a build, keep **Server files** selected: Apply builds
+and restarts the game server, disconnecting players. Client-data changes require
+the game client to be closed. If Apply is blocked, the message beside the button
+explains what needs attention. Server/client extensions are reviewed individually;
+**Review all** and **Review selected** in the client package batch apply only to
+client add-ons.
+
+Automated planning and UI checks do not establish successful riding, seal expiry,
+map transitions or appearance in a connected game. Those gameplay checks remain
+outstanding for the integrated extension.
+
 ## Install and manage
 
 1. Run **Install Add-on Support.bat** once and restart Studio if pack support is not installed.
@@ -64,9 +102,17 @@ Change **Shortcut** or **Show button** under **Installed add-ons → Pocket Wiki
 Details**, then review/apply with the client closed and launch it again. Game key
 bindings and focused chat/input take priority over add-on shortcuts.
 
-**Add-on Apply changes client packs. Server Apply builds and restarts the server.**
-Each has its own review. Installing a client add-on does not deploy a quest or
-restart the server. API v1 provides atlas callbacks; API v2 also supports standalone
+**Review & apply** shows saved server files and client add-ons together. Choose
+either group or both, then apply once. Server files build and restart the server;
+a client-only add-on apply rebuilds client packs while the server keeps running.
+Server/client extensions can also require server files; see [Legacy Mount
+Support](#legacy-mount-support).
+Use the individual add-on checkboxes or **Select all** / **Clear**. The selected
+count and **Apply all (N)** / **Apply selected (N)** button show exactly which
+changes are included. Studio prepares a fresh file plan as the selection changes.
+Skipped add-ons keep their installed version, enabled preference and saved
+settings; their reapply reminders remain until they are applied later.
+API v1 provides atlas callbacks; API v2 also supports standalone
 windows, shortcuts and local preferences. Add-ons run with the game client's
 permissions, so choose packages you trust.
 
@@ -85,11 +131,13 @@ loading hooks are missing. The enabled switch remains your saved preference;
 it does not prove that the files are still present in the game.
 
 Add-on pages check every 15 seconds while visible and when you return to Studio.
-A notice also appears on the main screen when files need attention. These checks
+A persistent notice, a count beside Installed add-ons, and the top-bar Apply count
+show when add-ons need to be applied again. **Review & apply together** opens the
+same review as saved server files, with eligible add-on repairs selected. These checks
 read local files and never download or reinstall automatically.
 
-Choose **Review reinstall**, close the game client, review the proposed changes,
-and apply. A clean game update becomes the new baseline. Isolated deleted add-on
+Choose **Review & apply together** or **Review reinstall**, close the game client,
+review the proposed changes, and apply. A clean game update becomes the new baseline. Isolated deleted add-on
 files or hooks reverted to the known baseline can be repaired from the saved
 installation, keeping settings and pack backups. Unexpected manual changes are
 shown for review and block repair. If whole game packs are missing or unreadable,
@@ -99,8 +147,9 @@ stay running throughout add-on repair.
 ## Install or update several add-ons together
 
 In **Discover add-ons**, select the packages you want and choose **Review selected**,
-or choose **Review all** for every bundled or downloaded package ready to install
-or update. The installed page also offers **Review all ready updates**. Repository
+or choose **Review all** for every bundled or downloaded client package ready to
+install or update. The installed page also offers **Review ready client updates**.
+Server/client extensions have their own individual review. Repository
 releases need to be downloaded and verified before they join an installation batch.
 
 The preview lists each add-on and the combined file changes. Dependencies and

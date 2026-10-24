@@ -51,6 +51,13 @@ def build_changes(studio, sources=None):
     chmod -R a+rX /out-quest/poland/quest
 
 '''
+    if 'mounts_legacy' in identities.values():
+        compile_line = '      /usr/local/bin/qc "$name"; \\\n'
+        mount_functions = '''      if [ "$quest_name" = "mounts_legacy" ]; then cp quest_functions quest_functions.studio-mount-before; grep -qx 'pc.get_point' quest_functions || printf '%s\\n' 'pc.get_point' >> quest_functions; fi; \\
+'''
+        restore_functions = '''      if [ "$quest_name" = "mounts_legacy" ]; then mv quest_functions.studio-mount-before quest_functions; fi; \\
+'''
+        hook = hook.replace(compile_line, mount_functions + compile_line + restore_functions, 1)
     start = raw.index(MARKER) if MARKER in raw else stage.start()
     if start > stage.start():
         raise ValueError('The Studio quest hook is outside the compiler stage. Review the Dockerfile first.')

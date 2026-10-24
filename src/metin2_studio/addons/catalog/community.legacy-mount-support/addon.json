@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "api_version": 2,
+  "id": "community.legacy-mount-support",
+  "name": "Legacy Mount Support",
+  "version": "0.1.0-alpha.1",
+  "description": "## What it does\n\nActivates legacy mount seals whose installed client assets are available and corrects three old client mount model mappings. Inspects seal 71128 and changes only its known old fields when still needed. Native mount seals and fixes already supplied by the game are retained.\n\n## Apply\n\nClose the game client, review both components, and apply through Studio Review & apply. Activation requires a game-server build and restart. The review lists unavailable appearances and any conflicting custom mount handlers. After a game update, review and reapply this add-on separately from client-only add-on batches.\n\n## Remove or disable\n\nReview and apply again. Client corrections owned by this add-on are reversed safely. A cleanup-only quest remains to clear recorded rides when offline characters return. Existing manual source is retained in the add-on backup.\n\n## Scope\n\nActivation and client data only. Mounted combat is a separate option and is not included. No executables, game assets, pack keys or compiler binaries are distributed. Exact engine and installed codec profiles are required. Static model and transaction checks do not establish in-game riding or combat verification.",
+  "author": "Add-on Hub contributors",
+  "category": "Gameplay",
+  "kind": "game-extension",
+  "entry": "legacy-mount-support",
+  "requires": [],
+  "conflicts": [],
+  "capabilities": [
+    "server.quest.mounts",
+    "client.data.mounts"
+  ],
+  "files": [
+    {
+      "source": "server/mounts.json",
+      "target": "server/mounts.json",
+      "sha256": "a45f1b3957e64af3a48311fd083131fba0b2e3a2407fc8335285bcc80ae9154f"
+    },
+    {
+      "source": "server/mounts_legacy.quest.in",
+      "target": "server/mounts_legacy.quest.in",
+      "sha256": "e3cd6440272a05aea2cf0d48c60c25a6ee8f01bba60000a40f286836f91286aa"
+    }
+  ],
+  "settings": {},
+  "settings_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "compatibility": {
+    "server_versions": [
+      "2.2.123"
+    ],
+    "client_versions": [
+      "2.0.125"
+    ],
+    "experimental": true
+  },
+  "release_notes": "Initial activation and client-data extension with reviewed server builds, narrow pack corrections, asset checks and owned cleanup. Mounted combat is excluded.",
+  "license": "MIT"
+}

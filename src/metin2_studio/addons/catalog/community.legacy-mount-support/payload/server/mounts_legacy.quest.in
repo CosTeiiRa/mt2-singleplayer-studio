@@ -1,0 +1,147 @@
+-- Restores archived mount seals without enabling their old timer-reset scripts.
+-- Row fields: model, apply type, bonus, minimum level, fixed seconds,
+-- consume ticket, uses existing absolute item expiry, client assets verified.
+-- Native special-ride seals keep their engine handlers. Missing appearances
+-- are refused without consuming the seal. No horse progress is changed.
+quest mounts_legacy begin
+    state start begin
+        function t(pl, en)
+            if pc.getf("playerbot_lang", "en") == 1 then return en end
+            return pl
+        end
+
+        function info(vnum)
+            local seals = {
+__DEFINITIONS__
+            }
+            return seals[vnum]
+        end
+
+        function mount_vnum()
+            return pc.get_point(pc.get_player_id(), 109)
+        end
+
+        function clear()
+            cleartimer("legacy_mount_watch")
+            pc.setqf("active_item", 0)
+            pc.setqf("active_vnum", 0)
+            pc.setqf("active_model", 0)
+            pc.setqf("active_until", 0)
+        end
+
+        function stop()
+            local model = pc.getqf("active_model")
+            if model > 0 and mounts_legacy.mount_vnum() == model then pc.unmount() end
+            mounts_legacy.clear()
+        end
+
+        function select_owned_seal(id, vnum)
+            for cell = 0, 224 do
+                if item.select_cell(cell) and item.get_id() == id and item.get_vnum() == vnum then
+                    return true
+                end
+            end
+            return false
+        end
+
+        when __EVENTS__ begin
+            if pc.is_dead() or pc.is_busy() then return end
+            local mounted = mounts_legacy.mount_vnum()
+            local own_model = pc.getqf("active_model")
+            if own_model > 0 and mounted == own_model then
+                mounts_legacy.stop()
+                return
+            end
+            local vnum = item.get_vnum()
+            local info = mounts_legacy.info(vnum)
+            if info == nil then return end
+            if info[8] == 0 then
+                syschat(mounts_legacy.t("Brak modelu tego wierzchowca w kliencie. Zachowujesz pieczec.", "This mount's model is missing from this client. Your seal has been kept."))
+                return
+            end
+            if pc.is_polymorphed() then
+                syschat(mounts_legacy.t("Nie mozesz jezdzic podczas przemiany.", "You cannot ride while transformed."))
+                return
+            end
+            if mounted ~= 0 or pc.is_mount() or pc.is_riding() then
+                syschat(mounts_legacy.t("Najpierw zsiadz z obecnego wierzchowca.", "Dismount your current mount first."))
+                return
+            end
+            if pc.get_level() < info[4] then
+                syschat(mounts_legacy.t("Twoj poziom jest za niski dla tej pieczeci.", "Your level is too low for this seal."))
+                return
+            end
+            if pc.get_map_index() == 112 or pc.get_war_map() ~= 0 then
+                syschat(mounts_legacy.t("Nie mozesz uzywac tej pieczeci na tej mapie.", "You cannot use this seal on this map."))
+                return
+            end
+            local body = pc.get_wear(0)
+            if body ~= nil and body >= 11901 and body <= 11904 then
+                syschat(mounts_legacy.t("Zdejmij stroj slubny przed jazda.", "Remove your wedding outfit before riding."))
+                return
+            end
+            local until_time = get_time() + info[5]
+            if info[7] == 1 then until_time = item.get_socket(0) end
+            local left = until_time - get_time()
+            if left <= 0 then
+                syschat(mounts_legacy.t("Ta pieczec nie ma juz czasu waznosci.", "This seal has no remaining lifetime."))
+                return
+            end
+            local id = item.get_id()
+            if horse.is_summon() then horse.unsummon() end
+            pc.mount(info[1], left)
+            if mounts_legacy.mount_vnum() ~= info[1] then return end
+            if info[3] ~= 0 then pc.mount_bonus(info[2], info[3], left) end
+            if info[6] == 1 then
+                -- The engine confirmed the mount before a single-use ticket
+                -- is consumed. No item socket or remaining life is rewritten.
+                pc.remove_item(vnum, 1)
+                id = 0
+            end
+            pc.setqf("active_item", id)
+            pc.setqf("active_vnum", vnum)
+            pc.setqf("active_model", info[1])
+            pc.setqf("active_until", until_time)
+            loop_timer("legacy_mount_watch", 2)
+            if info[6] == 1 then
+                syschat(mounts_legacy.t("Wcisnij Ctrl+G, aby zsiasc.", "Press Ctrl+G to dismount."))
+            else
+                syschat(mounts_legacy.t("Ctrl+G lub ponownie uzyj pieczeci, aby zsiasc.", "Press Ctrl+G or use the seal again to dismount."))
+            end
+        end
+
+        when legacy_mount_watch.timer begin
+            local model = pc.getqf("active_model")
+            if model <= 0 then mounts_legacy.clear() return end
+            local mounted = mounts_legacy.mount_vnum()
+            if mounted ~= model then
+                if mounted == 0 and not pc.is_riding() then affect.remove_new(533) end
+                mounts_legacy.clear()
+                return
+            end
+            if pc.is_dead() or pc.is_polymorphed() or pc.get_map_index() == 112 or pc.get_war_map() ~= 0 then
+                mounts_legacy.stop()
+                return
+            end
+            if get_time() >= pc.getqf("active_until") then mounts_legacy.stop() return end
+            local vnum = pc.getqf("active_vnum")
+            local info = mounts_legacy.info(vnum)
+            if info == nil or info[8] == 0 or info[1] ~= model then mounts_legacy.stop() return end
+            if info[6] == 0 then
+                if not mounts_legacy.select_owned_seal(pc.getqf("active_item"), vnum) then
+                    mounts_legacy.stop()
+                    return
+                end
+                if info[7] == 1 and item.get_socket(0) <= get_time() then mounts_legacy.stop() end
+            end
+        end
+
+        when login begin
+            if pc.getqf("active_model") > 0 then loop_timer("legacy_mount_watch", 2) end
+        end
+
+        when logout begin
+            mounts_legacy.stop()
+        end
+    end
+end

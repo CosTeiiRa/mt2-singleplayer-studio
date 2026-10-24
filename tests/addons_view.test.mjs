@@ -252,6 +252,63 @@ test('selected batch review excludes unselected packages',async()=>{
   }finally{input.checked=false;await listeners.get('change')[0]({target:input});nodes.get('ah-plan-dialog').close();}
 });
 
+test('server and client extensions have individual reviews outside client package batches',async()=>{
+  const extension={id:'community.legacy-mount-support',name:'Legacy Mount Support',kind:'game-extension',entry:'legacy-mount-support',version:'1.0.0',components:[{id:'activation',status:'provided'},{id:'client-data',status:'ready',message:'Uses <installed> assets.'}]};
+  const ctx=context('addons'),original=ctx.api;let batch,shared;
+  ctx.reviewApply=options=>{shared=options;};
+  ctx.api=async(path,body)=>{
+    if(path.endsWith('/catalog'))return {catalog:{items:[item,extension]}};
+    if(path.endsWith('/plan/batch')){batch=body;return {plan:{id:'client-only-batch'}};}
+    if(path.endsWith('/plan'))return {plan:{id:'mount-review',kind:'game-extension',addon_id:extension.id,server_required:true,can_apply:true,components:extension.components,changes:[]}};
+    return original(path,body);
+  };
+  try{
+    await views.mount(ctx);
+    assert.match(root.innerHTML,/Install client add-ons together/);
+    assert.match(root.innerHTML,/Review all \(1\)/);
+    assert.doesNotMatch(root.innerHTML,/data-batch-id="community\.legacy-mount-support"/);
+    const details={dataset:{action:'details',id:extension.id},closest:()=>details};
+    await listeners.get('click')[0]({target:details});
+    const markup=nodes.get('ah-details-content').innerHTML;
+    assert.match(markup,/<dt>Integration<\/dt>/);
+    assert.match(markup,/Provided by game/);
+    assert.match(markup,/Uses &lt;installed&gt; assets/);
+    assert.match(markup,/Mounted combat remains separate/);
+    const review={dataset:{action:'plan',id:extension.id,operation:'install'},closest:()=>review};
+    await listeners.get('click')[0]({target:review});
+    assert.deepEqual(shared,{addonPlanId:'mount-review'});
+    assert.equal(nodes.get('ah-details-dialog').open,false);
+    const all={dataset:{action:'batch-all'},closest:()=>all};
+    await listeners.get('click')[0]({target:all});
+    assert.deepEqual(batch,{addon_ids:[item.id]});
+  }finally{nodes.get('ah-details-dialog').close();}
+});
+
+test('a missing extension reviews its own reapply and requires Studio for server activation',async()=>{
+  const previous=structuredClone(state),extension={id:'community.legacy-mount-support',name:'Legacy Mount Support',kind:'game-extension',version:'1.0.0',enabled:true,integrity:{status:'missing'}};
+  state.installed=[extension];state.integrity={status:'missing',repair_available:true};
+  const ctx=context('installed'),original=ctx.api;let reviewed,applied=false;
+  ctx.api=async(path,body)=>{
+    if(path.endsWith('/catalog'))return {catalog:{items:[extension]}};
+    if(path.endsWith('/plan')){reviewed=body;return {plan:{id:'mount-reapply',kind:'game-extension',action:'reapply',addon_id:extension.id,server_required:true,can_apply:true,components:[{id:'activation',status:'ready'}],changes:[]}};}
+    if(path.endsWith('/apply')){applied=true;return {};}
+    return original(path,body);
+  };
+  try{
+    await views.mount(ctx);
+    assert.match(root.innerHTML,/Needs reapply/);
+    assert.match(root.innerHTML,/data-operation="reapply" data-id="community\.legacy-mount-support"/);
+    const review={dataset:{action:'plan',id:extension.id,operation:'reapply'},closest:()=>review};
+    await listeners.get('click')[0]({target:review});
+    assert.deepEqual(reviewed,{addon_id:extension.id,action:'reapply'});
+    assert.match(nodes.get('ah-plan-content').innerHTML,/Open Review &amp; apply in Studio/);
+    assert.match(nodes.get('ah-plan-content').innerHTML,/data-action="apply" data-mutation data-blocked="true"/);
+    const apply={dataset:{action:'apply'},closest:()=>apply};
+    await listeners.get('click')[0]({target:apply});
+    assert.equal(applied,false);
+  }finally{for(const key of Object.keys(state))delete state[key];Object.assign(state,previous);nodes.get('ah-plan-dialog').close();}
+});
+
 test('opening the client after the batch is an explicit option on the one apply request',async()=>{
   const previous=state.installation;
   state.installation={kind:'installation',writable:true};
@@ -681,4 +738,15 @@ test('atlas distinguishes a navigation layout from missing terrain artwork',asyn
   assert.match(root.innerHTML,/opacity="1"/);
   ctx.api=path=>path.includes('/map?')?{map:{id:64,name:'Dungeon',image_url:null,regions:[]}}:original(path);
   await views.mount(ctx);assert.match(root.innerHTML,/Spawn diagram · no map image/);
+});
+
+test('embedded add-on plans open the shared Apply review without a second dialog',async()=>{
+  const ctx=context('addons'),original=ctx.api;let review;
+  ctx.reviewApply=options=>{review=options;};
+  ctx.api=async(path,body)=>path.endsWith('/plan')?{plan:{id:'shared-plan',action:'install',addon_id:item.id,can_apply:true,changes:[]}}:original(path,body);
+  await views.mount(ctx);
+  const button={dataset:{action:'plan',operation:'install',id:item.id},closest:()=>button};
+  await listeners.get('click')[0]({target:button});
+  assert.deepEqual(review,{addonPlanId:'shared-plan'});
+  assert.equal(nodes.get('ah-plan-dialog').open,false);
 });
