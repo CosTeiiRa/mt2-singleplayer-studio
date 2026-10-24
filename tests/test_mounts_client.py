@@ -14,7 +14,7 @@ class MountClientTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.client = self.root / 'Klient'
         (self.client / 'pack').mkdir(parents=True)
         names = ['vnum', 'name', 'locale_name', *mounts.ITEM_INVARIANTS, *mounts.ITEM_FIXES, 'padding']
